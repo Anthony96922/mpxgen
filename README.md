@@ -18,10 +18,10 @@ To test:
 
 `./mpxgen --audio stereo_44100.wav`
 
-A new audio file named "test.wav" will be made. This file is at 228 kHz sample rate so it needs to be resampled. ffmpeg can be used to to this. Adjust volume as necessary.
+A new audio file named "test.wav" will be made. This file is at 228 kHz sample rate so it needs to be resampled. ffmpeg can be used to do this. Adjust volume as necessary.
 
 
-`ffmpeg -i test.wav -ar 192k -af mpx.wav`
+`ffmpeg -i test.wav -ar 192k mpx.wav`
 
 
 Play the newly created audio file:
