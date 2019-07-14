@@ -131,7 +131,7 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis_corner_freq) {
 
 // samples provided by this function are in 0..10: they need to be divided by
 // 10 after.
-int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int mpx, int rds, int wait) {
+int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int rds, int wait) {
 	if(inf == NULL) {
 		if(rds) get_rds_samples(mpx_buffer, length);
 		return 0;
@@ -228,7 +228,7 @@ int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int mpx, int rds, i
 			carrier_19[phase_19] / 16;
 
 			if (rds) {
-				mpx_buffer[i] += rds_buffer[i] * 4;
+				mpx_buffer[i] += rds_buffer[i];
 			}
 
 			phase_19++;
@@ -240,13 +240,10 @@ int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int mpx, int rds, i
 			mpx_buffer[i] = out_mono;
 
 			if (rds) {
-				mpx_buffer[i] += rds_buffer[i] * 4;
+				mpx_buffer[i] += rds_buffer[i];
 			}
 		}
 		audio_pos++;
-		// scale samples
-		mpx_buffer[i] /= 10.;
-		//mpx_buffer[i] *= (mpx / 100);
 	}
 
 	return 0;

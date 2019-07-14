@@ -49,19 +49,16 @@ static void fatal(char *fmt, ...)
     terminate(0);
 }
 
-void stereoize(short *inbuf, short *outbuf, int inbufsize) {
+void postprocess(float *inbuf, short *outbuf, int inbufsize) {
 	int j = 0;
 
-	// copy the mono channel to the two stereo channels
 	for (int i = 0; i < inbufsize; i++) {
+		// scale samples
+		inbuf[i] /= 10;
+		inbuf[i] *= 32768;
+		// copy the mono channel to the two stereo channels
 		outbuf[j] = outbuf[j+1] = inbuf[i];
 		j += 2;
-	}
-}
-
-void float2pcm16(float *inbuf, short *outbuf, int inbufsize) {
-	for (int i = 0; i < inbufsize; i++) {
-		outbuf[i] = 32767 * inbuf[i];
 	}
 }
 
@@ -79,7 +76,6 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	float mpx_data[DATA_SIZE];
 	float rds_data[DATA_SIZE];
 	float resample_out[DATA_SIZE];
-	short scale_out[BUFFER_SIZE];
 	short dev_out[BUFFER_SIZE];
 
 	// AO
@@ -112,11 +108,7 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 		return 1;
 	}
 
-	src_data.end_of_input = 0;
-	src_data.input_frames = 0;
-	src_data.data_in = mpx_data;
 	src_data.src_ratio = 192000. / 228000;
-	src_data.data_out = resample_out;
 	src_data.output_frames = DATA_SIZE;
 
 	printf("Starting MPX generator\n");
@@ -166,7 +158,7 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	for (;;) {
 		if(control_pipe) poll_control_pipe();
 
-		if (fm_mpx_get_samples(mpx_data, rds_data, mpx, rds, wait) < 0) break;
+		if (fm_mpx_get_samples(mpx_data, rds_data, rds, wait) < 0) break;
 		src_data.input_frames = DATA_SIZE;
 		src_data.data_in = mpx_data;
 		src_data.data_out = resample_out;
@@ -177,8 +169,7 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 		}
 
 		generated_frames = src_data.output_frames_gen;
-		float2pcm16(resample_out, scale_out, generated_frames);
-		stereoize(scale_out, dev_out, generated_frames);
+		postprocess(resample_out, dev_out, generated_frames);
 		ao_play(device, (char *)dev_out, generated_frames * CHANNELS * 2);
 	}
 
