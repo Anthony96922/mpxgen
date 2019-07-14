@@ -5,11 +5,12 @@ This program generates MPX baseband audio that can be fed through a 192 kHz capa
 
 Libraries needed:
 - libsndfile
+- libsamplerate
 
 To build:
 
 ```
-git clone https://github.com/tanaka1892/mpxgen
+git clone https://github.com/Anthony96922/mpxgen
 cd mpxgen/src
 make
 ```
@@ -18,18 +19,10 @@ To test:
 
 `./mpxgen --audio stereo_44100.wav`
 
-A new audio file named "test.wav" will be made. This file is at 228 kHz sample rate so it needs to be resampled. ffmpeg can be used to do this. Adjust volume as necessary.
-
-
-`ffmpeg -i test.wav -ar 192k mpx.wav`
-
-
-Play the newly created audio file:
-
-`aplay mpx.wav`
+mpxgen will output to your default sound card.
 
 This is a work in progress. Some things that need to be done:
-- Internally resample the audio to 192 kHz
-- Directly output to a sound card (through ALSA / libao)
+- Internally resample the audio to 192 kHz *done*
+- Directly output to a sound card (through ALSA / libao) *done*
 - Allow adjusting output volume if sound card doesn't have a volume control
-- Bring RDS encoder up to par with my PiFmAdv fork
+- Improve RDS encoder feature-set with additions from my PiFmAdv fork
