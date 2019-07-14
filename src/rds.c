@@ -216,7 +216,7 @@ void get_rds_group(int *buffer) {
 void get_rds_samples(double *buffer, int count) {
     static int bit_buffer[BITS_PER_GROUP];
     static int bit_pos = BITS_PER_GROUP;
-    static double sample_buffer[SAMPLE_BUFFER_SIZE] = {0};
+    static float sample_buffer[SAMPLE_BUFFER_SIZE] = {0};
 
     static int prev_output = 0;
     static int cur_output = 0;
@@ -246,7 +246,7 @@ void get_rds_samples(double *buffer, int count) {
             int idx = in_sample_index;
 
             for(int j=0; j<FILTER_SIZE; j++) {
-                double val = (*src++);
+                float val = (*src++);
                 if(inverting) val = -val;
                 sample_buffer[idx++] += val;
                 if(idx >= SAMPLE_BUFFER_SIZE) idx = 0;
@@ -259,7 +259,7 @@ void get_rds_samples(double *buffer, int count) {
             sample_count = 0;
         }
 
-        double sample = sample_buffer[out_sample_index];
+        float sample = sample_buffer[out_sample_index] / 32;
         sample_buffer[out_sample_index] = 0;
         out_sample_index++;
         if(out_sample_index >= SAMPLE_BUFFER_SIZE) out_sample_index = 0;

@@ -1,10 +1,10 @@
 CC = gcc
-STD_CFLAGS = -Wall -Wno-multichar -std=gnu99 -ffast-math -c -O1
+STD_CFLAGS = -Wall -Wno-multichar -std=gnu99 -ffast-math -c -O2
 
 CFLAGS = $(STD_CFLAGS) -march=armv7-a -mtune=cortex-a5 -mfloat-abi=hard -mfpu=vfp
 
 app: mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o
-	$(CC) -o mpxgen mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o -lm -lsndfile
+	$(CC) -o mpxgen mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o -lm -lsndfile -lsamplerate -lao
 
 rds.o: rds.c waveforms.h
 	$(CC) $(CFLAGS) rds.c

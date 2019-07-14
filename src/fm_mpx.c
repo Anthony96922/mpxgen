@@ -12,8 +12,6 @@
 
 #include "rds.h"
 
-#define PI 3.14159265359
-
 #define FIR_HALF_SIZE 30
 #define FIR_SIZE (2*FIR_HALF_SIZE-1)
 
@@ -22,8 +20,8 @@ size_t length;
 // coefficients of the low-pass FIR filter
 double low_pass_fir[FIR_HALF_SIZE];
 
-double carrier_38[] = {0.0, 0.8660254037844386, 0.8660254037844388, 1.2246467991473532e-16, -0.8660254037844384, -0.8660254037844386};
-double carrier_19[] = {0.0, 0.5, 0.8660254037844386, 1.0, 0.8660254037844388, 0.5, 1.2246467991473532e-16, -0.5, -0.8660254037844384, -1.0, -0.8660254037844386, -0.5};
+float carrier_38[] = {0.0, 0.8660254037844386, 0.8660254037844388, 1.2246467991473532e-16, -0.8660254037844384, -0.8660254037844386};
+float carrier_19[] = {0.0, 0.5, 0.8660254037844386, 1.0, 0.8660254037844388, 0.5, 1.2246467991473532e-16, -0.5, -0.8660254037844384, -1.0, -0.8660254037844386, -0.5};
 
 int phase_38 = 0;
 int phase_19 = 0;
@@ -98,7 +96,7 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis_corner_freq) {
 		for(int i=0; i<channels; i++) last_buffer_val[i] = 0;
 
 		if (preemphasis_corner_freq > 0) {
-			preemphasis_prewarp = tan(PI*preemphasis_corner_freq/in_samplerate);
+			preemphasis_prewarp = tan(M_PI*preemphasis_corner_freq/in_samplerate);
 			preemphasis_coefficient = (1.0 + (1.0 - preemphasis_prewarp)/(1.0 + preemphasis_prewarp))/2.0;
 			printf("Created preemphasis with cutoff at %.1i Hz\n", preemphasis_corner_freq);
 		}
@@ -114,8 +112,8 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis_corner_freq) {
 		// Only store half of the filter since it is symmetric
 		for(int i=1; i<FIR_HALF_SIZE; i++) {
 			low_pass_fir[FIR_HALF_SIZE-1-i] =
-				sin(2 * PI * cutoff_freq * i / 228000) / (PI * i) // sinc
-				* (.54 - .46 * cos(2*PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
+				sin(2 * M_PI * cutoff_freq * i / 228000) / (M_PI * i) // sinc
+				* (.54 - .46 * cos(2*M_PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
 		}
 		printf("Created low-pass FIR filter for audio channels, with cutoff at %.1i Hz\n", cutoff_freq);
 
@@ -133,7 +131,7 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis_corner_freq) {
 
 // samples provided by this function are in 0..10: they need to be divided by
 // 10 after.
-int fm_mpx_get_samples(double *mpx_buffer, double *rds_buffer, int rds, int wait) {
+int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int mpx, int rds, int wait) {
 	if(inf == NULL) {
 		if(rds) get_rds_samples(mpx_buffer, length);
 		return 0;
@@ -158,7 +156,7 @@ int fm_mpx_get_samples(double *mpx_buffer, double *rds_buffer, int rds, int wait
 								return 0;
 							} else {
 								fprintf(stderr, "Could not rewind in audio file, terminating\n");
-                                                        	return -1;
+								return -1;
 							}
 						}
 					} else {
@@ -227,10 +225,10 @@ int fm_mpx_get_samples(double *mpx_buffer, double *rds_buffer, int rds, int wait
 			mpx_buffer[i] =
 			out_mono +
 			carrier_38[phase_38] * out_stereo +
-			carrier_19[phase_19] / 30;
+			carrier_19[phase_19] / 16;
 
 			if (rds) {
-				mpx_buffer[i] += rds_buffer[i] / 30;
+				mpx_buffer[i] += rds_buffer[i] * 4;
 			}
 
 			phase_19++;
@@ -242,10 +240,13 @@ int fm_mpx_get_samples(double *mpx_buffer, double *rds_buffer, int rds, int wait
 			mpx_buffer[i] = out_mono;
 
 			if (rds) {
-				mpx_buffer[i] += rds_buffer[i] / 30;
+				mpx_buffer[i] += rds_buffer[i] * 4;
 			}
 		}
 		audio_pos++;
+		// scale samples
+		mpx_buffer[i] /= 10.;
+		//mpx_buffer[i] *= (mpx / 100);
 	}
 
 	return 0;

@@ -1,4 +1,5 @@
 /*
+
     PiFmAdv - Advanced FM transmitter for the Raspberry Pi
     Copyright (C) 2017 Miegl
 
@@ -15,16 +16,18 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sndfile.h>
 #include <getopt.h>
+#include <samplerate.h>
+#include <ao/ao.h>
 
 #include "rds.h"
 #include "fm_mpx.h"
 #include "control_pipe.h"
 
-#define NUM_SAMPLES			64000
-#define SUBSIZE                         1
-#define DATA_SIZE                       1000
+#define NUM_SAMPLES		65536
+#define DATA_SIZE		4096
+#define BUFFER_SIZE		8192
+#define CHANNELS		2
 
 static void terminate(int num)
 {
@@ -46,7 +49,23 @@ static void fatal(char *fmt, ...)
     terminate(0);
 }
 
-int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, int preemphasis_cutoff, char *control_pipe, int pty, int tp, int wait) {
+void stereoize(short *inbuf, short *outbuf, int inbufsize) {
+	int j = 0;
+
+	// copy the mono channel to the two stereo channels
+	for (int i = 0; i < inbufsize; i++) {
+		outbuf[j] = outbuf[j+1] = inbuf[i];
+		j += 2;
+	}
+}
+
+void float2pcm16(float *inbuf, short *outbuf, int inbufsize) {
+	for (int i = 0; i < inbufsize; i++) {
+		outbuf[i] = 32767 * inbuf[i];
+	}
+}
+
+int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, int preemphasis_cutoff, int mpx, char *control_pipe, int pty, int tp, int wait) {
 	// Catch only important signals
 	for (int i = 0; i < 25; i++) {
 		struct sigaction sa;
@@ -57,11 +76,48 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	}
 
 	// Data structures for baseband data
-	double data[DATA_SIZE];
-	double rds_buffer[DATA_SIZE];
+	float mpx_data[DATA_SIZE];
+	float rds_data[DATA_SIZE];
+	float resample_out[DATA_SIZE];
+	short scale_out[BUFFER_SIZE];
+	short dev_out[BUFFER_SIZE];
 
-	int out_channels = 2;
-	double audio_out_buffer[DATA_SIZE * out_channels];
+	// AO
+	ao_device *device;
+	ao_sample_format format;
+	ao_initialize();
+	int default_driver = ao_default_driver_id();
+	memset(&format, 0, sizeof(format));
+	format.bits = 16;
+	format.channels = CHANNELS;
+	format.rate = 192000;
+	format.byte_format = AO_FMT_LITTLE;
+
+	device = ao_open_live(default_driver, &format, NULL);
+	if (device == NULL) {
+		fprintf(stderr, "Error: cannot open sound device.\n");
+		return 1;
+	}
+
+	// SRC
+	int src_init_error;
+	int src_error;
+	int generated_frames;
+
+	SRC_STATE *src_state;
+	SRC_DATA src_data;
+
+	if ((src_state = src_new(SRC_SINC_FASTEST, 1, &src_init_error)) == NULL) {
+		printf("Error: src_new failed: %s\n", src_strerror(src_init_error));
+		return 1;
+	}
+
+	src_data.end_of_input = 0;
+	src_data.input_frames = 0;
+	src_data.data_in = mpx_data;
+	src_data.src_ratio = 192000. / 228000;
+	src_data.data_out = resample_out;
+	src_data.output_frames = DATA_SIZE;
 
 	printf("Starting MPX generator\n");
 
@@ -107,39 +163,27 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 		}
 	}
 
-	SNDFILE *outf;
-	SF_INFO sfinfo;
-
-	sfinfo.frames = DATA_SIZE * out_channels;
-	sfinfo.samplerate = 228000;
-	sfinfo.channels = out_channels;
-	sfinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
-	sfinfo.sections = 1;
-	sfinfo.seekable = 0;
-
-	outf = sf_open("test.wav", SFM_WRITE, &sfinfo);
-
-	int count, outcount = 0;
-
 	for (;;) {
 		if(control_pipe) poll_control_pipe();
 
-		if (fm_mpx_get_samples(data, rds_buffer, rds, wait) < 0) break;
+		if (fm_mpx_get_samples(mpx_data, rds_data, mpx, rds, wait) < 0) break;
+		src_data.input_frames = DATA_SIZE;
+		src_data.data_in = mpx_data;
+		src_data.data_out = resample_out;
 
-		// copy the mono channel to the two stereo channels
-		for (count = 0; count < DATA_SIZE; count++) {
-			audio_out_buffer[outcount] = audio_out_buffer[outcount+1] = data[count];
-			outcount += 2;
+		if ((src_error = src_process(src_state, &src_data))) {
+			printf("Error: src_process failed: %s\n", src_strerror(src_error));
+			break;
 		}
 
-		outcount = 0;
-
-		sf_write_double(outf, audio_out_buffer, DATA_SIZE * out_channels);
-
-		usleep(DATA_SIZE * out_channels);
+		generated_frames = src_data.output_frames_gen;
+		float2pcm16(resample_out, scale_out, generated_frames);
+		stereoize(scale_out, dev_out, generated_frames);
+		ao_play(device, (char *)dev_out, generated_frames * CHANNELS * 2);
 	}
 
-	sf_close(outf);
+	ao_close(device);
+	ao_shutdown();
 
 	return 0;
 }
@@ -154,10 +198,11 @@ int main(int argc, char **argv) {
 	int af_size = 0;
 	char *ps = "MPXGEN";
 	char *rt = "MPXGEN: FM multiplex generator and RDS encoder";
-	uint16_t pi = 0x0000;
+	uint16_t pi = 0x1234;
 	int preemphasis_cutoff = 0;
-	int pty = 9;
+	int pty = 0;
 	int tp = 0;
+	int mpx = 100;
 	int wait = 0;
 
 	const char	*short_opt = "a:P:m:W:C:h";
@@ -165,6 +210,7 @@ int main(int argc, char **argv) {
 	{
 		{"audio", 	required_argument, NULL, 'a'},
 		{"preemph",	required_argument, NULL, 'P'},
+		{"mpx",		required_argument, NULL, 'm'},
 		{"wait",	required_argument, NULL, 'W'},
 
 		{"rds", 	required_argument, NULL, 'rds'},
@@ -179,11 +225,6 @@ int main(int argc, char **argv) {
 		{"help",	no_argument, NULL, 'h'},
 		{ 0, 		0, 		   0,    0 }
 	};
-
-	if (argc == 1) {
-		printf("No options specified. See -h (--help)\n");
-		return 1;
-	}
 
 	while((opt = getopt_long(argc, argv, short_opt, long_opt, NULL)) != -1)
 	{
@@ -208,9 +249,13 @@ int main(int argc, char **argv) {
 				}
 				break;
 
+			case 'm': //mpx
+				mpx = atoi(optarg);
+				break;
+
 			case 'W': //wait
-                                wait = atoi(optarg);
-                                break;
+				wait = atoi(optarg);
+				break;
 
 			case 'rds': //rds
 				rds = atoi(optarg);
@@ -233,8 +278,8 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'tp': //tp
-                                tp = atoi(optarg);
-                                break;
+				tp = atoi(optarg);
+				break;
 
 			case 'af': //af
 				af_size++;
@@ -250,7 +295,7 @@ int main(int argc, char **argv) {
 			case 'h': //help
 				fatal("Help:\n"
 				      "Syntax: mpx_gen [--audio (-a) file]\n"
-				      "                [--preemph (-P) preemphasis] [--div (-D) divider] \n"
+				      "                [--mpx (-m) mpx-power] [--preemph (-P) preemphasis] [--div (-D) divider]\n"
 				      "                [--wait (-W) wait-switch]\n"
 				      "                [--rds rds-switch] [--pi pi-code] [--ps ps-text] [--rt radiotext] [--tp traffic-program]\n"
 				      "                [--pty program-type] [--af alternative-freq] [--ctl (-C) control-pipe]\n");
@@ -270,7 +315,7 @@ int main(int argc, char **argv) {
 
 	alternative_freq[0] = af_size;
 
-	int errcode = generate_mpx(audio_file, rds, pi, ps, rt, alternative_freq, preemphasis_cutoff, control_pipe, pty, tp, wait);
+	int errcode = generate_mpx(audio_file, rds, pi, ps, rt, alternative_freq, preemphasis_cutoff, mpx, control_pipe, pty, tp, wait);
 
 	terminate(errcode);
 }
