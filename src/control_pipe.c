@@ -112,38 +112,52 @@ int poll_control_pipe() {
             }
             return CONTROL_PIPE_PTY_SET;
         }
-	if (res[0] == 'R' && res[1] == 'T' && res[2] == 'P') {
-	    int tag, type, start, len;
-	    if (sscanf(arg, "%d %d %d %d", &tag, &type, &start, &len)) {
-		if (tag != 1 && tag != 2) tag = 1;
-		if (type > 63) type = 0;
-		if (start < 1 && start > 64) start = 1;
-		if (len > 64) len = 0;
-		printf("RT+ tags: tag: %d, type: %d, start: %d, length: %d\n", tag, type, start, len);
-		set_rds_rtp_tags(tag, type, start, len);
-	    } else {
-		printf("Could not parse RT+ tag info.");
-	    }
-	    return CONTROL_PIPE_RTP_SET;
-	}
+        if (res[0] == 'R' && res[1] == 'T' && res[2] == 'P') {
+            int type_1, start_1, len_1, type_2, start_2, len_2;
+            if (sscanf(arg, "%d,%d,%d,%d,%d,%d", &type_1, &start_1, &len_1, &type_2, &start_2, &len_2)) {
+                if (type_1 > 63) type_1 = 0;
+                if (type_2 > 63) type_2 = 0;
+                if (start_1 > 64) start_1 = 0;
+                if (start_2 > 64) start_2 = 0;
+                if (len_1 > 64) len_1 = 1;
+                if (len_2 > 32) len_2 = 1;
+                printf("RT+ tag 1: type: %d, start: %d, length: %d\n", type_1, start_1, len_1);
+                printf("RT+ tag 2: type: %d, start: %d, length: %d\n", type_2, start_2, len_2);
+                set_rds_rtp_tags(type_1, start_1, len_1, type_2, start_2, len_2);
+            } else {
+                printf("Could not parse RT+ tag info.\n");
+            }
+            return CONTROL_PIPE_RTP_SET;
+        }
     }
     if (strlen(res) > 5 && res[4] == ' ') {
-	char *arg = res+5;
-	if(arg[strlen(arg)-1] == '\n') arg[strlen(arg)-1] = 0;
+        char *arg = res+5;
+        if(arg[strlen(arg)-1] == '\n') arg[strlen(arg)-1] = 0;
 	if (res[0] == 'R' && res[1] == 'T' && res[2] == 'P' && res[3] == 'F') {
-	    int toggle, running;
-	    if (sscanf(arg, "%d %d", &toggle, &running)) {
-		if (toggle != 0 && toggle != 1) toggle = 0;
-		if (running != 0 && running != 1) running = 0;
-		printf("RT+ flags: toggle: %d, running: %d\n", toggle, running);
-		set_rds_rtp_flags(toggle, running);
-	    } else {
-		printf("Could not parse RT+ flags.\n");
-	    }
-	}
-	return CONTROL_PIPE_RTP_FLAGS_SET;
+            int toggle, running;
+            if (sscanf(arg, "%d,%d", &toggle, &running)) {
+                if (toggle > 1) toggle = 0;
+                if (running > 1) running = 0;
+                printf("RT+ flags: toggle: %d, running: %d\n", toggle, running);
+                set_rds_rtp_flags(toggle, running);
+            } else {
+                printf("Could not parse RT+ flags.\n");
+            }
+	    return CONTROL_PIPE_RTP_FLAGS_SET;
+        }
+        if (res[0] == 'P' && res[1] == 'T' && res[2] == 'Y' && res[3] == 'N') {
+            arg[8] = 0;
+            if (strcmp(arg, "OFF") == 0) {
+                printf("PTYN disabled\n");
+                set_rds_ptyn_enable(0);
+            } else {
+                printf("PTYN set to: \"%s\"\n", arg);
+                set_rds_ptyn_enable(1);
+                set_rds_ptyn_dynamic(arg);
+            }
+            return CONTROL_PIPE_PTYN_SET;
+        }
     }
-
     return -1;
 }
 

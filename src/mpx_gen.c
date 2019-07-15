@@ -24,7 +24,6 @@
 #include "fm_mpx.h"
 #include "control_pipe.h"
 
-#define NUM_SAMPLES		65536
 #define DATA_SIZE		4096
 #define BUFFER_SIZE		8192
 
@@ -110,7 +109,7 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	SRC_DATA src_data;
 
 	if ((src_state = src_new(SRC_SINC_FASTEST, 1, &src_init_error)) == NULL) {
-		printf("Error: src_new failed: %s\n", src_strerror(src_init_error));
+		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_init_error));
 		return 1;
 	}
 
