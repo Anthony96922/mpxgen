@@ -276,7 +276,7 @@ void get_rds_samples(float *buffer, int count) {
         phase++;
         if(phase >= 4) phase = 0;
 
-        *buffer++ = sample/8;
+        *buffer++ = sample;
         sample_count++;
     }
 }

@@ -27,12 +27,17 @@
 #define NUM_SAMPLES		65536
 #define DATA_SIZE		4096
 #define BUFFER_SIZE		8192
-#define CHANNELS		2
+
+ao_device *device;
+SRC_STATE *src_state;
 
 static void terminate(int num)
 {
     fm_mpx_close();
     close_control_pipe();
+    ao_close(device);
+    ao_shutdown();
+    src_delete(src_state);
 
     printf("MPX generator stopped\n");
 
@@ -49,20 +54,22 @@ static void fatal(char *fmt, ...)
     terminate(0);
 }
 
-void postprocess(float *inbuf, short *outbuf, int inbufsize) {
+void postprocess(float *inbuf, short *outbuf, int inbufsize, float volume) {
 	int j = 0;
 
 	for (int i = 0; i < inbufsize; i++) {
 		// scale samples
 		inbuf[i] /= 10;
-		inbuf[i] *= 32768;
+		inbuf[i] *= 32767;
+		// volume control
+		inbuf[i] *= (volume / 100);
 		// copy the mono channel to the two stereo channels
 		outbuf[j] = outbuf[j+1] = inbuf[i];
 		j += 2;
 	}
 }
 
-int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, int preemphasis_cutoff, int mpx, char *control_pipe, int pty, int tp, int wait) {
+int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, int preemphasis_cutoff, float mpx, char *control_pipe, int pty, int tp, int wait) {
 	// Catch only important signals
 	for (int i = 0; i < 25; i++) {
 		struct sigaction sa;
@@ -79,13 +86,12 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	short dev_out[BUFFER_SIZE];
 
 	// AO
-	ao_device *device;
 	ao_sample_format format;
 	ao_initialize();
 	int default_driver = ao_default_driver_id();
 	memset(&format, 0, sizeof(format));
 	format.bits = 16;
-	format.channels = CHANNELS;
+	format.channels = 2;
 	format.rate = 192000;
 	format.byte_format = AO_FMT_LITTLE;
 
@@ -169,12 +175,9 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 		}
 
 		generated_frames = src_data.output_frames_gen;
-		postprocess(resample_out, dev_out, generated_frames);
-		ao_play(device, (char *)dev_out, generated_frames * CHANNELS * 2);
+		postprocess(resample_out, dev_out, generated_frames, mpx);
+		ao_play(device, (char *)dev_out, generated_frames * 4);
 	}
-
-	ao_close(device);
-	ao_shutdown();
 
 	return 0;
 }
@@ -193,10 +196,10 @@ int main(int argc, char **argv) {
 	int preemphasis_cutoff = 0;
 	int pty = 0;
 	int tp = 0;
-	int mpx = 100;
+	float mpx = 10;
 	int wait = 0;
 
-	const char	*short_opt = "a:P:m:W:C:h";
+	const char	*short_opt = "a:P:m:W:R:i:s:r:p:T:A:C:h";
 	struct option	long_opt[] =
 	{
 		{"audio", 	required_argument, NULL, 'a'},
@@ -204,17 +207,17 @@ int main(int argc, char **argv) {
 		{"mpx",		required_argument, NULL, 'm'},
 		{"wait",	required_argument, NULL, 'W'},
 
-		{"rds", 	required_argument, NULL, 'rds'},
-		{"pi", 		required_argument, NULL, 'pi'},
-		{"ps", 		required_argument, NULL, 'ps'},
-		{"rt", 		required_argument, NULL, 'rt'},
-		{"pty", 	required_argument, NULL, 'pty'},
-		{"tp",		required_argument, NULL, 'tp'},
-		{"af", 		required_argument, NULL, 'af'},
-		{"ctl", 	required_argument, NULL, 'C'},
+		{"rds", 	required_argument, NULL, 'R'},
+		{"pi",		required_argument, NULL, 'i'},
+		{"ps",		required_argument, NULL, 's'},
+		{"rt",		required_argument, NULL, 'r'},
+		{"pty",		required_argument, NULL, 'p'},
+		{"tp",		required_argument, NULL, 'T'},
+		{"af",		required_argument, NULL, 'A'},
+		{"ctl",		required_argument, NULL, 'C'},
 
 		{"help",	no_argument, NULL, 'h'},
-		{ 0, 		0, 		   0,    0 }
+		{ 0,		0,		0,	0 }
 	};
 
 	while((opt = getopt_long(argc, argv, short_opt, long_opt, NULL)) != -1)
@@ -248,31 +251,31 @@ int main(int argc, char **argv) {
 				wait = atoi(optarg);
 				break;
 
-			case 'rds': //rds
+			case 'd': //rds
 				rds = atoi(optarg);
 				break;
 
-			case 'pi': //pi
+			case 'i': //pi
 				pi = (uint16_t) strtol(optarg, NULL, 16);
 				break;
 
-			case 'ps': //ps
+			case 's': //ps
 				ps = optarg;
 				break;
 
-			case 'rt': //rt
+			case 'r': //rt
 				rt = optarg;
 				break;
 
-			case 'pty': //pty
+			case 'p': //pty
 				pty = atoi(optarg);
 				break;
 
-			case 'tp': //tp
+			case 'T': //tp
 				tp = atoi(optarg);
 				break;
 
-			case 'af': //af
+			case 'A': //af
 				af_size++;
 				alternative_freq[af_size] = (int)(10*atof(optarg))-875;
 				if(alternative_freq[af_size] < 1 || alternative_freq[af_size] > 204)
@@ -286,9 +289,9 @@ int main(int argc, char **argv) {
 			case 'h': //help
 				fatal("Help:\n"
 				      "Syntax: mpx_gen [--audio (-a) file]\n"
-				      "                [--mpx (-m) mpx-power] [--preemph (-P) preemphasis] [--div (-D) divider]\n"
-				      "                [--wait (-W) wait-switch]\n"
-				      "                [--rds rds-switch] [--pi pi-code] [--ps ps-text] [--rt radiotext] [--tp traffic-program]\n"
+				      "                [--mpx (-m) mpx-power] [--preemph (-P) preemphasis]\n"
+				      "                [--wait (-W) wait-switch] [--rds rds-switch]\n"
+				      "                [--pi pi-code] [--ps ps-text] [--rt radiotext] [--tp traffic-program]\n"
 				      "                [--pty program-type] [--af alternative-freq] [--ctl (-C) control-pipe]\n");
 
 				break;

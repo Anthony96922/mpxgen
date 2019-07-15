@@ -1,27 +1,28 @@
 CC = gcc
-STD_CFLAGS = -Wall -Wno-multichar -std=gnu99 -ffast-math -c -O2
+STD_CFLAGS = -Wall -std=gnu99 -ffast-math -c -O2
 
-CFLAGS = $(STD_CFLAGS) -march=armv7-a -mtune=cortex-a5 -mfloat-abi=hard -mfpu=vfp
+CFLAGS = $(STD_CFLAGS) -march=armv7-a -mtune=cortex-a5 -mfloat-abi=hard -mfpu=vfpv4
 
 app: mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o
 	$(CC) -o mpxgen mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o -lm -lsndfile -lsamplerate -lao
 
-rds.o: rds.c waveforms.h
+rds.o: rds.c
 	$(CC) $(CFLAGS) rds.c
 
-control_pipe.o: control_pipe.c control_pipe.h rds.h
+control_pipe.o: control_pipe.c
 	$(CC) $(CFLAGS) control_pipe.c
 
-waveforms.o: waveforms.c waveforms.h
+waveforms.o: waveforms.c
 	$(CC) $(CFLAGS) waveforms.c
 
-mailbox.o: mailbox.c mailbox.h
+mailbox.o: mailbox.c
 	$(CC) $(CFLAGS) mailbox.c
 
-fm_mpx.o: fm_mpx.c fm_mpx.h
+fm_mpx.o: fm_mpx.c
 	$(CC) $(CFLAGS) fm_mpx.c
 
 mpx_gen.o: mpx_gen.c
 	$(CC) $(CFLAGS) mpx_gen.c
+
 clean:
 	rm -f *.o mpxgen
