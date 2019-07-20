@@ -221,28 +221,21 @@ int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int rds, int wait) 
 		}
 		// End of FIR filter
 
-		if (channels>1) {
-			mpx_buffer[i] =
-			10 * out_mono +
-			10 * carrier_38[phase_38] * out_stereo +
-			carrier_19[phase_19];
+		mpx_buffer[i] = 10 * out_mono;
 
-			if (rds) {
-				mpx_buffer[i] += rds_buffer[i];
-			}
+		if (channels>1) {
+			mpx_buffer[i] +=
+			10 * carrier_38[phase_38] * out_stereo +
+			0.8 * carrier_19[phase_19];
 
 			phase_19++;
 			phase_38++;
 			if(phase_19 >= 12) phase_19 = 0;
 			if(phase_38 >= 6) phase_38 = 0;
 		}
-		else {
-			mpx_buffer[i] = 10 * out_mono;
 
-			if (rds) {
-				mpx_buffer[i] += rds_buffer[i];
-			}
-		}
+		if (rds) mpx_buffer[i] += rds_buffer[i];
+
 		audio_pos++;
 	}
 

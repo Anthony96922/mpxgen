@@ -25,7 +25,7 @@
 #include "control_pipe.h"
 
 #define DATA_SIZE		4096
-#define BUFFER_SIZE		8192
+#define OUTPUT_DATA_SIZE	8192
 
 ao_device *device;
 SRC_STATE *src_state;
@@ -46,11 +46,10 @@ static void terminate(int num)
 static void fatal(char *fmt, ...)
 {
     va_list ap;
-    fprintf(stderr,"ERROR: ");
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
     va_end(ap);
-    terminate(0);
+    exit(1);
 }
 
 void postprocess(float *inbuf, short *outbuf, int inbufsize, float volume) {
@@ -82,7 +81,7 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	float mpx_data[DATA_SIZE];
 	float rds_data[DATA_SIZE];
 	float resample_out[DATA_SIZE];
-	short dev_out[BUFFER_SIZE];
+	short dev_out[OUTPUT_DATA_SIZE];
 
 	// AO
 	ao_sample_format format;
@@ -101,15 +100,14 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	}
 
 	// SRC
-	int src_init_error;
 	int src_error;
 	int generated_frames;
 
 	SRC_STATE *src_state;
 	SRC_DATA src_data;
 
-	if ((src_state = src_new(SRC_SINC_FASTEST, 1, &src_init_error)) == NULL) {
-		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_init_error));
+	if ((src_state = src_new(SRC_SINC_FASTEST, 1, &src_error)) == NULL) {
+		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_error));
 		return 1;
 	}
 
@@ -186,11 +184,11 @@ int main(int argc, char **argv) {
 
 	char *audio_file = NULL;
 	char *control_pipe = NULL;
-    	int rds = 1;
+	int rds = 1;
 	int alternative_freq[100] = {};
 	int af_size = 0;
-	char *ps = "MPXGEN";
-	char *rt = "MPXGEN: FM multiplex generator and RDS encoder";
+	char *ps = "mpxgen";
+	char *rt = "mpxgen: FM Stereo and RDS encoder";
 	uint16_t pi = 0x1234;
 	int preemphasis_cutoff = 0;
 	int pty = 0;
@@ -250,7 +248,7 @@ int main(int argc, char **argv) {
 				wait = atoi(optarg);
 				break;
 
-			case 'd': //rds
+			case 'R': //rds
 				rds = atoi(optarg);
 				break;
 
@@ -286,13 +284,12 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'h': //help
-				fatal("Help:\n"
-				      "Syntax: mpx_gen [--audio (-a) file]\n"
-				      "                [--mpx (-m) mpx-power] [--preemph (-P) preemphasis]\n"
-				      "                [--wait (-W) wait-switch] [--rds rds-switch]\n"
-				      "                [--pi pi-code] [--ps ps-text] [--rt radiotext] [--tp traffic-program]\n"
-				      "                [--pty program-type] [--af alternative-freq] [--ctl (-C) control-pipe]\n");
-
+				fatal("Help: %s\n"
+				      "	[--audio (-a) file] [--mpx (-m) mpx-power]\n"
+				      "	[--preemph (-P) preemphasis] [--wait (-W) wait-switch]\n"
+				      "	[--rds rds-switch] [--pi pi-code] [--ps ps-text]\n"
+				      "	[--rt radiotext] [--tp traffic-program] [--pty program-type]\n"
+				      "	[--af alternative-freq] [--ctl (-C) control-pipe]\n", argv[0]);
 				break;
 
 			case ':':

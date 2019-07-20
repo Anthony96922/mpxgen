@@ -54,13 +54,13 @@ int poll_control_pipe() {
         if(arg[strlen(arg)-1] == '\n') arg[strlen(arg)-1] = 0;
         if(res[0] == 'P' && res[1] == 'S') {
             arg[8] = 0;
-            set_rds_ps_dynamic(arg);
+            set_rds_ps(arg);
             printf("PS set to: \"%s\"\n", arg);
             return CONTROL_PIPE_PS_SET;
         }
         if(res[0] == 'R' && res[1] == 'T') {
             arg[64] = 0;
-            set_rds_rt_dynamic(arg);
+            set_rds_rt(arg);
             printf("RT set to: \"%s\"\n", arg);
             return CONTROL_PIPE_RT_SET;
         }
@@ -114,7 +114,7 @@ int poll_control_pipe() {
         }
         if (res[0] == 'R' && res[1] == 'T' && res[2] == 'P') {
             int type_1, start_1, len_1, type_2, start_2, len_2;
-            if (sscanf(arg, "%d,%d,%d,%d,%d,%d", &type_1, &start_1, &len_1, &type_2, &start_2, &len_2)) {
+            if (sscanf(arg, "%d,%d,%d,%d,%d,%d", &type_1, &start_1, &len_1, &type_2, &start_2, &len_2) == 6) {
                 if (type_1 > 63) type_1 = 0;
                 if (type_2 > 63) type_2 = 0;
                 if (start_1 > 64) start_1 = 0;
@@ -135,7 +135,7 @@ int poll_control_pipe() {
         if(arg[strlen(arg)-1] == '\n') arg[strlen(arg)-1] = 0;
 	if (res[0] == 'R' && res[1] == 'T' && res[2] == 'P' && res[3] == 'F') {
             int toggle, running;
-            if (sscanf(arg, "%d,%d", &toggle, &running)) {
+            if (sscanf(arg, "%d,%d", &toggle, &running) == 2) {
                 if (toggle > 1) toggle = 0;
                 if (running > 1) running = 0;
                 printf("RT+ flags: toggle: %d, running: %d\n", toggle, running);
@@ -153,7 +153,7 @@ int poll_control_pipe() {
             } else {
                 printf("PTYN set to: \"%s\"\n", arg);
                 set_rds_ptyn_enable(1);
-                set_rds_ptyn_dynamic(arg);
+                set_rds_ptyn(arg);
             }
             return CONTROL_PIPE_PTYN_SET;
         }
