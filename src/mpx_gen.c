@@ -52,7 +52,7 @@ static void fatal(char *fmt, ...)
     exit(1);
 }
 
-void postprocess(float *inbuf, short *outbuf, int inbufsize, float volume) {
+void postprocess(float *inbuf, short *outbuf, size_t inbufsize, float volume) {
 	int j = 0;
 
 	for (int i = 0; i < inbufsize; i++) {
@@ -93,15 +93,14 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	format.rate = 192000;
 	format.byte_format = AO_FMT_LITTLE;
 
-	device = ao_open_live(default_driver, &format, NULL);
-	if (device == NULL) {
+	if ((device = ao_open_live(default_driver, &format, NULL)) == NULL) {
 		fprintf(stderr, "Error: cannot open sound device.\n");
 		return 1;
 	}
 
 	// SRC
 	int src_error;
-	int generated_frames;
+	size_t generated_frames;
 
 	SRC_STATE *src_state;
 	SRC_DATA src_data;
@@ -112,7 +111,7 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	}
 
 	src_data.src_ratio = 192000. / 228000;
-	src_data.output_frames = DATA_SIZE;
+	src_data.output_frames = OUTPUT_DATA_SIZE;
 
 	printf("Starting MPX generator\n");
 
@@ -131,8 +130,7 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	printf("RDS Options:\n");
 
 	if(rds) {
-		printf("RDS: %i, ", rds);
-		printf("PI: %04X, PS: \"%s\", PTY: %i\n", pi, ps, pty);
+		printf("RDS: %i, PI: %04X, PS: \"%s\", PTY: %i\n", rds, pi, ps, pty);
 		printf("RT: \"%s\"\n", rt);
 		if(af_array[0]) {
 			set_rds_af(af_array);
@@ -167,13 +165,17 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 		src_data.data_out = resample_out;
 
 		if ((src_error = src_process(src_state, &src_data))) {
-			printf("Error: src_process failed: %s\n", src_strerror(src_error));
+			fprintf(stderr, "Error: src_process failed: %s\n", src_strerror(src_error));
 			break;
 		}
 
 		generated_frames = src_data.output_frames_gen;
 		postprocess(resample_out, dev_out, generated_frames, mpx);
-		ao_play(device, (char *)dev_out, generated_frames * 4);
+		// num_bytes = generated_frames * channels * bytes per sample
+		if (!ao_play(device, (char *)dev_out, generated_frames * 4)) {
+			fprintf(stderr, "Error: could not play audio.\n");
+			break;
+		}
 	}
 
 	return 0;

@@ -118,7 +118,7 @@ int get_rds_ct_group(uint16_t *blocks) {
 
 /* PS group (0A)
  */
-int get_rds_ps_group(uint16_t *blocks) {
+void get_rds_ps_group(uint16_t *blocks) {
 	static int ps_state, af_state;
 
 	blocks[1] |= 0x0000 | rds_params.ta << 4 | rds_params.ms << 3 | ps_state;
@@ -143,12 +143,11 @@ int get_rds_ps_group(uint16_t *blocks) {
 			ps_update = 0;
 		}
 	}
-	return 1;
 }
 
 /* RT group (2A)
  */
-int get_rds_rt_group(uint16_t *blocks) {
+void get_rds_rt_group(uint16_t *blocks) {
 	static int rt_state;
 
 restart_rt:
@@ -170,12 +169,11 @@ restart_rt:
 
 	rt_state++;
 	if (rt_state == 16) rt_state = 0;
-	return 1;
 }
 
 /* ODA group (3A)
  */
-int get_rds_oda_group(uint16_t *blocks) {
+void get_rds_oda_group(uint16_t *blocks) {
 	static int oda_state;
 
 	switch (oda_state) {
@@ -188,12 +186,11 @@ int get_rds_oda_group(uint16_t *blocks) {
 
 	oda_state++;
 	if (oda_state == 1) oda_state = 0;
-	return 1;
 }
 
 /* PTYN group (10A)
  */
-int get_rds_ptyn_group(uint16_t *blocks) {
+void get_rds_ptyn_group(uint16_t *blocks) {
 	static int ptyn_state;
 
 	blocks[1] |= 0xA000 | ptyn_state;
@@ -207,12 +204,11 @@ int get_rds_ptyn_group(uint16_t *blocks) {
 			ptyn_update = 0;
 		}
 	}
-	return 1;
 }
 
 /* RT+ group (assigned to 11A)
  */
-int get_rds_rtp_group(uint16_t *blocks) {
+void get_rds_rtp_group(uint16_t *blocks) {
 	// RT+ block format
 	blocks[1] |= 0xB000 | rds_params.rt_p_toggle << 4 | rds_params.rt_p_running << 3 |
 		    (rds_params.rt_p_type_1 & 0x38) >> 3;
@@ -220,25 +216,23 @@ int get_rds_rtp_group(uint16_t *blocks) {
 		    (rds_params.rt_p_len_1 & 0x3F) << 1 | (rds_params.rt_p_type_2 & 0x20) >> 5;
 	blocks[3] = (rds_params.rt_p_type_2 & 0x1F) << 11 | (rds_params.rt_p_start_2 & 0x3F) << 5 |
 		    (rds_params.rt_p_len_2 & 0x1F);
-	return 1;
 }
 
 /* Other RDS groups have lower priority than 0A and 2A and are
    therefore placed in a subsequence
  */
-int get_rds_other_groups(uint16_t *blocks) {
+void get_rds_other_groups(uint16_t *blocks) {
 	static int state;
 
 skip_group:
-	if (state == 5) state = 0;
+	if (state == 4) state = 0;
 
 	switch (state) {
-	case 0:
-	case 1: // Type 3A groups
+	case 0: // Type 3A groups
 		get_rds_oda_group(blocks);
 		break;
-	case 2:
-	case 3: // Type 10A groups
+	case 1:
+	case 2: // Type 10A groups
 		if (!rds_params.enable_ptyn) { // Do not generate a 10A group if PTYN is off
 			state++;
 			goto skip_group;
@@ -246,16 +240,15 @@ skip_group:
 			get_rds_ptyn_group(blocks);
 		}
 		break;
-	case 4: // Type 11A groups
+	case 3: // Type 11A groups
 		get_rds_rtp_group(blocks);
 		break;
 	}
 
 	state++;
-	return 1;
 }
 
-/* Creates an RDS group. This generates sequences of the form 0A, 2A, 0A, 2A, 0A, 2A, 0A, 2A, etc.
+/* Creates an RDS group. This generates sequences of the form 0A, 2A, 0A, 2A, 0A, 2A, etc.
    The pattern is of length 8, the variable 'state' keeps track of where we are in the
    pattern. 'ps_state' and 'rt_state' keep track of where we are in the PS (0A) sequence
    or RT (2A) sequence, respectively.
@@ -274,16 +267,17 @@ void get_rds_group(int *buffer) {
 	    get_rds_ps_group(blocks);
 	    break;
 	case 1:
-	case 3: // Type 2A groups
+	case 3:
+	case 5: // Type 2A groups
 	    get_rds_rt_group(blocks);
 	    break;
-	case 5: // Other groups
+	case 6: // Other groups
 	    get_rds_other_groups(blocks);
 	    break;
 	}
 
 	state++;
-	if(state == 6) state = 0;
+	if(state == 7) state = 0;
     }
 
     // Calculate the checkword for each block and emit the bits
