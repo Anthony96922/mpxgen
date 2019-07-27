@@ -1,22 +1,70 @@
 # mpxgen
 Based on PiFmAdv (https://github.com/miegl/PiFmAdv) which is based on PiFmRds (https://github.com/ChristopheJacquet/PiFmRds)
 
-This program generates FM multiplex baseband audio that can be fed through a 192 kHz capable sound card to a mono FM transmitter. This includes stereo audio as well as realtime RDS data. This is a work in progress.
+This program generates FM multiplex baseband audio that can be fed through a 192 kHz capable sound card to a mono FM transmitter. This includes stereo audio as well as realtime RDS data.
 
-Libraries needed:
-- libsndfile
-- libsamplerate
-
-To build:
-
+## Build
+This app needs the libsndfile and libsamplerate libraries to work. Once those are installed, run
 ```
 git clone https://github.com/Anthony96922/mpxgen
 cd mpxgen/src
 make
 ```
 
-To test:
+## How to use
+Simply run:
+```
+./mpxgen
+```
+This produce an RDS subcarrier but there will be no audio. If you have an FM transmitter plugged in to the sound card, tune an RDS-enabled radio to your transmitter's frequency. You should see "mpxgen" appear on the display.
 
-`./mpxgen --audio stereo_44100.wav`
+To test audio output, you can use the provided stereo_44100.wav file.
+```
+./mpxgen --audio stereo_44100.wav
+```
+If the audio sounds distorted, you may be overmodulating the transmitter. Adjust the sound card's volume until audio sounds clear and no clipping can be heard.
 
-mpxgen will output to your default sound card.
+There are more options that can be given to mpxgen:
+* `--audio` specifies an audio file to play as audio. The sample rate does not matter: mpxgen will resample and filter it. If a stereo file is provided, mpxgen will produce an FM Stereo signal. Example: `--audio sound.wav`. The supported formats depend on `libsndfile`. This includes WAV and Ogg/Vorbis (among others) but not MP3. Specify `-` as the file name to read audio data on standard input (useful for piping audio into mpxgen, see below).
+* `--pi` specifies the PI code of the RDS broadcast. 4 hexadecimal digits. Example: `--pi FFFF`.
+* `--ps` specifies the station name (Program Service name, PS) of the RDS broadcast. Limit: 8 characters. Example: `--ps KPSK-FM`.
+* `--rt` specifies the radiotext (RT) to be transmitted. Limit: 64 characters. Example:  `--rt 'Hello, world!'`.
+* `--af` specifies alternative frequencies (AF). Example:  `--af 107.9 --af 99.2`.
+* `--pty` specifies the program type. Valid range: 0 - 31. Example: `--pty 9` (US: Top 40). See https://en.wikipedia.org/wiki/Radio_Data_System for more program types.
+* `--tp` specifies if the program carries traffic information.  Example `--tp 0`.
+* `--mpx` specifies the MPX output volume. Default 10. Example `--mpx 50`. Use this if your sound card does not have a software volume control.
+* `--preemph` specifies which preemph should be used, since it differs from location. For Europe choose 'eu', for the US choose 'us'.
+* `--ctl` specifies a named pipe (FIFO) to use as a control channel to change PS and RT at run-time (see below).
+* `--rds` RDS broadcast switch.
+* `--wait` specifies whether mpxgen should wait for the the audio pipe or terminate as soon as there is no audio. It's set to 1 by default.
+
+### Piping audio into mpxgen
+If you use the argument `--audio -`, mpxgen reads audio data on standard input. This allows you to pipe the output of a program into mpxgen. For instance, this can be used to read MP3 files using Sox:
+```
+sox -t mp3 http://www.linuxvoice.com/episodes/lv_s02e01.mp3 -t wav -  | ./mpxgen --audio -
+```
+Or to pipe the AUX input of a sound card into mpxgen:
+```
+arecord -fS16_LE -r 44100 -Dplughw:1,0 -c 2 -  | ./mpxgen --audio -
+```
+
+### Changing PS, RT, TA and PTY at run-time
+You can control PS, RT, TA (Traffic Announcement flag) and PTY (Program Type) at run-time using a named pipe (FIFO). For this run mpxgen with the `--ctl` argument.
+
+Example:
+```
+mkfifo rds_ctl
+./mpxgen --ctl rds_ctl
+```
+Then you can send “commands” to change PS, RT, TA and PTY:
+```
+cat >rds_ctl
+PS MyText
+RT A text to be sent as radiotext
+PTY 10
+TA ON
+PS OtherTxt
+TA OFF
+...
+```
+Every line must start with either `PS`, `RT`, `TA` or `PTY`, followed by one space character, and the desired value. Any other line format is silently ignored. `TA ON` switches the Traffic Announcement flag to *on*, and any other value switches it to *off*.
