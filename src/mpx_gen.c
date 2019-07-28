@@ -7,15 +7,9 @@
 */
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <errno.h>
 #include <stdarg.h>
-#include <stdint.h>
 #include <signal.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <getopt.h>
 #include <samplerate.h>
 #include <ao/ao.h>
@@ -102,7 +96,6 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	int src_error;
 	size_t generated_frames;
 
-	SRC_STATE *src_state;
 	SRC_DATA src_data;
 
 	if ((src_state = src_new(SRC_SINC_FASTEST, 1, &src_error)) == NULL) {
@@ -111,7 +104,9 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	}
 
 	src_data.src_ratio = 192000. / 228000;
+	src_data.input_frames = DATA_SIZE;
 	src_data.output_frames = OUTPUT_DATA_SIZE;
+	src_data.data_out = resample_out;
 
 	printf("Starting MPX generator\n");
 
@@ -125,7 +120,6 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	set_rds_pty(pty);
 	set_rds_tp(tp);
 	set_rds_ms(1);
-	set_rds_ab(0);
 
 	printf("RDS Options:\n");
 
@@ -160,9 +154,7 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 		if(control_pipe) poll_control_pipe();
 
 		if (fm_mpx_get_samples(mpx_data, rds_data, rds, wait) < 0) break;
-		src_data.input_frames = DATA_SIZE;
 		src_data.data_in = mpx_data;
-		src_data.data_out = resample_out;
 
 		if ((src_error = src_process(src_state, &src_data))) {
 			fprintf(stderr, "Error: src_process failed: %s\n", src_strerror(src_error));
@@ -196,7 +188,7 @@ int main(int argc, char **argv) {
 	int pty = 0;
 	int tp = 0;
 	float mpx = 10;
-	int wait = 0;
+	int wait = 1;
 
 	const char	*short_opt = "a:P:m:W:R:i:s:r:p:T:A:C:h";
 	struct option	long_opt[] =
@@ -244,6 +236,8 @@ int main(int argc, char **argv) {
 
 			case 'm': //mpx
 				mpx = atoi(optarg);
+				if (mpx < 1 || mpx > 100)
+					fatal("MPX volume must be between 1 - 100.\n");
 				break;
 
 			case 'W': //wait
@@ -268,6 +262,8 @@ int main(int argc, char **argv) {
 
 			case 'p': //pty
 				pty = atoi(optarg);
+				if (pty < 0 || pty > 31)
+					fatal("PTY must be between 0 - 31.\n");
 				break;
 
 			case 'T': //tp
@@ -287,7 +283,7 @@ int main(int argc, char **argv) {
 
 			case 'h': //help
 				fatal("Help: %s\n"
-				      "	[--audio (-a) file] [--mpx (-m) mpx-power]\n"
+				      "	[--audio (-a) file] [--mpx (-m) mpx-volume]\n"
 				      "	[--preemph (-P) preemphasis] [--wait (-W) wait-switch]\n"
 				      "	[--rds rds-switch] [--pi pi-code] [--ps ps-text]\n"
 				      "	[--rt radiotext] [--tp traffic-program] [--pty program-type]\n"

@@ -1,5 +1,5 @@
 CC = gcc
-STD_CFLAGS = -Wall -std=gnu99 -ffast-math -c -O2
+STD_CFLAGS = -Wall -c -O2
 
 CFLAGS = $(STD_CFLAGS)
 
@@ -14,9 +14,6 @@ control_pipe.o: control_pipe.c
 
 waveforms.o: waveforms.c
 	$(CC) $(CFLAGS) waveforms.c
-
-mailbox.o: mailbox.c
-	$(CC) $(CFLAGS) mailbox.c
 
 fm_mpx.o: fm_mpx.c
 	$(CC) $(CFLAGS) fm_mpx.c
