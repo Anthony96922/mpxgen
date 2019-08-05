@@ -32,8 +32,6 @@ static void terminate(int num)
     ao_shutdown();
     src_delete(src_state);
 
-    printf("MPX generator stopped\n");
-
     exit(num);
 }
 
@@ -108,8 +106,6 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	src_data.output_frames = OUTPUT_DATA_SIZE;
 	src_data.data_out = resample_out;
 
-	printf("Starting MPX generator\n");
-
 	// Initialize the baseband generator
 	if(fm_mpx_open(audio_file, DATA_SIZE, preemphasis_cutoff) < 0) return 1;
 
@@ -121,23 +117,18 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	set_rds_tp(tp);
 	set_rds_ms(1);
 
-	printf("RDS Options:\n");
-
 	if(rds) {
-		printf("RDS: %i, PI: %04X, PS: \"%s\", PTY: %i\n", rds, pi, ps, pty);
+		printf("RDS Options:\n");
+		printf("PI: %04X, PS: \"%s\", PTY: %d\n", pi, ps, pty);
 		printf("RT: \"%s\"\n", rt);
 		if(af_array[0]) {
 			set_rds_af(af_array);
 			printf("AF: ");
-			int f;
-			for(f = 1; f < af_array[0]+1; f++) {
-				printf("%f Mhz ", (float)(af_array[f]+875)/10);
+			for(int f = 1; f < af_array[0]+1; f++) {
+				printf("%.1f MHz ", (float)(af_array[f]+875)/10);
 			}
 			printf("\n");
 		}
-	}
-	else {
-		printf("RDS: %i\n", rds);
 	}
 
 	// Initialize the control pipe reader
@@ -274,7 +265,7 @@ int main(int argc, char **argv) {
 				af_size++;
 				alternative_freq[af_size] = (int)(10*atof(optarg))-875;
 				if(alternative_freq[af_size] < 1 || alternative_freq[af_size] > 204)
-					fatal("Alternative Frequency has to be set in range of 87.6 Mhz - 107.9 Mhz\n");
+					fatal("Alternative Frequency has to be set in range of 87.6 MHz - 107.9 MHz\n");
 				break;
 
 			case 'C': //ctl
