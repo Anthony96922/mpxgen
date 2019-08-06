@@ -1,8 +1,8 @@
 /*
-    PiFmAdv - Advanced FM transmitter for the Raspberry Pi
-    Copyright (C) 2017 Miegl
+    mpxgen - FM multiplex encoder with Stereo and RDS
+    Copyright (C) 2019 Anthony96922
 
-    See https://github.com/Miegl/PiFmAdv
+    See https://github.com/Anthony96922/mpxgen
 */
 
 #define CONTROL_PIPE_PS_SET 1

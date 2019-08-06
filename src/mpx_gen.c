@@ -1,9 +1,8 @@
 /*
+    mpxgen - FM multiplex encoder with Stereo and RDS
+    Copyright (C) 2019 Anthony96922
 
-    PiFmAdv - Advanced FM transmitter for the Raspberry Pi
-    Copyright (C) 2017 Miegl
-
-    See https://github.com/Miegl/PiFmAdv
+    See https://github.com/Anthony96922/mpxgen
 */
 
 #include <stdio.h>

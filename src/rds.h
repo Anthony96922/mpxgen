@@ -1,13 +1,12 @@
 /*
-    PiFmAdv - Advanced FM transmitter for the Raspberry Pi
-    Copyright (C) 2017 Miegl
+    mpxgen - FM multiplex encoder with Stereo and RDS
+    Copyright (C) 2019 Anthony96922
 
-    See https://github.com/Miegl/PiFmAdv
+    See https://github.com/Anthony96922/mpxgen
 */
 
 #ifndef RDS_H
 #define RDS_H
-
 
 #include <stdint.h>
 
@@ -26,6 +25,5 @@ extern void set_rds_af(int *af_array);
 extern void set_rds_tp(int tp);
 extern void set_rds_ms(int ms);
 extern void set_rds_ab(int ab);
-
 
 #endif /* RDS_H */
