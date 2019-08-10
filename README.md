@@ -4,7 +4,9 @@ Based on PiFmAdv (https://github.com/miegl/PiFmAdv) which is based on PiFmRds (h
 This program generates FM multiplex baseband audio that can be fed through a 192 kHz capable sound card to a mono FM transmitter. This includes stereo audio as well as realtime RDS data.
 
 ## Build
-This app needs the libsndfile and libsamplerate libraries to work. Once those are installed, run
+This app depends on the sndfile, ao and samplerate libraries. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libao-dev libsamplerate0-dev` to install them.
+
+Once those are installed, run
 ```
 git clone https://github.com/Anthony96922/mpxgen
 cd mpxgen/src
@@ -16,7 +18,7 @@ Simply run:
 ```
 ./mpxgen
 ```
-This produce an RDS subcarrier but there will be no audio. If you have an FM transmitter plugged in to the sound card, tune an RDS-enabled radio to your transmitter's frequency. You should see "mpxgen" appear on the display.
+This will produce only an RDS subcarrier with no audio. If you have an FM transmitter plugged in to the sound card, tune an RDS-enabled radio to your transmitter's frequency. You should see "mpxgen" appear on the display.
 
 To test audio output, you can use the provided stereo_44100.wav file.
 ```
@@ -48,6 +50,8 @@ Or to pipe the AUX input of a sound card into mpxgen:
 arecord -fS16_LE -r 44100 -Dplughw:1,0 -c 2 -  | ./mpxgen --audio -
 ```
 
+Please note this does not do any processing other than low-pass filtering and optionally preemphasis. Use an external program with processiong like sox or ffmpeg if you want to increase the loudness of your audio.
+
 ### Changing PS, RT, TA and PTY at run-time
 You can control PS, RT, TA (Traffic Announcement flag) and PTY (Program Type) at run-time using a named pipe (FIFO). For this run mpxgen with the `--ctl` argument.
 
@@ -68,3 +72,13 @@ TA OFF
 ...
 ```
 Every line must start with either `PS`, `RT`, `TA` or `PTY`, followed by one space character, and the desired value. Any other line format is silently ignored. `TA ON` switches the Traffic Announcement flag to *on*, and any other value switches it to *off*.
+
+### RT+
+Mpxgen implements RT+ to allow some radios to display indivdual MP3-like metadata tags like artist and song titles from RT.
+
+Syntax for RT+ is comma-separated values specifying content type, start offset and length. RT+ flags use a similar syntax.
+```
+RTP <content type 1>,<start 1>,<length 1>,<content type 2>,<start 2>,<length 2>
+RTPF <running bit>,<toggle bit>
+```
+For more information, see http://www.nprlabs.org/sites/nprlabs/files/documents/pad/RDSPlus_Description.pdf
