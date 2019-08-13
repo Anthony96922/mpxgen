@@ -122,7 +122,7 @@ void get_rds_ps_group(uint16_t *blocks) {
 	static int ps_state, af_state;
 
 	blocks[1] |= 0x0000 | rds_params.ta << 4 | rds_params.ms << 3 | ps_state;
-	if (ps_state == 3) blocks[1] |= 0x0004; // DI = 1 - Stereo
+	if (ps_state == 3) blocks[1] |= 4; // DI = 1 - Stereo
 	if (rds_params.af[0]) { // AF
 		if (af_state == 0) {
 			blocks[2] = (rds_params.af[0] + 224) << 8 | rds_params.af[1];
@@ -384,15 +384,19 @@ void set_rds_rt(char *rt) {
 }
 
 void set_rds_ps(char *ps) {
-    int i = 0;
+    int i;
 
     if (!ps_init) {
 	strncpy(rds_params.ps, ps, 8);
-	for(i=0; i<8; i++) if(rds_params.ps[i] == 0) rds_params.ps[i] = 32;
+	for(i=0; i<8; i++) {
+	    if(rds_params.ps[i] == 0) rds_params.ps[i] = 32;
+	}
 	ps_init = 1;
     } else {
 	strncpy(rds_params.new_ps, ps, 8);
-	for(i=0; i<8; i++) if(rds_params.new_ps[i] == 0) rds_params.ps[i] = 32;
+	for(i=0; i<8; i++) {
+	    if(rds_params.new_ps[i] == 0) rds_params.ps[i] = 32;
+	}
 	ps_update = 1;
     }
 }

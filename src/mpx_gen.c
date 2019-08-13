@@ -17,8 +17,7 @@
 #include "fm_mpx.h"
 #include "control_pipe.h"
 
-#define DATA_SIZE		4096
-#define OUTPUT_DATA_SIZE	DATA_SIZE * 2
+#define OUTPUT_DATA_SIZE (DATA_SIZE * 2)
 
 ao_device *device;
 SRC_STATE *src_state;
@@ -68,9 +67,13 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 		sigaction(i, &sa, NULL);
 	}
 
+	if (audio_file == NULL && !rds) {
+		fprintf(stderr, "Nothing to encode. Exiting.\n");
+		return 0;
+	}
+
 	// Data structures for baseband data
 	float mpx_data[DATA_SIZE];
-	float rds_data[DATA_SIZE];
 	float resample_out[DATA_SIZE];
 	short dev_out[OUTPUT_DATA_SIZE];
 
@@ -90,8 +93,8 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	}
 
 	// SRC
-	int src_error;
-	size_t generated_frames;
+	int src_error = 0;
+	size_t generated_frames = 0;
 
 	SRC_DATA src_data;
 	src_data.src_ratio = 192000. / 228000;
@@ -105,7 +108,7 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	}
 
 	// Initialize the baseband generator
-	if(fm_mpx_open(audio_file, DATA_SIZE, preemphasis) < 0) return 1;
+	if(fm_mpx_open(audio_file, DATA_SIZE, preemphasis, rds, wait) < 0) return 1;
 
 	// Initialize the RDS modulator
 	set_rds_pi(pi);
@@ -142,7 +145,7 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	for (;;) {
 		if(control_pipe) poll_control_pipe();
 
-		if (fm_mpx_get_samples(mpx_data, rds_data, rds, wait) < 0) break;
+		if (fm_mpx_get_samples(mpx_data) < 0) break;
 		src_data.data_in = mpx_data;
 
 		if ((src_error = src_process(src_state, &src_data))) {
@@ -163,7 +166,7 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 }
 
 int main(int argc, char **argv) {
-	int opt;
+	int opt = 0;
 
 	char *audio_file = NULL;
 	char *control_pipe = NULL;
@@ -204,10 +207,6 @@ int main(int argc, char **argv) {
 	{
 		switch(opt)
 		{
-			case -1:
-			case 0:
-			break;
-
 			case 'a': //audio
 				audio_file = optarg;
 				break;

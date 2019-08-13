@@ -5,6 +5,8 @@
     See https://github.com/Anthony96922/mpxgen
 */
 
-extern int fm_mpx_open(char *filename, size_t len, int preemphasis);
-extern int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int rds, int wait);
+#define DATA_SIZE 4096
+
+extern int fm_mpx_open(char *filename, size_t len, int preemphasis, int rds_on, int wait_for_audio);
+extern int fm_mpx_get_samples(float *mpx_buffer);
 extern int fm_mpx_close();

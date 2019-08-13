@@ -11,6 +11,7 @@
 #include <math.h>
 
 #include "rds.h"
+#include "fm_mpx.h"
 
 #define FIR_PHASES	32
 #define FIR_TAPS	32 // MUST be a power of 2 for the circular buffer
@@ -37,8 +38,9 @@ float fir_buffer_right[FIR_TAPS] = {0};
 int fir_index = 0;
 int channels;
 
-float preemphasis_prewarp;
-float preemphasis_coefficient;
+float rds_buffer[DATA_SIZE];
+int rds;
+int wait;
 
 SNDFILE *inf;
 
@@ -51,8 +53,10 @@ float *alloc_empty_buffer(size_t length) {
     return p;
 }
 
-int fm_mpx_open(char *filename, size_t len, int preemphasis) {
+int fm_mpx_open(char *filename, size_t len, int preemphasis, int rds_on, int wait_for_audio) {
 	length = len;
+	wait = wait_for_audio;
+	rds = rds_on;
 
 	if(filename != NULL) {
 		// Open the input file
@@ -138,7 +142,7 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis) {
 
 // samples provided by this function are in 0..10: they need to be divided by
 // 10 after.
-int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int rds, int wait) {
+int fm_mpx_get_samples(float *mpx_buffer) {
 	if(inf == NULL) {
 		if(rds) get_rds_samples(mpx_buffer, length);
 		return 0;
@@ -167,7 +171,6 @@ int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int rds, int wait) 
 							}
 						}
 					} else {
-
 						break;
 					}
 				}
@@ -205,10 +208,9 @@ int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int rds, int wait) 
 			}
 		}
 
-		mpx_buffer[i] = 10 * (out_left + out_right);
-
 		if (channels > 1) {
 			mpx_buffer[i] +=
+			10 * (out_left + out_right) +
 			0.8 * carrier_19[phase_19] +
 			10 * carrier_38[phase_38] * (out_left - out_right);
 
@@ -216,7 +218,8 @@ int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int rds, int wait) 
 			phase_38++;
 			if(phase_19 >= 12) phase_19 = 0;
 			if(phase_38 >= 6) phase_38 = 0;
-		}
+		} else
+			mpx_buffer[i] = 10 * out_left;
 
 		if (rds) mpx_buffer[i] += rds_buffer[i];
 
