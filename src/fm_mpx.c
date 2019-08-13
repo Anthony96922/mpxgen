@@ -12,16 +12,16 @@
 
 #include "rds.h"
 
-#define FIR_HALF_SIZE 30
-#define FIR_SIZE (2*FIR_HALF_SIZE-1)
+#define FIR_PHASES	32
+#define FIR_TAPS	32 // MUST be a power of 2 for the circular buffer
 
 size_t length;
 
 // coefficients of the low-pass FIR filter
-float low_pass_fir[FIR_HALF_SIZE];
+float low_pass_fir[FIR_PHASES][FIR_TAPS];
 
-float carrier_19[] = {0, 0.5, 0.8660253882408142, 1, 0.8660253882408142, 0.5, 1.224646852585168e-16, -0.5, -0.8660253882408142, -1, -0.8660253882408142, -0.5};
-float carrier_38[] = {0, 0.8660253882408142, 0.8660253882408142, 1.224646852585168e-16, -0.8660253882408142, -0.8660253882408142};
+float carrier_19[] = {0, 0.5, 0.8660254, 1, 0.8660254, 0.5, 0, -0.5, -0.8660254, -1, -0.8660254, -0.5};
+float carrier_38[] = {0, 0.8660254, 0.8660254, 0, -0.8660254, -0.8660254};
 int phase_19 = 0;
 int phase_38 = 0;
 
@@ -32,12 +32,11 @@ int audio_index = 0;
 int audio_len = 0;
 float audio_pos;
 
-float fir_buffer_mono[FIR_SIZE] = {0};
-float fir_buffer_stereo[FIR_SIZE] = {0};
+float fir_buffer_left[FIR_TAPS] = {0};
+float fir_buffer_right[FIR_TAPS] = {0};
 int fir_index = 0;
 int channels;
 
-float *last_buffer_val;
 float preemphasis_prewarp;
 float preemphasis_coefficient;
 
@@ -52,9 +51,7 @@ float *alloc_empty_buffer(size_t length) {
     return p;
 }
 
-
-
-int fm_mpx_open(char *filename, size_t len, int preemphasis_corner_freq) {
+int fm_mpx_open(char *filename, size_t len, int preemphasis) {
 	length = len;
 
 	if(filename != NULL) {
@@ -90,30 +87,42 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis_corner_freq) {
 			printf("1 channel, monophonic operation.\n");
 		}
 
-		// Create the preemphasis
-		last_buffer_val = (float*) malloc(sizeof(float)*channels);
-		for(int i=0; i<channels; i++) last_buffer_val[i] = 0;
+		int cutoff_freq = 16000;
+		if(in_samplerate/2 < cutoff_freq) cutoff_freq = in_samplerate/2;
 
-		if (preemphasis_corner_freq > 0) {
-			preemphasis_prewarp = tan(M_PI*preemphasis_corner_freq/in_samplerate);
-			preemphasis_coefficient = (1.0 + (1.0 - preemphasis_prewarp)/(1.0 + preemphasis_prewarp))/2.0;
-			printf("Created preemphasis with cutoff at %.1i Hz\n", preemphasis_corner_freq);
+		// Create the low-pass FIR filter, with pre-emphasis
+		double window, firlowpass, firpreemph, sincpos;
+
+		// IIR pre-emphasis filter
+		// Reference material: http://jontio.zapto.org/hda1/preempiir.pdf
+		double tau = preemphasis * 1e-6;
+		double delta = 1.96e-6;
+		double taup, deltap, bp, ap, a0, a1, b1;
+		taup = 1.0/(2.0*(in_samplerate*FIR_PHASES))/tan(1.0/(2*tau*(in_samplerate*FIR_PHASES)));
+		deltap = 1.0/(2.0*(in_samplerate*FIR_PHASES))/tan(1.0/(2*delta*(in_samplerate*FIR_PHASES)));
+		bp = sqrt(-taup*taup + sqrt(taup*taup*taup*taup + 8.0*taup*taup*deltap*deltap)) / 2.0 ;
+		ap = sqrt(2*bp*bp + taup*taup);
+		a0 = ( 2.0*ap + 1/(in_samplerate*FIR_PHASES))/(2.0*bp + 1/(in_samplerate*FIR_PHASES));
+		a1 = (-2.0*ap + 1/(in_samplerate*FIR_PHASES))/(2.0*bp + 1/(in_samplerate*FIR_PHASES));
+		b1 = ( 2.0*bp + 1/(in_samplerate*FIR_PHASES))/(2.0*bp + 1/(in_samplerate*FIR_PHASES));
+		double x = 0, y = 0;
+
+		for(int i=0; i<FIR_TAPS; i++) {
+			for(int j=0; j<FIR_PHASES; j++) {
+				int mi = i*FIR_PHASES + j+1;	// match indexing of Matlab script
+				sincpos = (mi)-(((FIR_TAPS*FIR_PHASES)+1.0)/2.0); // offset by 0.5 so sincpos!=0 (causes NaN x/0)
+				firlowpass = sin(2 * M_PI * cutoff_freq * sincpos / (in_samplerate*FIR_PHASES) ) / (M_PI * sincpos);
+
+				y = a0*firlowpass + a1*x + b1*y;// Find the combined impulse response
+				x = firlowpass;			// of FIR low-pass and IIR pre-emphasis
+				firpreemph = y;			// y could be replaced by firpreemph but this
+								// matches the example in the reference material
+
+				window = (.54 - .46 * cos(2*M_PI * (mi) / FIR_TAPS*FIR_PHASES)); // Hamming window
+				low_pass_fir[j][i] = firpreemph * window * 9;
+			}
 		}
 
-		// Create the low-pass FIR filter
-		int cutoff_freq = 15000;
-		if(in_samplerate < cutoff_freq) cutoff_freq = in_samplerate;
-
-		// Here we divide this coefficient by two because it will be counted twice
-		// when applying the filter
-		low_pass_fir[FIR_HALF_SIZE-1] = 2 * cutoff_freq / 228000 /2;
-
-		// Only store half of the filter since it is symmetric
-		for(int i=1; i<FIR_HALF_SIZE; i++) {
-			low_pass_fir[FIR_HALF_SIZE-1-i] =
-				sin(2 * M_PI * cutoff_freq * i / 228000) / (M_PI * i) // sinc
-				* (.54 - .46 * cos(2*M_PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
-		}
 		printf("Created low-pass FIR filter for audio channels, with cutoff at %.1i Hz\n", cutoff_freq);
 
 		audio_pos = downsample_factor;
@@ -126,7 +135,6 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis_corner_freq) {
 
 	return 0;
 }
-
 
 // samples provided by this function are in 0..10: they need to be divided by
 // 10 after.
@@ -159,17 +167,6 @@ int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int rds, int wait) 
 							}
 						}
 					} else {
-						//apply preemphasis
-						int k;
-						int l;
-						float tmp;
-						for(k=0; k<audio_len; k+=channels) {
-							for(l=0; l<channels; l++) {
-								tmp = audio_buffer[k+l];
-								audio_buffer[k+l] = audio_buffer[k+l] - preemphasis_coefficient*last_buffer_val[l];
-								last_buffer_val[l] = tmp;
-							}
-						}
 
 						break;
 					}
@@ -179,53 +176,41 @@ int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int rds, int wait) 
 				audio_index += channels;
 				audio_len -= channels;
 			}
-		}
 
-		// First store the current sample(s) into the FIR filter's ring buffer
-		if(channels == 0) {
-			fir_buffer_mono[fir_index] = audio_buffer[audio_index];
-		} else {
-			// In stereo operation, generate sum and difference signals
-			fir_buffer_mono[fir_index] =
-				audio_buffer[audio_index] + audio_buffer[audio_index+1];
-			fir_buffer_stereo[fir_index] =
-				audio_buffer[audio_index] - audio_buffer[audio_index+1];
-		}
-		fir_index++;
-		if(fir_index >= FIR_SIZE) fir_index = 0;
+			fir_index++; // fir_index will point to newest valid data soon
+			if(fir_index >= FIR_TAPS) fir_index = 0;
+			// First store the current sample(s) into the FIR filter's ring buffer
+			fir_buffer_left[fir_index] = audio_buffer[audio_index];
+			if(channels > 1) fir_buffer_right[fir_index] = audio_buffer[audio_index+1];
+		} // if need new sample
 
-		// Now apply the FIR low-pass filter
+		// Polyphase FIR filter
+		float out_left = 0;
+		float out_right = 0;
 
-		/* As the FIR filter is symmetric, we do not multiply all
-		   the coefficients independently, but two-by-two, thus reducing
-		   the total number of multiplications by a factor of two
-		 */
-		float out_mono = 0;
-		float out_stereo = 0;
-		int ifbi = fir_index; // ifbi = increasing FIR Buffer Index
-		int dfbi = fir_index; // dfbi = decreasing FIR Buffer Index
-		for(int fi=0; fi<FIR_HALF_SIZE; fi++) { // fi = Filter Index
-			dfbi--;
-			if(dfbi < 0) dfbi = FIR_SIZE-1;
-			out_mono +=
-				low_pass_fir[fi] *
-				(fir_buffer_mono[ifbi] + fir_buffer_mono[dfbi]);
-			if(channels > 1) {
-				out_stereo +=
-					low_pass_fir[fi] *
-					(fir_buffer_stereo[ifbi] + fir_buffer_stereo[dfbi]);
+		// Calculate which FIR phase to use
+		int iphase = ((int) (audio_pos*FIR_PHASES/downsample_factor)); // I think this is correct
+		int fi = 0;
+
+		if( channels > 1 ) {
+			for(fi=0; fi<FIR_TAPS; fi++)	// fi = Filter Index
+			{				// use bit masking to implement circular buffer
+				out_left  += low_pass_fir[iphase][fi]*fir_buffer_left[(fir_index-fi)&(FIR_TAPS-1)];
+				out_right += low_pass_fir[iphase][fi]*fir_buffer_right[(fir_index-fi)&(FIR_TAPS-1)];
 			}
-			ifbi++;
-			if(ifbi >= FIR_SIZE) ifbi = 0;
+		} else {
+			for(fi=0; fi<FIR_TAPS; fi++)	// fi = Filter Index
+			{				// use bit masking to implement circular buffer
+				out_left += low_pass_fir[iphase][fi]*fir_buffer_left[(fir_index-fi)&(FIR_TAPS-1)];
+			}
 		}
-		// End of FIR filter
 
-		mpx_buffer[i] = 10 * out_mono;
+		mpx_buffer[i] = 10 * (out_left + out_right);
 
-		if (channels>1) {
+		if (channels > 1) {
 			mpx_buffer[i] +=
-			10 * carrier_38[phase_38] * out_stereo +
-			0.8 * carrier_19[phase_19];
+			0.8 * carrier_19[phase_19] +
+			10 * carrier_38[phase_38] * (out_left - out_right);
 
 			phase_19++;
 			phase_38++;
@@ -243,9 +228,7 @@ int fm_mpx_get_samples(float *mpx_buffer, float *rds_buffer, int rds, int wait) 
 
 
 int fm_mpx_close() {
-	if(sf_close(inf) ) {
-		fprintf(stderr, "Error closing audio file");
-	}
+	if(sf_close(inf)) fprintf(stderr, "Error closing audio file\n");
 
 	if(audio_buffer != NULL) free(audio_buffer);
 

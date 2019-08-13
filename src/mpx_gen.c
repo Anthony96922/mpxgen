@@ -18,7 +18,7 @@
 #include "control_pipe.h"
 
 #define DATA_SIZE		4096
-#define OUTPUT_DATA_SIZE	8192
+#define OUTPUT_DATA_SIZE	DATA_SIZE * 2
 
 ao_device *device;
 SRC_STATE *src_state;
@@ -58,7 +58,7 @@ void postprocess(float *inbuf, short *outbuf, size_t inbufsize, float volume) {
 	}
 }
 
-int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, int preemphasis_cutoff, float mpx, char *control_pipe, int pty, int tp, int wait) {
+int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, int preemphasis, float mpx, char *control_pipe, int pty, int tp, int wait) {
 	// Catch only important signals
 	for (int i = 0; i < 25; i++) {
 		struct sigaction sa;
@@ -94,19 +94,18 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	size_t generated_frames;
 
 	SRC_DATA src_data;
-
-	if ((src_state = src_new(SRC_SINC_FASTEST, 1, &src_error)) == NULL) {
-		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_error));
-		return 1;
-	}
-
 	src_data.src_ratio = 192000. / 228000;
 	src_data.input_frames = DATA_SIZE;
 	src_data.output_frames = OUTPUT_DATA_SIZE;
 	src_data.data_out = resample_out;
 
+	if ((src_state = src_new(SRC_SINC_MEDIUM_QUALITY, 1, &src_error)) == NULL) {
+		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_error));
+		return 1;
+	}
+
 	// Initialize the baseband generator
-	if(fm_mpx_open(audio_file, DATA_SIZE, preemphasis_cutoff) < 0) return 1;
+	if(fm_mpx_open(audio_file, DATA_SIZE, preemphasis) < 0) return 1;
 
 	// Initialize the RDS modulator
 	set_rds_pi(pi);
@@ -174,7 +173,7 @@ int main(int argc, char **argv) {
 	char *ps = "mpxgen";
 	char *rt = "mpxgen: FM Stereo and RDS encoder";
 	uint16_t pi = 0x1234;
-	int preemphasis_cutoff = 0;
+	int preemphasis = 75;
 	int pty = 0;
 	int tp = 0;
 	float mpx = 10;
@@ -215,12 +214,12 @@ int main(int argc, char **argv) {
 
 			case 'P': //preemph
 				if(strcmp("eu", optarg)==0) {
-					preemphasis_cutoff = 3185;
+					preemphasis = 50;
 				} else if(strcmp("us", optarg)==0) {
-					preemphasis_cutoff = 2120;
+					preemphasis = 75;
 				}
 				else {
-					preemphasis_cutoff = atoi(optarg);
+					preemphasis = atoi(optarg);
 				}
 				break;
 
@@ -293,7 +292,7 @@ int main(int argc, char **argv) {
 
 	alternative_freq[0] = af_size;
 
-	int errcode = generate_mpx(audio_file, rds, pi, ps, rt, alternative_freq, preemphasis_cutoff, mpx, control_pipe, pty, tp, wait);
+	int errcode = generate_mpx(audio_file, rds, pi, ps, rt, alternative_freq, preemphasis, mpx, control_pipe, pty, tp, wait);
 
 	terminate(errcode);
 }

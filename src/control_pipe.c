@@ -117,8 +117,8 @@ int poll_control_pipe() {
                 if (type_2 > 63) type_2 = 0;
                 if (start_1 > 64) start_1 = 0;
                 if (start_2 > 64) start_2 = 0;
-                if (len_1 > 64) len_1 = 1;
-                if (len_2 > 32) len_2 = 1;
+                if (len_1 > 64) len_1 = 0;
+                if (len_2 > 32) len_2 = 0;
                 printf("RT+ tag 1: type: %u, start: %u, length: %u\n", type_1, start_1, len_1);
                 printf("RT+ tag 2: type: %u, start: %u, length: %u\n", type_2, start_2, len_2);
                 set_rds_rtp_tags(type_1, start_1, len_1, type_2, start_2, len_2);
@@ -132,12 +132,12 @@ int poll_control_pipe() {
         char *arg = res+5;
         if(arg[strlen(arg)-1] == '\n') arg[strlen(arg)-1] = 0;
 	if (res[0] == 'R' && res[1] == 'T' && res[2] == 'P' && res[3] == 'F') {
-            int toggle, running;
-            if (sscanf(arg, "%u,%u", &toggle, &running) == 2) {
-                if (toggle > 1) toggle = 0;
+            int running, toggle;
+            if (sscanf(arg, "%u,%u", &running, &toggle) == 2) {
                 if (running > 1) running = 0;
-                printf("RT+ flags: toggle: %u, running: %u\n", toggle, running);
-                set_rds_rtp_flags(toggle, running);
+                if (toggle > 1) toggle = 0;
+                printf("RT+ flags: running: %u, toggle: %u\n", running, toggle);
+                set_rds_rtp_flags(running, toggle);
             } else {
                 printf("Could not parse RT+ flags.\n");
             }
@@ -147,11 +147,10 @@ int poll_control_pipe() {
             arg[8] = 0;
             if (strcmp(arg, "OFF") == 0) {
                 printf("PTYN disabled\n");
-                set_rds_ptyn_enable(0);
+                set_rds_ptyn(NULL, 0);
             } else {
                 printf("PTYN set to: \"%s\"\n", arg);
-                set_rds_ptyn_enable(1);
-                set_rds_ptyn(arg);
+                set_rds_ptyn(arg, 1);
             }
             return CONTROL_PIPE_PTYN_SET;
         }

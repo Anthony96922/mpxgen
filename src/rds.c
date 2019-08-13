@@ -22,16 +22,15 @@ struct {
     int ms;
     int ab;
     char ps[8];
-    char ps_dynamic[8];
+    char new_ps[8];
     char rt[64];
-    char rt_dynamic[64];
+    char new_rt[64];
     int af[100];
-    int enable_ptyn;
     char ptyn[8];
-    char ptyn_dynamic[8];
+    char new_ptyn[8];
     // RT+
-    int rt_p_toggle;
     int rt_p_running;
+    int rt_p_toggle;
     int rt_p_type_1;
     int rt_p_start_1;
     int rt_p_len_1;
@@ -46,6 +45,7 @@ struct {
 
 int ps_init, rt_init, ptyn_init;
 int ps_update, rt_update, ptyn_update;
+int enable_ptyn;
 
 /* The RDS error-detection code generator polynomial is
    x^10 + x^8 + x^7 + x^5 + x^4 + x^3 + x^0
@@ -127,11 +127,11 @@ void get_rds_ps_group(uint16_t *blocks) {
 		if (af_state == 0) {
 			blocks[2] = (rds_params.af[0] + 224) << 8 | rds_params.af[1];
 		} else {
-			blocks[2] = (rds_params.af[af_state+1]) ?
-				rds_params.af[af_state] << 8 | rds_params.af[af_state+1] :
-				rds_params.af[af_state] << 8 | 0xCD;
+			blocks[2] = rds_params.af[af_state] << 8;
+			blocks[2] |= rds_params.af[af_state+1] ?
+					rds_params.af[af_state+1] : 0xCD;
 		}
-		af_state = af_state + 2;
+		af_state += 2;
 		if (af_state > rds_params.af[0]) af_state = 0;
 	}
 	blocks[3] = rds_params.ps[ps_state*2] << 8 | rds_params.ps[ps_state*2+1];
@@ -139,7 +139,7 @@ void get_rds_ps_group(uint16_t *blocks) {
 	if (ps_state == 4) {
 		ps_state = 0;
 		if (ps_update) {
-			strncpy(rds_params.ps, rds_params.ps_dynamic, 8);
+			strncpy(rds_params.ps, rds_params.new_ps, 8);
 			ps_update = 0;
 		}
 	}
@@ -152,7 +152,7 @@ void get_rds_rt_group(uint16_t *blocks) {
 
 restart_rt:
 	if (rt_update) {
-		strncpy(rds_params.rt, rds_params.rt_dynamic, 64);
+		strncpy(rds_params.rt, rds_params.new_rt, 64);
 		rds_params.ab ^= 1;
 		rt_update = 0;
 		rt_state = 0;
@@ -190,8 +190,11 @@ void get_rds_oda_group(uint16_t *blocks) {
 
 /* PTYN group (10A)
  */
-void get_rds_ptyn_group(uint16_t *blocks) {
+int get_rds_ptyn_group(uint16_t *blocks) {
 	static int ptyn_state;
+
+	// Do not generate a 10A group if PTYN is off
+	if (!enable_ptyn) return 0;
 
 	blocks[1] |= 0xA000 | ptyn_state;
 	blocks[2] = rds_params.ptyn[ptyn_state*4+0] << 8 | rds_params.ptyn[ptyn_state*4+1];
@@ -200,10 +203,11 @@ void get_rds_ptyn_group(uint16_t *blocks) {
 	if (ptyn_state == 2) {
 		ptyn_state = 0;
 		if (ptyn_update) {
-			strncpy(rds_params.ptyn, rds_params.ptyn_dynamic, 8);
+			strncpy(rds_params.ptyn, rds_params.new_ptyn, 8);
 			ptyn_update = 0;
 		}
 	}
+	return 1;
 }
 
 /* RT+ group (assigned to 11A)
@@ -218,34 +222,26 @@ void get_rds_rtp_group(uint16_t *blocks) {
 		    (rds_params.rt_p_len_2 & 0x1F);
 }
 
-/* Other RDS groups have lower priority than 0A and 2A and are
-   therefore placed in a subsequence
+/* Lower priority groups are placed in a subsequence
  */
 void get_rds_other_groups(uint16_t *blocks) {
 	static int state;
 
-skip_group:
-	if (state == 4) state = 0;
+next:
+	state++;
+	if (state == 3) state = 0;
 
 	switch (state) {
 	case 0: // Type 3A groups
 		get_rds_oda_group(blocks);
 		break;
-	case 1:
-	case 2: // Type 10A groups
-		if (!rds_params.enable_ptyn) { // Do not generate a 10A group if PTYN is off
-			state++;
-			goto skip_group;
-		} else {
-			get_rds_ptyn_group(blocks);
-		}
+	case 1: // Type 10A groups
+		if (!get_rds_ptyn_group(blocks)) goto next;
 		break;
-	case 3: // Type 11A groups
+	case 2: // Type 11A groups
 		get_rds_rtp_group(blocks);
 		break;
 	}
-
-	state++;
 }
 
 /* Creates an RDS group. This generates sequences of the form 0A, 2A, 0A, 2A, 0A, 2A, etc.
@@ -381,27 +377,29 @@ void set_rds_rt(char *rt) {
 	if (rt_len < 64) rds_params.rt[rt_len] = '\r';
 	rt_init = 1;
     } else {
-	strncpy(rds_params.rt_dynamic, rt, 64);
-	if (rt_len < 64) rds_params.rt_dynamic[rt_len] = '\r';
+	strncpy(rds_params.new_rt, rt, 64);
+	if (rt_len < 64) rds_params.new_rt[rt_len] = '\r';
 	rt_update = 1;
     }
 }
 
 void set_rds_ps(char *ps) {
+    int i = 0;
+
     if (!ps_init) {
 	strncpy(rds_params.ps, ps, 8);
-	for(int i=0; i<8; i++) if(rds_params.ps[i] == 0) rds_params.ps[i] = 32;
+	for(i=0; i<8; i++) if(rds_params.ps[i] == 0) rds_params.ps[i] = 32;
 	ps_init = 1;
     } else {
-	strncpy(rds_params.ps_dynamic, ps, 8);
-	for(int i=0; i<8; i++) if(rds_params.ps_dynamic[i] == 0) rds_params.ps_dynamic[i] = 32;
+	strncpy(rds_params.new_ps, ps, 8);
+	for(i=0; i<8; i++) if(rds_params.new_ps[i] == 0) rds_params.ps[i] = 32;
 	ps_update = 1;
     }
 }
 
-void set_rds_rtp_flags(int rt_p_toggle, int rt_p_running) {
-    rds_params.rt_p_toggle = rt_p_toggle;
+void set_rds_rtp_flags(int rt_p_running, int rt_p_toggle) {
     rds_params.rt_p_running = rt_p_running;
+    rds_params.rt_p_toggle = rt_p_toggle;
 }
 
 void set_rds_rtp_tags(int rt_p_type_1, int rt_p_start_1, int rt_p_len_1,
@@ -425,16 +423,14 @@ void set_rds_pty(int pty) {
     rds_params.pty = pty;
 }
 
-void set_rds_ptyn_enable(int enable_ptyn) {
-    rds_params.enable_ptyn = enable_ptyn;
-}
-
-void set_rds_ptyn(char *ptyn) {
+void set_rds_ptyn(char *ptyn, int enable) {
+    enable_ptyn = enable;
+    if (!enable_ptyn) return;
     if (!ptyn_init) {
 	strncpy(rds_params.ptyn, ptyn, 8);
 	ptyn_init = 1;
     } else {
-	strncpy(rds_params.ptyn_dynamic, ptyn, 8);
+	strncpy(rds_params.new_ptyn, ptyn, 8);
 	ptyn_update = 1;
     }
 }
