@@ -123,7 +123,7 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis, int rds_on, int wai
 								// matches the example in the reference material
 
 				window = (.54 - .46 * cos(2*M_PI * (mi) / FIR_TAPS*FIR_PHASES)); // Hamming window
-				low_pass_fir[j][i] = firpreemph * window * 9;
+				low_pass_fir[j][i] = firpreemph * window * 7;
 			}
 		}
 
@@ -209,10 +209,10 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		}
 
 		if (channels > 1) {
-			mpx_buffer[i] +=
+			mpx_buffer[i] =
 			10 * (out_left + out_right) +
 			0.8 * carrier_19[phase_19] +
-			10 * carrier_38[phase_38] * (out_left - out_right);
+			10 * carrier_38[phase_38] * (1.5 * (out_left - out_right));
 
 			phase_19++;
 			phase_38++;
