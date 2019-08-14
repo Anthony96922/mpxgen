@@ -43,9 +43,9 @@ struct {
    (bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53119)
 */
 
-int ps_init, rt_init, ptyn_init;
-int ps_update, rt_update, ptyn_update;
-int enable_ptyn;
+int ps_init = 0, rt_init = 0, ptyn_init = 0;
+int ps_update = 0, rt_update = 0, ptyn_update = 0;
+int enable_ptyn = 0;
 
 /* The RDS error-detection code generator polynomial is
    x^10 + x^8 + x^7 + x^5 + x^4 + x^3 + x^0
@@ -395,7 +395,7 @@ void set_rds_ps(char *ps) {
     } else {
 	strncpy(rds_params.new_ps, ps, 8);
 	for(i=0; i<8; i++) {
-	    if(rds_params.new_ps[i] == 0) rds_params.ps[i] = 32;
+	    if(rds_params.new_ps[i] == 0) rds_params.new_ps[i] = 32;
 	}
 	ps_update = 1;
     }
