@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
 	int preemphasis = 75;
 	int pty = 0;
 	int tp = 0;
-	float mpx = 10;
+	float mpx = 100;
 	int wait = 1;
 
 	const char	*short_opt = "a:P:m:W:R:i:s:r:p:T:A:C:h";
