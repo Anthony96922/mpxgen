@@ -34,7 +34,7 @@ There are more options that can be given to mpxgen:
 * `--af` specifies alternative frequencies (AF). Example:  `--af 107.9 --af 99.2`.
 * `--pty` specifies the program type. Valid range: 0 - 31. Example: `--pty 9` (US: Top 40). See https://en.wikipedia.org/wiki/Radio_Data_System for more program types.
 * `--tp` specifies if the program carries traffic information.  Example `--tp 0`.
-* `--mpx` specifies the MPX output volume. Default 10. Example `--mpx 50`. Use this if your sound card does not have a software volume control.
+* `--mpx` specifies the MPX output volume in percent. Default 100. Example `--mpx 50`. Use this if your sound card does not have a software volume control.
 * `--preemph` specifies which preemph should be used, since it differs from location. For Europe choose 'eu', for the US choose 'us'.
 * `--ctl` specifies a named pipe (FIFO) to use as a control channel to change PS and RT at run-time (see below).
 * `--rds` RDS broadcast switch.
