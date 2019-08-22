@@ -115,7 +115,7 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis, int rds_on, int wai
 			for(int j=0; j<FIR_PHASES; j++) {
 				int mi = i*FIR_PHASES + j+1;	// match indexing of Matlab script
 				sincpos = (mi)-(((FIR_TAPS*FIR_PHASES)+1.0)/2.0); // offset by 0.5 so sincpos!=0 (causes NaN x/0)
-				firlowpass = sin(2 * M_PI * cutoff_freq * sincpos / (in_samplerate*FIR_PHASES) ) / (M_PI * sincpos);
+				firlowpass = sin(2 * M_PI * cutoff_freq * sincpos / (in_samplerate*FIR_PHASES)) / (M_PI * sincpos);
 
 				y = a0*firlowpass + a1*x + b1*y;// Find the combined impulse response
 				x = firlowpass;			// of FIR low-pass and IIR pre-emphasis
@@ -193,18 +193,18 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 
 		// Calculate which FIR phase to use
 		int iphase = ((int) (audio_pos*FIR_PHASES/downsample_factor)); // I think this is correct
-		int fi = 0;
+		int fi;
 
 		if( channels > 1 ) {
 			for(fi=0; fi<FIR_TAPS; fi++)	// fi = Filter Index
 			{				// use bit masking to implement circular buffer
-				out_left  += low_pass_fir[iphase][fi]*fir_buffer_left[(fir_index-fi)&(FIR_TAPS-1)];
-				out_right += low_pass_fir[iphase][fi]*fir_buffer_right[(fir_index-fi)&(FIR_TAPS-1)];
+				out_left += low_pass_fir[iphase][fi] * fir_buffer_left[(fir_index-fi)&(FIR_TAPS-1)];
+				out_right += low_pass_fir[iphase][fi] * fir_buffer_right[(fir_index-fi)&(FIR_TAPS-1)];
 			}
 		} else {
 			for(fi=0; fi<FIR_TAPS; fi++)	// fi = Filter Index
 			{				// use bit masking to implement circular buffer
-				out_left += low_pass_fir[iphase][fi]*fir_buffer_left[(fir_index-fi)&(FIR_TAPS-1)];
+				out_left += low_pass_fir[iphase][fi] * fir_buffer_left[(fir_index-fi)&(FIR_TAPS-1)];
 			}
 		}
 

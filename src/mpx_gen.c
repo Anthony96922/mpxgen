@@ -29,7 +29,6 @@ static void terminate(int num)
     ao_close(device);
     ao_shutdown();
     src_delete(src_state);
-
     exit(num);
 }
 
@@ -42,22 +41,28 @@ static void fatal(char *fmt, ...)
     exit(1);
 }
 
-void postprocess(float *inbuf, short *outbuf, size_t inbufsize, float volume) {
+int out_channels = 2;
+float volume = 0;
+
+void postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 	int j = 0;
 
 	for (int i = 0; i < inbufsize; i++) {
 		// scale samples
-		inbuf[i] /= 10;
-		inbuf[i] *= 32767;
+		inbuf[i] *= 3276.7;
 		// volume control
 		inbuf[i] *= (volume / 100);
 		// copy the mono channel to the two stereo channels
-		outbuf[j] = outbuf[j+1] = inbuf[i];
-		j += 2;
+		if (out_channels == 2) {
+			outbuf[j] = outbuf[j+1] = inbuf[i];
+			j += 2;
+		} else {
+			outbuf[i] = inbuf[i];
+		}
 	}
 }
 
-int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, int preemphasis, float mpx, char *control_pipe, int pty, int tp, int wait) {
+int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, int preemphasis, float mpx, char *control_pipe, int pty, int tp, int wait) {
 	// Catch only important signals
 	for (int i = 0; i < 25; i++) {
 		struct sigaction sa;
@@ -78,18 +83,28 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 	short dev_out[OUTPUT_DATA_SIZE];
 
 	// AO
-	ao_sample_format format;
 	ao_initialize();
-	int default_driver = ao_default_driver_id();
+	int ao_driver = ao_default_driver_id();
+	ao_sample_format format;
 	memset(&format, 0, sizeof(format));
 	format.bits = 16;
-	format.channels = 2;
+	format.channels = out_channels;
 	format.rate = 192000;
 	format.byte_format = AO_FMT_LITTLE;
 
-	if ((device = ao_open_live(default_driver, &format, NULL)) == NULL) {
-		fprintf(stderr, "Error: cannot open sound device.\n");
-		return 1;
+	if (output_file != NULL) {
+		ao_driver = ao_driver_id("raw");
+		out_channels = 1;
+		format.channels = out_channels;
+		if ((device = ao_open_file(ao_driver, output_file, 1, &format, NULL)) == NULL) {
+			fprintf(stderr, "Error: cannot open output file.\n");
+			return 1;
+		}
+	} else {
+		if ((device = ao_open_live(ao_driver, &format, NULL)) == NULL) {
+			fprintf(stderr, "Error: cannot open sound device.\n");
+			return 1;
+		}
 	}
 
 	// SRC
@@ -142,6 +157,8 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 		}
 	}
 
+	volume = mpx;
+
 	for (;;) {
 		if(control_pipe) poll_control_pipe();
 
@@ -154,9 +171,9 @@ int generate_mpx(char *audio_file, int rds, uint16_t pi, char *ps, char *rt, int
 		}
 
 		generated_frames = src_data.output_frames_gen;
-		postprocess(resample_out, dev_out, generated_frames, mpx);
+		postprocess(resample_out, dev_out, generated_frames);
 		// num_bytes = generated_frames * channels * bytes per sample
-		if (!ao_play(device, (char *)dev_out, generated_frames * 4)) {
+		if (!ao_play(device, (char *)dev_out, generated_frames * out_channels * 2)) {
 			fprintf(stderr, "Error: could not play audio.\n");
 			break;
 		}
@@ -169,6 +186,7 @@ int main(int argc, char **argv) {
 	int opt = 0;
 
 	char *audio_file = NULL;
+	char *output_file = NULL;
 	char *control_pipe = NULL;
 	int rds = 1;
 	int alternative_freq[100] = {};
@@ -182,10 +200,11 @@ int main(int argc, char **argv) {
 	float mpx = 100;
 	int wait = 1;
 
-	const char	*short_opt = "a:P:m:W:R:i:s:r:p:T:A:C:h";
+	const char	*short_opt = "a:o:P:m:W:R:i:s:r:p:T:A:C:h";
 	struct option	long_opt[] =
 	{
 		{"audio", 	required_argument, NULL, 'a'},
+		{"output-file",	required_argument, NULL, 'o'},
 		{"preemph",	required_argument, NULL, 'P'},
 		{"mpx",		required_argument, NULL, 'm'},
 		{"wait",	required_argument, NULL, 'W'},
@@ -209,6 +228,10 @@ int main(int argc, char **argv) {
 		{
 			case 'a': //audio
 				audio_file = optarg;
+				break;
+
+			case 'o': //output-file
+				output_file = optarg;
 				break;
 
 			case 'P': //preemph
@@ -271,7 +294,7 @@ int main(int argc, char **argv) {
 
 			case 'h': //help
 				fatal("Help: %s\n"
-				      "	[--audio (-a) file] [--mpx (-m) mpx-volume]\n"
+				      "	[--audio (-a) file] [--output-file (-o) PCM out] [--mpx (-m) mpx-volume]\n"
 				      "	[--preemph (-P) preemphasis] [--wait (-W) wait-switch]\n"
 				      "	[--rds rds-switch] [--pi pi-code] [--ps ps-text]\n"
 				      "	[--rt radiotext] [--tp traffic-program] [--pty program-type]\n"
@@ -291,7 +314,7 @@ int main(int argc, char **argv) {
 
 	alternative_freq[0] = af_size;
 
-	int errcode = generate_mpx(audio_file, rds, pi, ps, rt, alternative_freq, preemphasis, mpx, control_pipe, pty, tp, wait);
+	int errcode = generate_mpx(audio_file, output_file, rds, pi, ps, rt, alternative_freq, preemphasis, mpx, control_pipe, pty, tp, wait);
 
 	terminate(errcode);
 }
