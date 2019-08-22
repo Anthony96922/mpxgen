@@ -1,13 +1,22 @@
 # mpxgen
-Based on PiFmAdv (https://github.com/miegl/PiFmAdv) which is based on PiFmRds (https://github.com/ChristopheJacquet/PiFmRds)
+Based on [PiFmAdv](https://github.com/miegl/PiFmAdv) which is based on [PiFmRds](https://github.com/ChristopheJacquet/PiFmRds)
 
 This program generates FM multiplex baseband audio that can be fed through a 192 kHz capable sound card to a mono FM transmitter. This includes stereo audio as well as realtime RDS data.
+
+#### Features:
+- Low resource requirements
+- Built-in low-pass filtering and pre-emphasis
+- Support for basic RDS data fields: PS, RT, PTY and AF
+- RDS can be updated through control pipe
+- RT+ support
+
+Although it won't replace commercial broadcasting software, it's a great alternative to [JMPX](https://github.com/jontio/JMPX) as it doesn't require a GUI to use.
 
 ## Build
 This app depends on the sndfile, ao and samplerate libraries. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libao-dev libsamplerate0-dev` to install them.
 
 Once those are installed, run
-```
+```sh
 git clone https://github.com/Anthony96922/mpxgen
 cd mpxgen/src
 make
@@ -39,6 +48,7 @@ There are more options that can be given to mpxgen:
 * `--ctl` specifies a named pipe (FIFO) to use as a control channel to change PS and RT at run-time (see below).
 * `--rds` RDS broadcast switch.
 * `--wait` specifies whether mpxgen should wait for the the audio pipe or terminate as soon as there is no audio. It's set to 1 by default.
+* `--output-file` outputs raw PCM data to a file instead of playing through the sound card. FIFO pipes can be specified.
 
 ### Piping audio into mpxgen
 If you use the argument `--audio -`, mpxgen reads audio data on standard input. This allows you to pipe the output of a program into mpxgen. For instance, this can be used to read MP3 files using Sox:
