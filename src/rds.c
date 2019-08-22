@@ -176,10 +176,12 @@ restart_rt:
 void get_rds_oda_group(uint16_t *blocks) {
 	static int oda_state;
 
+	blocks[1] |= 0x3000;
+
 	switch (oda_state) {
 	case 0: // RT+
 		// Assign the RT+ AID to group 11A
-		blocks[1] |= 0x3000 | 11 << 1 | 0;
+		blocks[1] |= 11 << 1;
 		blocks[3] = 0x4BD7; // RT+ AID
 		break;
 	}
