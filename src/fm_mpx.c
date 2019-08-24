@@ -91,11 +91,12 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis, int rds_on, int wai
 			printf("1 channel, monophonic operation.\n");
 		}
 
-		int cutoff_freq = 16000;
+		int cutoff_freq = 15700;
 		if(in_samplerate/2 < cutoff_freq) cutoff_freq = in_samplerate/2;
 
 		// Create the low-pass FIR filter, with pre-emphasis
 		double window, firlowpass, firpreemph, sincpos;
+		float gain = 180 - (preemphasis/5.0);
 
 		// IIR pre-emphasis filter
 		// Reference material: http://jontio.zapto.org/hda1/preempiir.pdf
@@ -104,11 +105,11 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis, int rds_on, int wai
 		double taup, deltap, bp, ap, a0, a1, b1;
 		taup = 1.0/(2.0*(in_samplerate*FIR_PHASES))/tan(1.0/(2*tau*(in_samplerate*FIR_PHASES)));
 		deltap = 1.0/(2.0*(in_samplerate*FIR_PHASES))/tan(1.0/(2*delta*(in_samplerate*FIR_PHASES)));
-		bp = sqrt(-taup*taup + sqrt(taup*taup*taup*taup + 8.0*taup*taup*deltap*deltap)) / 2.0 ;
+		bp = sqrt(-taup*taup + sqrt(taup*taup*taup*taup + 8.0*taup*taup*deltap*deltap))/2.0;
 		ap = sqrt(2*bp*bp + taup*taup);
-		a0 = ( 2.0*ap + 1/(in_samplerate*FIR_PHASES))/(2.0*bp + 1/(in_samplerate*FIR_PHASES));
-		a1 = (-2.0*ap + 1/(in_samplerate*FIR_PHASES))/(2.0*bp + 1/(in_samplerate*FIR_PHASES));
-		b1 = ( 2.0*bp + 1/(in_samplerate*FIR_PHASES))/(2.0*bp + 1/(in_samplerate*FIR_PHASES));
+		a0 = ( 2.0*ap + 1.0/(in_samplerate*FIR_PHASES))/(2.0*bp + 1.0/(in_samplerate*FIR_PHASES));
+		a1 = (-2.0*ap + 1.0/(in_samplerate*FIR_PHASES))/(2.0*bp + 1.0/(in_samplerate*FIR_PHASES));
+		b1 = ( 2.0*bp - 1.0/(in_samplerate*FIR_PHASES))/(2.0*bp + 1.0/(in_samplerate*FIR_PHASES));
 		double x = 0, y = 0;
 
 		for(int i=0; i<FIR_TAPS; i++) {
@@ -123,7 +124,7 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis, int rds_on, int wai
 								// matches the example in the reference material
 
 				window = (.54 - .46 * cos(2*M_PI * (mi) / FIR_TAPS*FIR_PHASES)); // Hamming window
-				low_pass_fir[j][i] = firpreemph * window * 7;
+				low_pass_fir[j][i] = firpreemph * window * gain;
 			}
 		}
 
@@ -193,17 +194,16 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 
 		// Calculate which FIR phase to use
 		int iphase = ((int) (audio_pos*FIR_PHASES/downsample_factor)); // I think this is correct
-		int fi;
+		int fi; // fi = Filter Index
 
-		if( channels > 1 ) {
-			for(fi=0; fi<FIR_TAPS; fi++)	// fi = Filter Index
-			{				// use bit masking to implement circular buffer
+		// use bit masking to implement circular buffer
+		if(channels > 1) {
+			for(fi=0; fi<FIR_TAPS; fi++) {
 				out_left += low_pass_fir[iphase][fi] * fir_buffer_left[(fir_index-fi)&(FIR_TAPS-1)];
 				out_right += low_pass_fir[iphase][fi] * fir_buffer_right[(fir_index-fi)&(FIR_TAPS-1)];
 			}
 		} else {
-			for(fi=0; fi<FIR_TAPS; fi++)	// fi = Filter Index
-			{				// use bit masking to implement circular buffer
+			for(fi=0; fi<FIR_TAPS; fi++) {
 				out_left += low_pass_fir[iphase][fi] * fir_buffer_left[(fir_index-fi)&(FIR_TAPS-1)];
 			}
 		}
