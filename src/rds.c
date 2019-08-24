@@ -303,14 +303,14 @@ void get_rds_samples(float *buffer, int count) {
     static int bit_pos = BITS_PER_GROUP;
     static float sample_buffer[SAMPLE_BUFFER_SIZE] = {0};
 
-    static int prev_output = 0;
-    static int cur_output = 0;
-    static int cur_bit = 0;
+    static int prev_output;
+    static int cur_output;
+    static int cur_bit;
     static int sample_count = SAMPLES_PER_BIT;
-    static int inverting = 0;
-    static int phase = 0;
+    static int inverting;
+    static int phase;
 
-    static int in_sample_index = 0;
+    static int in_sample_index;
     static int out_sample_index = SAMPLE_BUFFER_SIZE-1;
 
     for(int i=0; i<count; i++) {
