@@ -3,7 +3,7 @@ Based on [PiFmAdv](https://github.com/miegl/PiFmAdv) which is based on [PiFmRds]
 
 This program generates FM multiplex baseband audio that can be fed through a 192 kHz capable sound card to a mono FM transmitter. This includes stereo audio as well as realtime RDS data.
 
-#### Features:
+#### Features
 - Low resource requirements
 - Built-in low-pass filtering and pre-emphasis
 - Support for basic RDS data fields: PS, RT, PTY and AF
@@ -11,6 +11,15 @@ This program generates FM multiplex baseband audio that can be fed through a 192
 - RT+ support
 
 Although it won't replace commercial broadcasting software, it's a great alternative to [JMPX](https://github.com/jontio/JMPX) as it doesn't require a GUI to use.
+
+#### To do
+- Final limiter to avoid harmonics
+- SSB stereo (I have no idea how to implement this)
+- SCA (or this)
+- Fix preemphasis (see "Known issues" below)
+
+#### Known issues
+- Using the built-in preemphasis causes images all across the MPX spectrum. Workaround is to turn off the built-in preemphasis by adding `--preemph 1` and using ffmpeg's aemphasis filter instead.
 
 ## Build
 This app depends on the sndfile, ao and samplerate libraries. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libao-dev libsamplerate0-dev` to install them.
@@ -60,7 +69,7 @@ Or to pipe the AUX input of a sound card into mpxgen:
 arecord -fS16_LE -r 44100 -Dplughw:1,0 -c 2 -  | ./mpxgen --audio -
 ```
 
-Please note this does not do any processing other than low-pass filtering and optionally preemphasis. Use an external program with processiong like sox or ffmpeg if you want to increase the loudness of your audio.
+Please note this does not do any processing other than low-pass filtering and preemphasis. Use an external program for processing like sox or ffmpeg if you want to increase the loudness of your audio.
 
 ### Changing PS, RT, TA and PTY at run-time
 You can control PS, RT, TA (Traffic Announcement flag) and PTY (Program Type) at run-time using a named pipe (FIFO). For this run mpxgen with the `--ctl` argument.
