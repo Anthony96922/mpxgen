@@ -13,6 +13,8 @@
 #include "rds.h"
 #include "control_pipe.h"
 
+//#define CONTROL_PIPE_MESSAGES
+
 #define CTL_BUFFER_SIZE 100
 
 FILE *f_ctl;
@@ -53,41 +55,53 @@ int poll_control_pipe() {
         if(res[0] == 'P' && res[1] == 'S') {
             arg[8] = 0;
             set_rds_ps(arg);
+#ifdef CONTROL_PIPE_MESSAGES
             printf("PS set to: \"%s\"\n", arg);
+#endif
             return CONTROL_PIPE_PS_SET;
         }
         if(res[0] == 'R' && res[1] == 'T') {
             arg[64] = 0;
             set_rds_rt(arg);
+#ifdef CONTROL_PIPE_MESSAGES
             printf("RT set to: \"%s\"\n", arg);
+#endif
             return CONTROL_PIPE_RT_SET;
         }
         if(res[0] == 'T' && res[1] == 'A') {
             int ta = ( strcmp(arg, "ON") == 0 );
             set_rds_ta(ta);
+#ifdef CONTROL_PIPE_MESSAGES
             printf("Set TA to ");
             if(ta) printf("ON\n"); else printf("OFF\n");
+#endif
             return CONTROL_PIPE_TA_SET;
         }
 	if(res[0] == 'T' && res[1] == 'P') {
             int tp = ( strcmp(arg, "ON") == 0 );
             set_rds_tp(tp);
+#ifdef CONTROL_PIPE_MESSAGES
             printf("Set TP to ");
             if(tp) printf("ON\n"); else printf("OFF\n");
+#endif
             return CONTROL_PIPE_TP_SET;
         }
 	if(res[0] == 'M' && res[1] == 'S') {
             int ms = ( strcmp(arg, "ON") == 0 );
             set_rds_ms(ms);
+#ifdef CONTROL_PIPE_MESSAGES
             printf("Set MS to ");
             if(ms) printf("ON\n"); else printf("OFF\n");
+#endif
             return CONTROL_PIPE_MS_SET;
         }
 	if(res[0] == 'A' && res[1] == 'B') {
             int ab = ( strcmp(arg, "ON") == 0 );
             set_rds_ab(ab);
+#ifdef CONTROL_PIPE_MESSAGES
             printf("Set AB to ");
             if(ab) printf("ON\n"); else printf("OFF\n");
+#endif
             return CONTROL_PIPE_AB_SET;
         }
     }
@@ -99,6 +113,7 @@ int poll_control_pipe() {
             int pty = atoi(arg);
             if (pty >= 0 && pty <= 31) {
                 set_rds_pty(pty);
+#ifdef CONTROL_PIPE_MESSAGES
                 if (!pty) {
                     printf("PTY disabled\n");
                 } else {
@@ -107,6 +122,7 @@ int poll_control_pipe() {
             }
             else {
                 printf("Wrong PTY identifier! The PTY range is 0 - 31.\n");
+#endif
             }
             return CONTROL_PIPE_PTY_SET;
         }
@@ -119,12 +135,17 @@ int poll_control_pipe() {
                 if (start_2 > 64) start_2 = 0;
                 if (len_1 > 64) len_1 = 0;
                 if (len_2 > 32) len_2 = 0;
+#ifdef CONTROL_PIPE_MESSAGES
                 printf("RT+ tag 1: type: %u, start: %u, length: %u\n", type_1, start_1, len_1);
                 printf("RT+ tag 2: type: %u, start: %u, length: %u\n", type_2, start_2, len_2);
+#endif
                 set_rds_rtp_tags(type_1, start_1, len_1, type_2, start_2, len_2);
-            } else {
+            }
+#ifdef CONTROL_PIPE_MESSAGES
+            else {
                 printf("Could not parse RT+ tag info.\n");
             }
+#endif
             return CONTROL_PIPE_RTP_SET;
         }
     }
@@ -136,20 +157,29 @@ int poll_control_pipe() {
             if (sscanf(arg, "%u,%u", &running, &toggle) == 2) {
                 if (running > 1) running = 0;
                 if (toggle > 1) toggle = 0;
+#ifdef CONTROL_PIPE_MESSAGES
                 printf("RT+ flags: running: %u, toggle: %u\n", running, toggle);
+#endif
                 set_rds_rtp_flags(running, toggle);
-            } else {
+            }
+#ifdef CONTROL_PIPE_MESSAGES
+            else {
                 printf("Could not parse RT+ flags.\n");
             }
+#endif
 	    return CONTROL_PIPE_RTP_FLAGS_SET;
         }
         if (res[0] == 'P' && res[1] == 'T' && res[2] == 'Y' && res[3] == 'N') {
             arg[8] = 0;
             if (strcmp(arg, "OFF") == 0) {
+#ifdef CONTROL_PIPE_MESSAGES
                 printf("PTYN disabled\n");
+#endif
                 set_rds_ptyn(NULL, 0);
             } else {
+#ifdef CONTROL_PIPE_MESSAGES
                 printf("PTYN set to: \"%s\"\n", arg);
+#endif
                 set_rds_ptyn(arg, 1);
             }
             return CONTROL_PIPE_PTYN_SET;
