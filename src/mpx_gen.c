@@ -49,7 +49,7 @@ void postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 
 	for (int i = 0; i < inbufsize; i++) {
 		// scale samples
-		inbuf[i] *= 3276.7;
+		inbuf[i] *= 32767;
 		// volume control
 		inbuf[i] *= (volume / 100);
 		// copy the mono channel to the two stereo channels
