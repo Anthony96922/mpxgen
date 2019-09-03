@@ -193,8 +193,8 @@ int main(int argc, char **argv) {
 	int af_size = 0;
 	char *ps = "mpxgen";
 	char *rt = "mpxgen: FM Stereo and RDS encoder";
-	uint16_t pi = 0x1234;
-	int preemphasis = 75;
+	uint16_t pi = 0xFFFF;
+	int preemphasis = 1;
 	int pty = 0;
 	int tp = 0;
 	float mpx = 100;
