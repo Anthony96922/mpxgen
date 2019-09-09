@@ -123,7 +123,7 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis, int rds_on, int wai
 				firpreemph = y;			// y could be replaced by firpreemph but this
 								// matches the example in the reference material
 
-				window = (.54 - .46 * cos(2*M_PI * (mi) / FIR_TAPS*FIR_PHASES)); // Hamming window
+				window = (.54 - .46 * cos(2 * M_PI * mi / (double) FIR_TAPS*FIR_PHASES)); // Hamming window
 				low_pass_fir[j][i] = firpreemph * window * gain;
 			}
 		}

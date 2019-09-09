@@ -84,7 +84,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 
 	// AO
 	ao_initialize();
-	int ao_driver = ao_default_driver_id();
+	int ao_driver = 0;
 	ao_sample_format format;
 	memset(&format, 0, sizeof(format));
 	format.bits = 16;
@@ -101,6 +101,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 			return 1;
 		}
 	} else {
+		ao_driver = ao_driver_id("alsa");
 		if ((device = ao_open_live(ao_driver, &format, NULL)) == NULL) {
 			fprintf(stderr, "Error: cannot open sound device.\n");
 			return 1;
