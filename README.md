@@ -10,13 +10,12 @@ This program generates FM multiplex baseband audio that can be fed through a 192
 - RDS can be updated through control pipe
 - RT+ support
 
-Although it won't replace commercial broadcasting software, it's a great alternative to [JMPX](https://github.com/jontio/JMPX) as it doesn't require a GUI to use.
+It won't replace commercial broadcasting software but it uses less resources than [JMPX](https://github.com/jontio/JMPX) as it doesn't require a GUI to use.
 
 #### To do
 - Final limiter to avoid harmonics
-- SSB stereo (I have no idea how to implement this.)
-- SCA (or this)
-- Fix preemphasis (see "Known issues" below)
+- SSB stereo
+- SCA
 
 ## Build
 This app depends on the sndfile, ao and samplerate libraries. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libao-dev libsamplerate0-dev` to install them.
