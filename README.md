@@ -14,12 +14,9 @@ Although it won't replace commercial broadcasting software, it's a great alterna
 
 #### To do
 - Final limiter to avoid harmonics
-- SSB stereo (I have no idea how to implement this)
+- SSB stereo (I have no idea how to implement this.)
 - SCA (or this)
 - Fix preemphasis (see "Known issues" below)
-
-#### Known issues
-- Using the built-in preemphasis causes images all across the MPX spectrum. Workaround is to turn off the built-in preemphasis by adding `--preemph 1` and using ffmpeg's aemphasis filter instead.
 
 ## Build
 This app depends on the sndfile, ao and samplerate libraries. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libao-dev libsamplerate0-dev` to install them.
@@ -53,7 +50,7 @@ There are more options that can be given to mpxgen:
 * `--pty` specifies the program type. Valid range: 0 - 31. Example: `--pty 9` (US: Top 40). See https://en.wikipedia.org/wiki/Radio_Data_System for more program types.
 * `--tp` specifies if the program carries traffic information.  Example `--tp 0`.
 * `--mpx` specifies the MPX output volume in percent. Default 100. Example `--mpx 50`. Use this if your sound card does not have a software volume control.
-* `--preemph` specifies which preemph should be used, since it differs from location. For Europe choose 'eu', for the US choose 'us'.
+* `--preemph` specifies which preemph should be used, since it differs from location. For Europe choose 'eu', for the US choose 'us'. Default is for no preemphasis.
 * `--ctl` specifies a named pipe (FIFO) to use as a control channel to change PS and RT at run-time (see below).
 * `--rds` RDS broadcast switch.
 * `--wait` specifies whether mpxgen should wait for the the audio pipe or terminate as soon as there is no audio. It's set to 1 by default.
