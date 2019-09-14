@@ -142,14 +142,14 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis, int rds_on, int wai
 }
 
 int fm_mpx_get_samples(float *mpx_buffer) {
-	if(rds) {
-		get_rds_samples(rds_buffer, length);
-		for (int i = 0; i < length; i++) {
-			mpx_buffer[i] = 0.1 * rds_buffer[i];
-		}
-	}
+	if(rds) get_rds_samples(rds_buffer, length);
 
-	if(inf == NULL) return 0;
+	if (inf == NULL) {
+		for (int i = 0; i < length; i++) {
+			mpx_buffer[i] = rds_buffer[i] / 10;
+		}
+		return 0;
+	}
 
 	for(int i=0; i<length; i++) {
 		if(audio_pos >= downsample_factor) {
@@ -209,8 +209,7 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		}
 
 		if (channels > 1) {
-			mpx_buffer[i] = mpx_buffer[i] +
-			(out_left + out_right) +
+			mpx_buffer[i] = (out_left + out_right) +
 			0.08 * carrier_19[phase_19] +
 			carrier_38[phase_38] * (1.5 * (out_left - out_right));
 
@@ -219,8 +218,9 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 			if(phase_19 >= 12) phase_19 = 0;
 			if(phase_38 >= 6) phase_38 = 0;
 		} else
-			mpx_buffer[i] = mpx_buffer[i] +
-			out_left;
+			mpx_buffer[i] = out_left;
+
+		if (rds) mpx_buffer[i] += rds_buffer[i] / 10;
 
 
 		audio_pos++;
