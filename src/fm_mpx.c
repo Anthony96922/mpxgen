@@ -195,31 +195,30 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 
 		// Calculate which FIR phase to use
 		int iphase = ((int) (audio_pos*FIR_PHASES/downsample_factor)); // I think this is correct
-		int fi; // fi = Filter Index
 
 		// use bit masking to implement circular buffer
-		if(channels > 1) {
-			for(fi=0; fi<FIR_TAPS; fi++) {
-				out_left += low_pass_fir[iphase][fi] * fir_buffer_left[(fir_index-fi)&(FIR_TAPS-1)];
+		for(int fi=0; fi<FIR_TAPS; fi++) { // fi = Filter Index
+			out_left += low_pass_fir[iphase][fi] * fir_buffer_left[(fir_index-fi)&(FIR_TAPS-1)];
+			if(channels > 1) {
 				out_right += low_pass_fir[iphase][fi] * fir_buffer_right[(fir_index-fi)&(FIR_TAPS-1)];
-			}
-		} else {
-			for(fi=0; fi<FIR_TAPS; fi++) {
-				out_left += low_pass_fir[iphase][fi] * fir_buffer_left[(fir_index-fi)&(FIR_TAPS-1)];
 			}
 		}
 
+
+		float out_mono = (out_left + out_right)/2;
+		mpx_buffer[i] = out_mono;
+
 		if (channels > 1) {
-			mpx_buffer[i] = (out_left + out_right) +
+			float out_stereo = out_left - out_right;
+			mpx_buffer[i] +=
 			carrier_19[phase_19] * 0.05 +
-			carrier_38[phase_38] * (1.5 * (out_left - out_right));
+			carrier_38[phase_38] * out_stereo;
 
 			phase_19++;
 			phase_38++;
 			if(phase_19 >= 12) phase_19 = 0;
 			if(phase_38 >= 6) phase_38 = 0;
-		} else
-			mpx_buffer[i] = out_left;
+		}
 
 		mpx_buffer[i] += rds_buffer[i];
 
