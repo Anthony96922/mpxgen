@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <math.h>
+#include <string.h>
 
 #include "rds.h"
 #include "fm_mpx.h"
@@ -39,6 +40,8 @@ int fir_index = 0;
 int channels = 0;
 
 float rds_buffer[DATA_SIZE];
+size_t buffer_size = sizeof(rds_buffer);
+
 int rds = 0;
 int wait = 0;
 
@@ -145,9 +148,7 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 	if(rds) get_rds_samples(rds_buffer, length);
 
 	if (inf == NULL) {
-		for (int i = 0; i < length; i++) {
-			mpx_buffer[i] = rds_buffer[i] / 10;
-		}
+		memcpy(mpx_buffer, rds_buffer, buffer_size);
 		return 0;
 	}
 
@@ -210,7 +211,7 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 
 		if (channels > 1) {
 			mpx_buffer[i] = (out_left + out_right) +
-			0.08 * carrier_19[phase_19] +
+			carrier_19[phase_19] * 0.05 +
 			carrier_38[phase_38] * (1.5 * (out_left - out_right));
 
 			phase_19++;
@@ -220,8 +221,7 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		} else
 			mpx_buffer[i] = out_left;
 
-		if (rds) mpx_buffer[i] += rds_buffer[i] / 10;
-
+		mpx_buffer[i] += rds_buffer[i];
 
 		audio_pos++;
 	}
