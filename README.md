@@ -13,9 +13,12 @@ This program generates FM multiplex baseband audio that can be fed through a 192
 It won't replace commercial broadcasting software but it uses less resources than [JMPX](https://github.com/jontio/JMPX) as it doesn't require a GUI to use.
 
 #### To do
-- Final limiter to avoid harmonics
+- Final limiter to avoid overmodulation
 - SSB stereo
 - SCA
+
+#### Known issues
+- Preemphasis causes images all over the MPX spectrum when using stereo. Use ffmpeg aemphasis filter if you need preemphasis.
 
 ## Build
 This app depends on the sndfile, ao and samplerate libraries. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libao-dev libsamplerate0-dev` to install them.
@@ -60,13 +63,23 @@ If you use the argument `--audio -`, mpxgen reads audio data on standard input. 
 ```
 sox -t mp3 http://www.linuxvoice.com/episodes/lv_s02e01.mp3 -t wav -  | ./mpxgen --audio -
 ```
+Basic audio processing with ffmpeg:
+```
+ffmpeg -i <file or stream URL> \
+  -af "
+    crossfeed,
+    acrossover[a][b],
+    [a]acompressor=threshold=0.0015:release=1000:makeup=20[aa],
+    [b]acompressor=threshold=0.0015:release=1000:makeup=20[ba],
+    [aa][ba]amix,
+    volume=5dB,
+    alimiter=release=100:level=disabled" \
+  -f wav - | ./mpxgen --audio -
+```
 Or to pipe the AUX input of a sound card into mpxgen:
 ```
 arecord -fS16_LE -r 44100 -Dplughw:1,0 -c 2 -  | ./mpxgen --audio -
 ```
-
-Please note this does not do any processing other than low-pass filtering and preemphasis. Use an external program for processing like sox or ffmpeg if you want to increase the loudness of your audio.
-
 ### Changing PS, RT, TA and PTY at run-time
 You can control PS, RT, TA (Traffic Announcement flag) and PTY (Program Type) at run-time using a named pipe (FIFO). For this run mpxgen with the `--ctl` argument.
 
