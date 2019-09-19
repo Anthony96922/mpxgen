@@ -127,7 +127,7 @@ int poll_control_pipe() {
             return CONTROL_PIPE_PTY_SET;
         }
         if (res[0] == 'R' && res[1] == 'T' && res[2] == 'P') {
-            int type_1, start_1, len_1, type_2, start_2, len_2;
+            unsigned int type_1, start_1, len_1, type_2, start_2, len_2;
             if (sscanf(arg, "%u,%u,%u,%u,%u,%u", &type_1, &start_1, &len_1, &type_2, &start_2, &len_2) == 6) {
                 if (type_1 > 63) type_1 = 0;
                 if (type_2 > 63) type_2 = 0;
@@ -153,7 +153,7 @@ int poll_control_pipe() {
         char *arg = res+5;
         if(arg[strlen(arg)-1] == '\n') arg[strlen(arg)-1] = 0;
 	if (res[0] == 'R' && res[1] == 'T' && res[2] == 'P' && res[3] == 'F') {
-            int running, toggle;
+            unsigned int running, toggle;
             if (sscanf(arg, "%u,%u", &running, &toggle) == 2) {
                 if (running > 1) running = 0;
                 if (toggle > 1) toggle = 0;

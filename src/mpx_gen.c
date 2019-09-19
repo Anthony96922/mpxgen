@@ -190,7 +190,7 @@ int main(int argc, char **argv) {
 	char *output_file = NULL;
 	char *control_pipe = NULL;
 	int rds = 1;
-	int alternative_freq[100] = {};
+	int alternative_freq[100] = {0};
 	int af_size = 0;
 	char *ps = "mpxgen";
 	char *rt = "mpxgen: FM Stereo and RDS encoder";

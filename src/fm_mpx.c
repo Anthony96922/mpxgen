@@ -17,16 +17,18 @@
 #define FIR_PHASES	32
 #define FIR_TAPS	32 // MUST be a power of 2 for the circular buffer
 
-size_t length = 0;
-
 // coefficients of the low-pass FIR filter
 float low_pass_fir[FIR_PHASES][FIR_TAPS];
+float fir_buffer_left[FIR_TAPS] = {0};
+float fir_buffer_right[FIR_TAPS] = {0};
+int fir_index = 0;
 
 float carrier_19[] = {0, 0.5, 0.8660254, 1, 0.8660254, 0.5, 0, -0.5, -0.8660254, -1, -0.8660254, -0.5};
 float carrier_38[] = {0, 0.8660254, 0.8660254, 0, -0.8660254, -0.8660254};
 int phase_19 = 0;
 int phase_38 = 0;
 
+size_t length = 0;
 float downsample_factor = 0;
 
 float *audio_buffer;
@@ -34,9 +36,6 @@ int audio_index = 0;
 int audio_len = 0;
 float audio_pos = 0;
 
-float fir_buffer_left[FIR_TAPS] = {0};
-float fir_buffer_right[FIR_TAPS] = {0};
-int fir_index = 0;
 int channels = 0;
 
 float rds_buffer[DATA_SIZE];
@@ -203,7 +202,6 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 				out_right += low_pass_fir[iphase][fi] * fir_buffer_right[(fir_index-fi)&(FIR_TAPS-1)];
 			}
 		}
-
 
 		float out_mono = (out_left + out_right)/2;
 		mpx_buffer[i] = out_mono;
