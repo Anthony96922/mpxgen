@@ -5,7 +5,7 @@ This program generates FM multiplex baseband audio that can be fed through a 192
 
 #### Features
 - Low resource requirements
-- Built-in low-pass filtering and pre-emphasis
+- Built-in low-pass filtering
 - Support for basic RDS data fields: PS, RT, PTY and AF
 - RDS can be updated through control pipe
 - RT+ support
@@ -13,12 +13,8 @@ This program generates FM multiplex baseband audio that can be fed through a 192
 It won't replace commercial broadcasting software but it uses less resources than [JMPX](https://github.com/jontio/JMPX) as it doesn't require a GUI to use.
 
 #### To do
-- Final limiter to avoid overmodulation
 - SSB stereo
 - SCA
-
-#### Known issues
-- Preemphasis causes images all over the MPX spectrum when using stereo. Use ffmpeg aemphasis filter if you need preemphasis.
 
 ## Build
 This app depends on the sndfile, ao and samplerate libraries. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libao-dev libsamplerate0-dev` to install them.
@@ -52,7 +48,6 @@ There are more options that can be given to mpxgen:
 * `--pty` specifies the program type. Valid range: 0 - 31. Example: `--pty 9` (US: Top 40). See https://en.wikipedia.org/wiki/Radio_Data_System for more program types.
 * `--tp` specifies if the program carries traffic information.  Example `--tp 0`.
 * `--mpx` specifies the MPX output volume in percent. Default 100. Example `--mpx 50`. Use this if your sound card does not have a software volume control.
-* `--preemph` specifies which preemph should be used, since it differs from location. For Europe choose 'eu', for the US choose 'us'. Default is for no preemphasis.
 * `--ctl` specifies a named pipe (FIFO) to use as a control channel to change PS and RT at run-time (see below).
 * `--rds` RDS broadcast switch.
 * `--wait` specifies whether mpxgen should wait for the the audio pipe or terminate as soon as there is no audio. It's set to 1 by default.
