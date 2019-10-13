@@ -48,12 +48,14 @@ void postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 	int j = 0;
 
 	for (int i = 0; i < inbufsize; i++) {
+		//if (inbuf[i] <= -1 || inbuf[i] >= 1) printf("mpx: overshoot! (%.7f)\n", inbuf[i]);
 		// scale samples
 		inbuf[i] *= 32767;
 		// volume control
 		inbuf[i] *= (volume / 100);
-		// copy the mono channel to the two stereo channels
+
 		if (out_channels == 2) {
+			// stereo upmix
 			outbuf[j] = outbuf[j+1] = inbuf[i];
 			j += 2;
 		} else {
@@ -62,7 +64,7 @@ void postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 	}
 }
 
-int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, int preemphasis, float mpx, char *control_pipe, int pty, int tp, int wait) {
+int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, float mpx, char *control_pipe, int pty, int tp, int wait) {
 	// Catch only important signals
 	for (int i = 0; i < 25; i++) {
 		struct sigaction sa;
@@ -70,11 +72,6 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 		memset(&sa, 0, sizeof(sa));
 		sa.sa_handler = terminate;
 		sigaction(i, &sa, NULL);
-	}
-
-	if (audio_file == NULL && !rds) {
-		fprintf(stderr, "Nothing to encode. Exiting.\n");
-		return 0;
 	}
 
 	// Data structures for baseband data
@@ -124,7 +121,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 	}
 
 	// Initialize the baseband generator
-	if(fm_mpx_open(audio_file, DATA_SIZE, preemphasis, rds, wait) < 0) return 1;
+	if(fm_mpx_open(audio_file, DATA_SIZE, rds, wait) < 0) return 1;
 
 	// Initialize the RDS modulator
 	set_rds_pi(pi);
@@ -195,18 +192,16 @@ int main(int argc, char **argv) {
 	char *ps = "mpxgen";
 	char *rt = "mpxgen: FM Stereo and RDS encoder";
 	uint16_t pi = 0xFFFF;
-	int preemphasis = 1;
 	int pty = 0;
 	int tp = 0;
 	float mpx = 100;
 	int wait = 1;
 
-	const char	*short_opt = "a:o:P:m:W:R:i:s:r:p:T:A:C:h";
+	const char	*short_opt = "a:o:m:W:R:i:s:r:p:T:A:C:h";
 	struct option	long_opt[] =
 	{
 		{"audio", 	required_argument, NULL, 'a'},
 		{"output-file",	required_argument, NULL, 'o'},
-		{"preemph",	required_argument, NULL, 'P'},
 		{"mpx",		required_argument, NULL, 'm'},
 		{"wait",	required_argument, NULL, 'W'},
 
@@ -233,17 +228,6 @@ int main(int argc, char **argv) {
 
 			case 'o': //output-file
 				output_file = optarg;
-				break;
-
-			case 'P': //preemph
-				if(strcmp("eu", optarg)==0) {
-					preemphasis = 50;
-				} else if(strcmp("us", optarg)==0) {
-					preemphasis = 75;
-				}
-				else {
-					preemphasis = atoi(optarg);
-				}
 				break;
 
 			case 'm': //mpx
@@ -296,7 +280,7 @@ int main(int argc, char **argv) {
 			case 'h': //help
 				fatal("Help: %s\n"
 				      "	[--audio (-a) file] [--output-file (-o) PCM out] [--mpx (-m) mpx-volume]\n"
-				      "	[--preemph (-P) preemphasis] [--wait (-W) wait-switch]\n"
+				      "	[--wait (-W) wait-switch]\n"
 				      "	[--rds rds-switch] [--pi pi-code] [--ps ps-text]\n"
 				      "	[--rt radiotext] [--tp traffic-program] [--pty program-type]\n"
 				      "	[--af alternative-freq] [--ctl (-C) control-pipe]\n", argv[0]);
@@ -313,9 +297,14 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	if (audio_file == NULL && !rds) {
+		fprintf(stderr, "Nothing to encode. Exiting.\n");
+		return 0;
+	}
+
 	alternative_freq[0] = af_size;
 
-	int errcode = generate_mpx(audio_file, output_file, rds, pi, ps, rt, alternative_freq, preemphasis, mpx, control_pipe, pty, tp, wait);
+	int errcode = generate_mpx(audio_file, output_file, rds, pi, ps, rt, alternative_freq, mpx, control_pipe, pty, tp, wait);
 
 	terminate(errcode);
 }

@@ -14,13 +14,26 @@
 #include "rds.h"
 #include "fm_mpx.h"
 
+#define OLD_FILTER
+
+#ifdef OLD_FILTER
+#define FIR_HALF_SIZE	64
+#define FIR_SIZE	(2*FIR_HALF_SIZE-1)
+
+// coefficients of the low-pass FIR filter
+float low_pass_fir[FIR_HALF_SIZE];
+float fir_buffer_left[FIR_SIZE] = {0};
+float fir_buffer_right[FIR_SIZE] = {0};
+#else
 #define FIR_PHASES	32
 #define FIR_TAPS	32 // MUST be a power of 2 for the circular buffer
 
 // coefficients of the low-pass FIR filter
-float low_pass_fir[FIR_PHASES][FIR_TAPS];
+float low_pass_fir[FIR_PHASES][FIR_TAPS] = {0};
 float fir_buffer_left[FIR_TAPS] = {0};
 float fir_buffer_right[FIR_TAPS] = {0};
+float gain = 200;
+#endif
 int fir_index = 0;
 
 float carrier_19[] = {0, 0.5, 0.8660254, 1, 0.8660254, 0.5, 0, -0.5, -0.8660254, -1, -0.8660254, -0.5};
@@ -38,7 +51,7 @@ float audio_pos = 0;
 
 int channels = 0;
 
-float rds_buffer[DATA_SIZE];
+float rds_buffer[DATA_SIZE] = {0};
 size_t buffer_size = sizeof(rds_buffer);
 
 int rds = 0;
@@ -55,7 +68,7 @@ float *alloc_empty_buffer(size_t length) {
     return p;
 }
 
-int fm_mpx_open(char *filename, size_t len, int preemphasis, int rds_on, int wait_for_audio) {
+int fm_mpx_open(char *filename, size_t len, int rds_on, int wait_for_audio) {
 	length = len;
 	wait = wait_for_audio;
 	rds = rds_on;
@@ -87,22 +100,33 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis, int rds_on, int wai
 		printf("Input: %d Hz, upsampling factor: %.2f\n", in_samplerate, downsample_factor);
 
 		channels = sfinfo.channels;
-		if(channels > 1) {
-			printf("%d channels, generating stereo multiplex.\n", channels);
+		if(channels == 2) {
+			printf("2 channels, generating stereo multiplex.\n");
 		} else {
 			printf("1 channel, monophonic operation.\n");
 		}
 
-		int cutoff_freq = 15700;
+		int cutoff_freq = 15500;
 		if(in_samplerate/2 < cutoff_freq) cutoff_freq = in_samplerate/2;
 
+#ifdef OLD_FILTER
+		low_pass_fir[FIR_HALF_SIZE-1] = 2 * cutoff_freq / 228000 /2;
+		// Here we divide this coefficient by two because it will be counted twice
+		// when applying the filter
+
+		// Only store half of the filter since it is symmetric
+		for(int i=1; i<FIR_HALF_SIZE; i++) {
+			low_pass_fir[FIR_HALF_SIZE-1-i] =
+				sin(2 * M_PI * cutoff_freq * i / 228000) / (M_PI * i) // sinc
+				* (.54 - .46 * cos(2*M_PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
+		}
+#else
 		// Create the low-pass FIR filter, with pre-emphasis
 		double window, firlowpass, firpreemph, sincpos;
-		float gain = 180 - (preemphasis/5.0);
 
 		// IIR pre-emphasis filter
 		// Reference material: http://jontio.zapto.org/hda1/preempiir.pdf
-		double tau = preemphasis * 1e-6;
+		double tau = 1e-6; // 1us = disable preemphasis
 		double delta = 1.96e-6;
 		double taup, deltap, bp, ap, a0, a1, b1;
 		taup = 1.0/(2.0*(in_samplerate*FIR_PHASES))/tan(1.0/(2*tau*(in_samplerate*FIR_PHASES)));
@@ -129,6 +153,7 @@ int fm_mpx_open(char *filename, size_t len, int preemphasis, int rds_on, int wai
 				low_pass_fir[j][i] = firpreemph * window * gain;
 			}
 		}
+#endif
 
 		printf("Created low-pass FIR filter for audio channels, with cutoff at %.1i Hz\n", cutoff_freq);
 
@@ -147,6 +172,7 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 	if(rds) get_rds_samples(rds_buffer, length);
 
 	if (inf == NULL) {
+		for (int i=0; i<length; i++) rds_buffer[i] *= 0.05;
 		memcpy(mpx_buffer, rds_buffer, buffer_size);
 		return 0;
 	}
@@ -181,16 +207,52 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 				audio_len -= channels;
 			}
 
-			fir_index++; // fir_index will point to newest valid data soon
-			if(fir_index >= FIR_TAPS) fir_index = 0;
+#ifndef OLD_FILTER
 			// First store the current sample(s) into the FIR filter's ring buffer
 			fir_buffer_left[fir_index] = audio_buffer[audio_index];
-			if(channels > 1) fir_buffer_right[fir_index] = audio_buffer[audio_index+1];
+			if(channels == 2) {
+				fir_buffer_right[fir_index] = audio_buffer[audio_index+1];
+			}
+			fir_index++; // fir_index will point to newest valid data soon
+			if(fir_index >= FIR_TAPS) fir_index = 0;
+#endif
 		} // if need new sample
 
-		// Polyphase FIR filter
+#ifdef OLD_FILTER
+		fir_buffer_left[fir_index] = audio_buffer[audio_index];
+		if (channels == 2) {
+			fir_buffer_right[fir_index] = audio_buffer[audio_index+1];
+		}
+		fir_index++;
+		if(fir_index >= FIR_SIZE) fir_index = 0;
+#endif
+
+		// L/R signals
 		float out_left = 0;
 		float out_right = 0;
+
+#ifdef OLD_FILTER
+		// Now apply the FIR low-pass filter
+
+		/* As the FIR filter is symmetric, we do not multiply all
+		   the coefficients independently, but two-by-two, thus reducing
+		   the total number of multiplications by a factor of two
+		 */
+		int ifbi = fir_index;  // ifbi = increasing FIR Buffer Index
+		int dfbi = fir_index;  // dfbi = decreasing FIR Buffer Index
+		for(int fi=0; fi<FIR_HALF_SIZE; fi++) {  // fi = Filter Index
+			dfbi--;
+			if(dfbi < 0) dfbi = FIR_SIZE-1;
+			out_left += low_pass_fir[fi] * (fir_buffer_left[ifbi] + fir_buffer_left[dfbi]);
+			if(channels == 2) {
+				out_right += low_pass_fir[fi] * (fir_buffer_right[ifbi] + fir_buffer_right[dfbi]);
+			}
+			ifbi++;
+			if(ifbi >= FIR_SIZE) ifbi = 0;
+		}
+		// End of FIR filter
+#else
+		// Polyphase FIR filter
 
 		// Calculate which FIR phase to use
 		int iphase = ((int) (audio_pos*FIR_PHASES/downsample_factor)); // I think this is correct
@@ -198,27 +260,32 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		// use bit masking to implement circular buffer
 		for(int fi=0; fi<FIR_TAPS; fi++) { // fi = Filter Index
 			out_left += low_pass_fir[iphase][fi] * fir_buffer_left[(fir_index-fi)&(FIR_TAPS-1)];
-			if(channels > 1) {
+			if(channels == 2) {
 				out_right += low_pass_fir[iphase][fi] * fir_buffer_right[(fir_index-fi)&(FIR_TAPS-1)];
 			}
 		}
+#endif
 
-		float out_mono = (out_left + out_right)/2;
-		mpx_buffer[i] = out_mono;
+		// Create sum and difference signals
+		float out_mono   = out_left + out_right;
+		float out_stereo = out_left - out_right;
 
-		if (channels > 1) {
-			float out_stereo = out_left - out_right;
-			mpx_buffer[i] +=
-			carrier_19[phase_19] * 0.05 +
-			carrier_38[phase_38] * out_stereo;
+		if (channels == 2) {
+			// audio signals need to be limited to 45% to remain within modulation limits
+			mpx_buffer[i] = out_mono * 0.45 +
+			carrier_38[phase_38] * out_stereo * 0.45 +
+			carrier_19[phase_19] * 0.05;
 
 			phase_19++;
 			phase_38++;
 			if(phase_19 >= 12) phase_19 = 0;
 			if(phase_38 >= 6) phase_38 = 0;
+		} else {
+			// mono audio is limited to 90%
+			mpx_buffer[i] = out_mono * 0.9;
 		}
 
-		mpx_buffer[i] += rds_buffer[i];
+		mpx_buffer[i] += rds_buffer[i] * 0.05;
 
 		audio_pos++;
 	}
