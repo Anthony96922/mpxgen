@@ -11,6 +11,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include "waveforms.h"
+#include "fm_mpx.h"
 
 #define GROUP_LENGTH 4
 
@@ -128,7 +129,7 @@ void get_rds_ps_group(uint16_t *blocks) {
 	static int ps_state, af_state;
 
 	blocks[1] |= 0x0000 | rds_params.ta << 4 | rds_params.ms << 3 | ps_state;
-	if (ps_state == 3) blocks[1] |= 4; // DI = 1 - Stereo
+	if (ps_state == 3 && channels == 2) blocks[1] |= 4; // DI = 1 - Stereo
 	if (rds_params.af[0]) { // AF
 		if (af_state == 0) {
 			blocks[2] = (rds_params.af[0] + 224) << 8 | rds_params.af[1];

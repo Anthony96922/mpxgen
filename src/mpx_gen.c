@@ -286,13 +286,8 @@ int main(int argc, char **argv) {
 				      "	[--af alternative-freq] [--ctl (-C) control-pipe]\n", argv[0]);
 				break;
 
-			case ':':
-				fatal("%s: option '-%c' requires an argument\n", argv[0], optopt);
-				break;
-
-			case '?':
 			default:
-				fatal("%s: option '-%c' is invalid. See -h (--help)\n", argv[0], optopt);
+				fatal("(See -h / --help)\n");
 				break;
 		}
 	}
