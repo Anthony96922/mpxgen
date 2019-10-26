@@ -12,6 +12,7 @@
 
 #include "rds.h"
 #include "control_pipe.h"
+#include "fm_mpx.h"
 
 //#define CONTROL_PIPE_MESSAGES
 
@@ -147,6 +148,18 @@ int poll_control_pipe() {
             }
 #endif
             return CONTROL_PIPE_RTP_SET;
+        }
+        if (res[0] == 'M' && res[1] == 'P' && res[2] == 'X') {
+            int level_19, level_38, level_57;
+            if (sscanf(arg, "%d,%d,%d", &level_19, &level_38, &level_57) == 3) {
+                if (level_19 < -1 || level_19 > 125) level_19 = 100;
+                if (level_38 < -1 || level_38 > 125) level_38 = 100;
+                if (level_57 < -1 || level_57 > 125) level_57 = 100;
+                set_19_level(level_19);
+                set_38_level(level_38);
+                set_57_level(level_57);
+            }
+            return CONTROL_PIPE_MPX_SET;
         }
     }
     if (strlen(res) > 5 && res[4] == ' ') {

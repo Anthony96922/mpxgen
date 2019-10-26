@@ -10,8 +10,10 @@
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
+
 #include "waveforms.h"
 #include "fm_mpx.h"
+#include "rds.h"
 
 #define GROUP_LENGTH 4
 
@@ -25,20 +27,14 @@ struct {
     int af[100];
     // PS
     char ps[8];
-    int ps_init;
     int ps_update;
-    char new_ps[8];
     // RT
     char rt[64];
-    int rt_init;
     int rt_update;
-    char new_rt[64];
     // PTYN
     char ptyn[8];
-    int ptyn_init;
     int ptyn_update;
     int enable_ptyn;
-    char new_ptyn[8];
     // RT+
     int rt_p_running;
     int rt_p_toggle;
@@ -127,6 +123,7 @@ int get_rds_ct_group(uint16_t *blocks) {
  */
 void get_rds_ps_group(uint16_t *blocks) {
 	static int ps_state, af_state;
+	static char ps_text[8];
 
 	blocks[1] |= 0x0000 | rds_params.ta << 4 | rds_params.ms << 3 | ps_state;
 	if (ps_state == 3 && channels == 2) blocks[1] |= 4; // DI = 1 - Stereo
@@ -141,12 +138,12 @@ void get_rds_ps_group(uint16_t *blocks) {
 		af_state += 2;
 		if (af_state > rds_params.af[0]) af_state = 0;
 	}
-	blocks[3] = rds_params.ps[ps_state*2] << 8 | rds_params.ps[ps_state*2+1];
+	blocks[3] = ps_text[ps_state*2] << 8 | ps_text[ps_state*2+1];
 	ps_state++;
 	if (ps_state == 4) {
 		ps_state = 0;
 		if (rds_params.ps_update) {
-			strncpy(rds_params.ps, rds_params.new_ps, 8);
+			strncpy(ps_text, rds_params.ps, 8);
 			rds_params.ps_update = 0;
 		}
 	}
@@ -156,11 +153,11 @@ void get_rds_ps_group(uint16_t *blocks) {
  */
 void get_rds_rt_group(uint16_t *blocks) {
 	static int rt_state;
+	static char rt_text[64];
 
 restart_rt:
 	if (rds_params.rt_update) {
-		strncpy(rds_params.rt, rds_params.new_rt, 64);
-		rds_params.ab ^= 1;
+		strncpy(rt_text, rds_params.rt, 64);
 		rds_params.rt_update = 0;
 		rt_state = 0;
 	}
@@ -171,8 +168,8 @@ restart_rt:
 	}
 
 	blocks[1] |= 0x2000 | rds_params.ab << 4 | rt_state;
-	blocks[2] = rds_params.rt[rt_state*4+0] << 8 | rds_params.rt[rt_state*4+1];
-	blocks[3] = rds_params.rt[rt_state*4+2] << 8 | rds_params.rt[rt_state*4+3];
+	blocks[2] = rt_text[rt_state*4+0] << 8 | rt_text[rt_state*4+1];
+	blocks[3] = rt_text[rt_state*4+2] << 8 | rt_text[rt_state*4+3];
 
 	rt_state++;
 	if (rt_state == 16) rt_state = 0;
@@ -199,24 +196,21 @@ void get_rds_oda_group(uint16_t *blocks) {
 
 /* PTYN group (10A)
  */
-int get_rds_ptyn_group(uint16_t *blocks) {
+void get_rds_ptyn_group(uint16_t *blocks) {
 	static int ptyn_state;
-
-	// Do not generate a 10A group if PTYN is off
-	if (!rds_params.enable_ptyn) return 0;
+	static char ptyn_text[8];
 
 	blocks[1] |= 0xA000 | ptyn_state;
-	blocks[2] = rds_params.ptyn[ptyn_state*4+0] << 8 | rds_params.ptyn[ptyn_state*4+1];
-	blocks[3] = rds_params.ptyn[ptyn_state*4+2] << 8 | rds_params.ptyn[ptyn_state*4+3];
+	blocks[2] = ptyn_text[ptyn_state*4+0] << 8 | ptyn_text[ptyn_state*4+1];
+	blocks[3] = ptyn_text[ptyn_state*4+2] << 8 | ptyn_text[ptyn_state*4+3];
 	ptyn_state++;
 	if (ptyn_state == 2) {
 		ptyn_state = 0;
 		if (rds_params.ptyn_update) {
-			strncpy(rds_params.ptyn, rds_params.new_ptyn, 8);
+			strncpy(ptyn_text, rds_params.ptyn, 8);
 			rds_params.ptyn_update = 0;
 		}
 	}
-	return 1;
 }
 
 /* RT+ group (assigned to 11A)
@@ -237,20 +231,25 @@ void get_rds_other_groups(uint16_t *blocks) {
 	static int state;
 
 next:
-	state++;
-	if (state == 3) state = 0;
-
 	switch (state) {
 	case 0: // Type 3A groups
 		get_rds_oda_group(blocks);
 		break;
 	case 1: // Type 10A groups
-		if (!get_rds_ptyn_group(blocks)) goto next;
+		// Do not generate a 10A group if PTYN is off
+		if (!rds_params.enable_ptyn) {
+			state++;
+			goto next;
+		}
+		get_rds_ptyn_group(blocks);
 		break;
 	case 2: // Type 11A groups
 		get_rds_rtp_group(blocks);
 		break;
 	}
+
+	state++;
+	if (state == 3) state = 0;
 }
 
 /* Creates an RDS group. This generates sequences of the form 0A, 2A, 0A, 2A, 0A, 2A, etc.
@@ -258,72 +257,81 @@ next:
    pattern. 'ps_state' and 'rt_state' keep track of where we are in the PS (0A) sequence
    or RT (2A) sequence, respectively.
 */
-void get_rds_group(int *buffer) {
+void get_rds_group(uint16_t *blocks) {
     static int state;
-    // Basic block data
-    uint16_t blocks[GROUP_LENGTH] = {rds_params.pi, rds_params.tp << 10 | rds_params.pty << 5, 0, 0};
+    blocks[0] = rds_params.pi;
+    blocks[1] = rds_params.tp << 10 | rds_params.pty << 5;
 
     // Generate block content
     if(!get_rds_ct_group(blocks)) { // CT (clock time) has priority on other group types
 	switch (state) {
 	case 0:
 	case 2:
-	case 4: // Type 0A groups
+	case 4:
+	case 6:
+	case 8: // Type 0A groups
 	    get_rds_ps_group(blocks);
 	    break;
 	case 1:
 	case 3:
-	case 5: // Type 2A groups
+	case 5:
+	case 7:
+	case 9: // Type 2A groups
 	    get_rds_rt_group(blocks);
 	    break;
-	case 6: // Other groups
+	case 10:
+	case 11: // Other groups
 	    get_rds_other_groups(blocks);
 	    break;
 	}
 
 	state++;
-	if(state == 7) state = 0;
+	if(state == 12) state = 0;
     }
+}
+
+void get_rds_bits(int *out_buffer) {
+    // Basic block data
+    static uint16_t out_blocks[GROUP_LENGTH];
+
+    get_rds_group(out_blocks);
 
     // Calculate the checkword for each block and emit the bits
     for(int i=0; i<GROUP_LENGTH; i++) {
-        uint16_t block = blocks[i];
+        uint16_t block = out_blocks[i];
         uint16_t check = crc(block) ^ offset_words[i];
         for(int j=0; j<BLOCK_SIZE; j++) {
-            *buffer++ = ((block & (1<<(BLOCK_SIZE-1))) != 0);
+            *out_buffer++ = ((block & (1<<(BLOCK_SIZE-1))) != 0);
             block <<= 1;
         }
         for(int j=0; j<POLY_DEG; j++) {
-            *buffer++= ((check & (1<<(POLY_DEG-1))) != 0);
+            *out_buffer++ = ((check & (1<<(POLY_DEG-1))) != 0);
             check <<= 1;
         }
     }
 }
 
 /* Get a number of RDS samples. This generates the envelope of the waveform using
-   pre-generated elementary waveform samples, and then it amplitude-modulates the
-   envelope with a 57 kHz carrier, which is very efficient as 57 kHz is 4 times the
-   sample frequency we are working at (228 kHz).
+   pre-generated elementary waveform samples.
  */
 void get_rds_samples(float *buffer, int count) {
     static int bit_buffer[BITS_PER_GROUP];
     static int bit_pos = BITS_PER_GROUP;
-    static float sample_buffer[SAMPLE_BUFFER_SIZE] = {0};
+    static float sample_buffer[SAMPLE_BUFFER_SIZE];
 
     static int prev_output;
     static int cur_output;
     static int cur_bit;
     static int sample_count = SAMPLES_PER_BIT;
     static int inverting;
-    static int phase;
 
     static int in_sample_index;
     static int out_sample_index = SAMPLE_BUFFER_SIZE-1;
 
     for(int i=0; i<count; i++) {
-        if(sample_count >= SAMPLES_PER_BIT) {
-            if(bit_pos >= BITS_PER_GROUP) {
-                get_rds_group(bit_buffer);
+        if(sample_count == SAMPLES_PER_BIT) {
+            if(bit_pos == BITS_PER_GROUP) {
+                get_rds_bits(bit_buffer);
                 bit_pos = 0;
             }
 
@@ -341,36 +349,34 @@ void get_rds_samples(float *buffer, int count) {
                 float val = (*src++);
                 if(inverting) val = -val;
                 sample_buffer[idx++] += val;
-                if(idx >= SAMPLE_BUFFER_SIZE) idx = 0;
+                if(idx == SAMPLE_BUFFER_SIZE) idx = 0;
             }
 
             in_sample_index += SAMPLES_PER_BIT;
-            if(in_sample_index >= SAMPLE_BUFFER_SIZE) in_sample_index -= SAMPLE_BUFFER_SIZE;
+            if(in_sample_index == SAMPLE_BUFFER_SIZE) in_sample_index -= SAMPLE_BUFFER_SIZE;
 
             bit_pos++;
             sample_count = 0;
         }
 
         float sample = sample_buffer[out_sample_index];
-        sample_buffer[out_sample_index] = 0;
-        out_sample_index++;
-        if(out_sample_index >= SAMPLE_BUFFER_SIZE) out_sample_index = 0;
 
-
-        // modulate at 57 kHz
-        // use phase for this
-        switch(phase) {
-            case 0:
-            case 2: sample = 0; break;
-            case 1: break;
-            case 3: sample = -sample; break;
-        }
-        phase++;
-        if(phase >= 4) phase = 0;
+        sample_buffer[out_sample_index++] = 0;
+        if(out_sample_index == SAMPLE_BUFFER_SIZE) out_sample_index = 0;
 
         *buffer++ = sample;
         sample_count++;
     }
+}
+
+void rds_encoder_init(uint16_t init_pi, char *init_ps, char *init_rt, int init_pty, int init_tp) {
+    set_rds_ab(1);
+    set_rds_pi(init_pi);
+    set_rds_ps(init_ps);
+    set_rds_rt(init_rt);
+    set_rds_pty(init_pty);
+    set_rds_tp(init_tp);
+    set_rds_ms(1);
 }
 
 void set_rds_pi(uint16_t pi_code) {
@@ -381,32 +387,19 @@ void set_rds_rt(char *rt) {
     // Terminate RT with '\r' (carriage return) if RT is < 64 characters long
     int rt_len = strlen(rt);
 
-    if (!rds_params.rt_init) {
-	strncpy(rds_params.rt, rt, 64);
-	if (rt_len < 64) rds_params.rt[rt_len] = '\r';
-	rds_params.rt_init = 1;
-    } else {
-	strncpy(rds_params.new_rt, rt, 64);
-	if (rt_len < 64) rds_params.new_rt[rt_len] = '\r';
-	rds_params.rt_update = 1;
-    }
+    rds_params.rt_update = 1;
+    rds_params.ab ^= 1;
+    strncpy(rds_params.rt, rt, 64);
+    if (rt_len < 64) rds_params.rt[rt_len] = '\r';
 }
 
 void set_rds_ps(char *ps) {
     int i;
 
-    if (!rds_params.ps_init) {
-	strncpy(rds_params.ps, ps, 8);
-	for(i=0; i<8; i++) {
-	    if(rds_params.ps[i] == 0) rds_params.ps[i] = 32;
-	}
-	rds_params.ps_init = 1;
-    } else {
-	strncpy(rds_params.new_ps, ps, 8);
-	for(i=0; i<8; i++) {
-	    if(rds_params.new_ps[i] == 0) rds_params.new_ps[i] = 32;
-	}
-	rds_params.ps_update = 1;
+    rds_params.ps_update = 1;
+    strncpy(rds_params.ps, ps, 8);
+    for(i=0; i<8; i++) {
+        if(rds_params.ps[i] == 0) rds_params.ps[i] = 32;
     }
 }
 
@@ -439,13 +432,9 @@ void set_rds_pty(int pty) {
 void set_rds_ptyn(char *ptyn, int enable) {
     rds_params.enable_ptyn = enable;
     if (!rds_params.enable_ptyn) return;
-    if (!rds_params.ptyn_init) {
-	strncpy(rds_params.ptyn, ptyn, 8);
-	rds_params.ptyn_init = 1;
-    } else {
-	strncpy(rds_params.new_ptyn, ptyn, 8);
-	rds_params.ptyn_update = 1;
-    }
+
+    rds_params.ptyn_update = 1;
+    strncpy(rds_params.ptyn, ptyn, 8);
 }
 
 void set_rds_ta(int ta) {

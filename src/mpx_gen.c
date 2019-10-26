@@ -7,7 +7,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <stdarg.h>
 #include <signal.h>
 #include <getopt.h>
 #include <samplerate.h>
@@ -32,23 +31,17 @@ static void terminate(int num)
     exit(num);
 }
 
-static void fatal(char *fmt, ...)
-{
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-    exit(1);
-}
-
 int out_channels = 2;
 float volume = 0;
 
-void postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
+int postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 	int j = 0;
 
 	for (int i = 0; i < inbufsize; i++) {
-		//if (inbuf[i] <= -1 || inbuf[i] >= 1) printf("mpx: overshoot! (%.7f)\n", inbuf[i]);
+		if (inbuf[i] <= -1 || inbuf[i] >= 1) {
+			fprintf(stderr, "overmodulation! (%.7f)\n", inbuf[i]);
+			return 1;
+		}
 		// scale samples
 		inbuf[i] *= 32767;
 		// volume control
@@ -62,6 +55,7 @@ void postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 			outbuf[i] = inbuf[i];
 		}
 	}
+	return 0;
 }
 
 int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, float mpx, char *control_pipe, int pty, int tp, int wait) {
@@ -106,8 +100,8 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 	}
 
 	// SRC
-	int src_error = 0;
-	size_t generated_frames = 0;
+	int src_error;
+	size_t generated_frames;
 
 	SRC_DATA src_data;
 	src_data.src_ratio = 192000. / 228000;
@@ -124,14 +118,8 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 	if(fm_mpx_open(audio_file, DATA_SIZE, rds, wait) < 0) return 1;
 
 	// Initialize the RDS modulator
-	set_rds_pi(pi);
-	set_rds_ps(ps);
-	set_rds_rt(rt);
-	set_rds_pty(pty);
-	set_rds_tp(tp);
-	set_rds_ms(1);
-
 	if(rds) {
+		rds_encoder_init(pi, ps, rt, pty, tp);
 		printf("RDS Options:\n");
 		printf("PI: %04X, PS: \"%s\", PTY: %d\n", pi, ps, pty);
 		printf("RT: \"%s\"\n", rt);
@@ -169,7 +157,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 		}
 
 		generated_frames = src_data.output_frames_gen;
-		postprocess(resample_out, dev_out, generated_frames);
+		if (postprocess(resample_out, dev_out, generated_frames)) break;
 		// num_bytes = generated_frames * channels * bytes per sample
 		if (!ao_play(device, (char *)dev_out, generated_frames * out_channels * 2)) {
 			fprintf(stderr, "Error: could not play audio.\n");
@@ -181,8 +169,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 }
 
 int main(int argc, char **argv) {
-	int opt = 0;
-
+	int opt;
 	char *audio_file = NULL;
 	char *output_file = NULL;
 	char *control_pipe = NULL;
@@ -232,8 +219,10 @@ int main(int argc, char **argv) {
 
 			case 'm': //mpx
 				mpx = atoi(optarg);
-				if (mpx < 1 || mpx > 100)
-					fatal("MPX volume must be between 1 - 100.\n");
+				if (mpx < 1 || mpx > 100) {
+					fprintf(stderr, "MPX volume must be between 1 - 100.\n");
+					return 1;
+				}
 				break;
 
 			case 'W': //wait
@@ -258,8 +247,10 @@ int main(int argc, char **argv) {
 
 			case 'p': //pty
 				pty = atoi(optarg);
-				if (pty < 0 || pty > 31)
-					fatal("PTY must be between 0 - 31.\n");
+				if (pty < 0 || pty > 31) {
+					fprintf(stderr, "PTY must be between 0 - 31.\n");
+					return 1;
+				}
 				break;
 
 			case 'T': //tp
@@ -270,7 +261,7 @@ int main(int argc, char **argv) {
 				af_size++;
 				alternative_freq[af_size] = (int)(10*atof(optarg))-875;
 				if(alternative_freq[af_size] < 1 || alternative_freq[af_size] > 204)
-					fatal("Alternative Frequency has to be set in range of 87.6 MHz - 107.9 MHz\n");
+					fprintf(stderr, "Alternative Frequency has to be set in range of 87.6 MHz - 107.9 MHz\n");
 				break;
 
 			case 'C': //ctl
@@ -278,16 +269,18 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'h': //help
-				fatal("Help: %s\n"
+				fprintf(stderr, "Help: %s\n"
 				      "	[--audio (-a) file] [--output-file (-o) PCM out] [--mpx (-m) mpx-volume]\n"
 				      "	[--wait (-W) wait-switch]\n"
 				      "	[--rds rds-switch] [--pi pi-code] [--ps ps-text]\n"
 				      "	[--rt radiotext] [--tp traffic-program] [--pty program-type]\n"
 				      "	[--af alternative-freq] [--ctl (-C) control-pipe]\n", argv[0]);
+				return 1;
 				break;
 
 			default:
-				fatal("(See -h / --help)\n");
+				fprintf(stderr, "(See -h / --help)\n");
+				return 1;
 				break;
 		}
 	}

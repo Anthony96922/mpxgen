@@ -38,8 +38,10 @@ int fir_index = 0;
 
 float carrier_19[] = {0, 0.5, 0.8660254, 1, 0.8660254, 0.5, 0, -0.5, -0.8660254, -1, -0.8660254, -0.5};
 float carrier_38[] = {0, 0.8660254, 0.8660254, 0, -0.8660254, -0.8660254};
+float carrier_57[] = {0, 1, 0, -1};
 int phase_19 = 0;
 int phase_38 = 0;
+int phase_57 = 0;
 
 size_t length = 0;
 float downsample_factor = 0;
@@ -56,6 +58,10 @@ size_t buffer_size = sizeof(rds_buffer);
 
 int rds = 0;
 int wait = 0;
+
+float level_19 = 1;
+float level_38 = 1;
+float level_57 = 1;
 
 SNDFILE *inf;
 
@@ -172,7 +178,10 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 	if(rds) get_rds_samples(rds_buffer, length);
 
 	if (inf == NULL) {
-		for (int i=0; i<length; i++) rds_buffer[i] *= 0.05;
+		for (int i=0; i<length; i++) {
+			rds_buffer[i] *= carrier_57[phase_57++] * 0.05 * level_57;
+			if (phase_57 == 4) phase_57 = 0;
+		}
 		memcpy(mpx_buffer, rds_buffer, buffer_size);
 		return 0;
 	}
@@ -214,7 +223,7 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 				fir_buffer_right[fir_index] = audio_buffer[audio_index+1];
 			}
 			fir_index++; // fir_index will point to newest valid data soon
-			if(fir_index >= FIR_TAPS) fir_index = 0;
+			if(fir_index == FIR_TAPS) fir_index = 0;
 #endif
 		} // if need new sample
 
@@ -224,7 +233,7 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 			fir_buffer_right[fir_index] = audio_buffer[audio_index+1];
 		}
 		fir_index++;
-		if(fir_index >= FIR_SIZE) fir_index = 0;
+		if(fir_index == FIR_SIZE) fir_index = 0;
 #endif
 
 		// L/R signals
@@ -248,7 +257,7 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 				out_right += low_pass_fir[fi] * (fir_buffer_right[ifbi] + fir_buffer_right[dfbi]);
 			}
 			ifbi++;
-			if(ifbi >= FIR_SIZE) ifbi = 0;
+			if(ifbi == FIR_SIZE) ifbi = 0;
 		}
 		// End of FIR filter
 #else
@@ -273,19 +282,20 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		if (channels == 2) {
 			// audio signals need to be limited to 45% to remain within modulation limits
 			mpx_buffer[i] = out_mono * 0.45 +
-			carrier_38[phase_38] * out_stereo * 0.45 +
-			carrier_19[phase_19] * 0.05;
+			carrier_19[phase_19++] * 0.05 * level_19 +
+			carrier_38[phase_38++] * out_stereo * 0.45 * level_38;
 
-			phase_19++;
-			phase_38++;
-			if(phase_19 >= 12) phase_19 = 0;
-			if(phase_38 >= 6) phase_38 = 0;
+			if (phase_19 == 12) phase_19 = 0;
+			if (phase_38 == 6) phase_38 = 0;
 		} else {
 			// mono audio is limited to 90%
 			mpx_buffer[i] = out_mono * 0.9;
 		}
 
-		mpx_buffer[i] += rds_buffer[i] * 0.05;
+		mpx_buffer[i] +=
+		carrier_57[phase_57++] * rds_buffer[i] * 0.05 * level_57;
+
+		if (phase_57 == 4) phase_57 = 0;
 
 		audio_pos++;
 	}
@@ -293,6 +303,21 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 	return 0;
 }
 
+void set_19_level(int new_level) {
+	if (new_level == -1) return;
+	level_19 = (new_level / 100.0);
+}
+
+void set_38_level(int new_level) {
+	if (new_level == -1) return;
+	level_38 = (new_level / 100.0);
+}
+
+void set_57_level(int new_level) {
+	if (new_level == -1) return;
+	rds = (new_level == 0) ? 0 : 1;
+	level_57 = (new_level / 100.0);
+}
 
 int fm_mpx_close() {
 	if(sf_close(inf)) fprintf(stderr, "Error closing audio file\n");

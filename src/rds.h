@@ -25,4 +25,6 @@ extern void set_rds_tp(int tp);
 extern void set_rds_ms(int ms);
 extern void set_rds_ab(int ab);
 
+extern void rds_encoder_init(uint16_t init_pi, char *init_ps,
+                             char *init_rt, int init_pty, int init_tp);
 #endif /* RDS_H */

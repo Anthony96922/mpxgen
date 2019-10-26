@@ -9,7 +9,7 @@ mpxgen: $(MPXGEN_OBJ)
 control_pipe.o: control_pipe.h rds.h
 fm_mpx.o: rds.h fm_mpx.h
 mpx_gen.o: rds.h fm_mpx.h control_pipe.h
-rds.o: fm_mpx.h
+rds.o: rds.h fm_mpx.h
 
 clean:
 	rm -f *.o
