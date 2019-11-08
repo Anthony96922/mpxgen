@@ -77,7 +77,7 @@ uint16_t crc(uint16_t block) {
         int msb = (crc >> (POLY_DEG-1)) & 1;
         crc <<= 1;
         if((msb ^ bit) != 0) {
-            crc = crc ^ POLY;
+            crc ^= POLY;
         }
     }
     return crc;
@@ -155,16 +155,16 @@ void get_rds_rt_group(uint16_t *blocks) {
 	static int rt_state;
 	static char rt_text[64];
 
-restart_rt:
+begin:
 	if (rds_params.rt_update) {
 		strncpy(rt_text, rds_params.rt, 64);
 		rds_params.rt_update = 0;
 		rt_state = 0;
 	}
 
-	if (rds_params.rt[rt_state*4] == 0) {
+	if (rt_text[rt_state*4] == 0) {
 		rt_state = 0;
-		goto restart_rt;
+		goto begin;
 	}
 
 	blocks[1] |= 0x2000 | rds_params.ab << 4 | rt_state;
@@ -259,6 +259,7 @@ next:
 */
 void get_rds_group(uint16_t *blocks) {
     static int state;
+    // Basic block data
     blocks[0] = rds_params.pi;
     blocks[1] = rds_params.tp << 10 | rds_params.pty << 5;
 
@@ -291,9 +292,7 @@ void get_rds_group(uint16_t *blocks) {
 }
 
 void get_rds_bits(int *out_buffer) {
-    // Basic block data
-    static uint16_t out_blocks[GROUP_LENGTH];
-
+    uint16_t out_blocks[GROUP_LENGTH] = {0};
     get_rds_group(out_blocks);
 
     // Calculate the checkword for each block and emit the bits
@@ -370,9 +369,9 @@ void get_rds_samples(float *buffer, int count) {
 }
 
 void rds_encoder_init(uint16_t init_pi, char *init_ps, char *init_rt, int init_pty, int init_tp) {
-    set_rds_ab(1);
     set_rds_pi(init_pi);
     set_rds_ps(init_ps);
+    set_rds_ab(1);
     set_rds_rt(init_rt);
     set_rds_pty(init_pty);
     set_rds_tp(init_tp);
@@ -384,12 +383,13 @@ void set_rds_pi(uint16_t pi_code) {
 }
 
 void set_rds_rt(char *rt) {
-    // Terminate RT with '\r' (carriage return) if RT is < 64 characters long
     int rt_len = strlen(rt);
 
     rds_params.rt_update = 1;
     rds_params.ab ^= 1;
     strncpy(rds_params.rt, rt, 64);
+
+    // Terminate RT with '\r' (carriage return) if RT is < 64 characters long
     if (rt_len < 64) rds_params.rt[rt_len] = '\r';
 }
 

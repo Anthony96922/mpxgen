@@ -7,7 +7,7 @@
 
 #define DATA_SIZE 4096
 
-extern int fm_mpx_open(char *filename, size_t len, int rds_on, int wait_for_audio);
+extern int fm_mpx_open(char *filename, size_t len, int rds_on);
 extern int fm_mpx_get_samples(float *mpx_buffer);
 extern int fm_mpx_close();
 extern int channels;

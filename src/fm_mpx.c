@@ -57,7 +57,6 @@ float rds_buffer[DATA_SIZE] = {0};
 size_t buffer_size = sizeof(rds_buffer);
 
 int rds = 0;
-int wait = 0;
 
 float level_19 = 1;
 float level_38 = 1;
@@ -74,9 +73,8 @@ float *alloc_empty_buffer(size_t length) {
     return p;
 }
 
-int fm_mpx_open(char *filename, size_t len, int rds_on, int wait_for_audio) {
+int fm_mpx_open(char *filename, size_t len, int rds_on) {
 	length = len;
-	wait = wait_for_audio;
 	rds = rds_on;
 
 	if(filename != NULL) {
@@ -112,7 +110,7 @@ int fm_mpx_open(char *filename, size_t len, int rds_on, int wait_for_audio) {
 			printf("1 channel, monophonic operation.\n");
 		}
 
-		int cutoff_freq = 15500;
+		int cutoff_freq = 17000;
 		if(in_samplerate/2 < cutoff_freq) cutoff_freq = in_samplerate/2;
 
 #ifdef OLD_FILTER
@@ -196,16 +194,8 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 					if (audio_len < 0) {
 						fprintf(stderr, "Error reading audio\n");
 						return -1;
-					}
-					if(audio_len == 0) {
-						if( sf_seek(inf, 0, SEEK_SET) < 0 ) {
-							if(wait) {
-								return 0;
-							} else {
-								fprintf(stderr, "Could not rewind in audio file, terminating\n");
-								return -1;
-							}
-						}
+					} else if (audio_len == 0) {
+						if( sf_seek(inf, 0, SEEK_SET) < 0 ) return 0;
 					} else {
 						break;
 					}

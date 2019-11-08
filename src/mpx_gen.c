@@ -58,7 +58,7 @@ int postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 	return 0;
 }
 
-int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, float mpx, char *control_pipe, int pty, int tp, int wait) {
+int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, float mpx, char *control_pipe, int pty, int tp) {
 	// Catch only important signals
 	for (int i = 0; i < 25; i++) {
 		struct sigaction sa;
@@ -115,7 +115,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 	}
 
 	// Initialize the baseband generator
-	if(fm_mpx_open(audio_file, DATA_SIZE, rds, wait) < 0) return 1;
+	if(fm_mpx_open(audio_file, DATA_SIZE, rds) < 0) return 1;
 
 	// Initialize the RDS modulator
 	if(rds) {
@@ -182,15 +182,13 @@ int main(int argc, char **argv) {
 	int pty = 0;
 	int tp = 0;
 	float mpx = 100;
-	int wait = 1;
 
-	const char	*short_opt = "a:o:m:W:R:i:s:r:p:T:A:C:h";
+	const char	*short_opt = "a:o:m:R:i:s:r:p:T:A:C:h";
 	struct option	long_opt[] =
 	{
 		{"audio", 	required_argument, NULL, 'a'},
 		{"output-file",	required_argument, NULL, 'o'},
 		{"mpx",		required_argument, NULL, 'm'},
-		{"wait",	required_argument, NULL, 'W'},
 
 		{"rds", 	required_argument, NULL, 'R'},
 		{"pi",		required_argument, NULL, 'i'},
@@ -223,10 +221,6 @@ int main(int argc, char **argv) {
 					fprintf(stderr, "MPX volume must be between 1 - 100.\n");
 					return 1;
 				}
-				break;
-
-			case 'W': //wait
-				wait = atoi(optarg);
 				break;
 
 			case 'R': //rds
@@ -271,7 +265,6 @@ int main(int argc, char **argv) {
 			case 'h': //help
 				fprintf(stderr, "Help: %s\n"
 				      "	[--audio (-a) file] [--output-file (-o) PCM out] [--mpx (-m) mpx-volume]\n"
-				      "	[--wait (-W) wait-switch]\n"
 				      "	[--rds rds-switch] [--pi pi-code] [--ps ps-text]\n"
 				      "	[--rt radiotext] [--tp traffic-program] [--pty program-type]\n"
 				      "	[--af alternative-freq] [--ctl (-C) control-pipe]\n", argv[0]);
@@ -292,7 +285,7 @@ int main(int argc, char **argv) {
 
 	alternative_freq[0] = af_size;
 
-	int errcode = generate_mpx(audio_file, output_file, rds, pi, ps, rt, alternative_freq, mpx, control_pipe, pty, tp, wait);
+	int errcode = generate_mpx(audio_file, output_file, rds, pi, ps, rt, alternative_freq, mpx, control_pipe, pty, tp);
 
 	terminate(errcode);
 }
