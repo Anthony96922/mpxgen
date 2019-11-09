@@ -16,6 +16,7 @@
 #include "fm_mpx.h"
 #include "control_pipe.h"
 
+#define DATA_SIZE 4096
 #define OUTPUT_DATA_SIZE (DATA_SIZE * 2)
 
 ao_device *device;
@@ -75,18 +76,18 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 
 	// AO
 	ao_initialize();
-	int ao_driver = 0;
+	int ao_driver;
 	ao_sample_format format;
 	memset(&format, 0, sizeof(format));
 	format.bits = 16;
-	format.channels = out_channels;
+	format.channels = 2;
 	format.rate = 192000;
 	format.byte_format = AO_FMT_LITTLE;
 
 	if (output_file != NULL) {
 		ao_driver = ao_driver_id("raw");
 		out_channels = 1;
-		format.channels = out_channels;
+		format.channels = 1;
 		if ((device = ao_open_file(ao_driver, output_file, 1, &format, NULL)) == NULL) {
 			fprintf(stderr, "Error: cannot open output file.\n");
 			return 1;
@@ -119,7 +120,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 
 	// Initialize the RDS modulator
 	if(rds) {
-		rds_encoder_init(pi, ps, rt, pty, tp);
+		rds_encoder_init(DATA_SIZE, pi, ps, rt, pty, tp);
 		printf("RDS Options:\n");
 		printf("PI: %04X, PS: \"%s\", PTY: %d\n", pi, ps, pty);
 		printf("RT: \"%s\"\n", rt);

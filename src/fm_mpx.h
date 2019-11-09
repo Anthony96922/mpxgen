@@ -5,8 +5,6 @@
     See https://github.com/Anthony96922/mpxgen
 */
 
-#define DATA_SIZE 4096
-
 extern int fm_mpx_open(char *filename, size_t len, int rds_on);
 extern int fm_mpx_get_samples(float *mpx_buffer);
 extern int fm_mpx_close();

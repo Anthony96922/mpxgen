@@ -59,7 +59,7 @@ int poll_control_pipe() {
 #ifdef CONTROL_PIPE_MESSAGES
             printf("PS set to: \"%s\"\n", arg);
 #endif
-            return CONTROL_PIPE_PS_SET;
+            return 1;
         }
         if(res[0] == 'R' && res[1] == 'T') {
             arg[64] = 0;
@@ -67,7 +67,7 @@ int poll_control_pipe() {
 #ifdef CONTROL_PIPE_MESSAGES
             printf("RT set to: \"%s\"\n", arg);
 #endif
-            return CONTROL_PIPE_RT_SET;
+            return 1;
         }
         if(res[0] == 'T' && res[1] == 'A') {
             int ta = ( strcmp(arg, "ON") == 0 );
@@ -76,7 +76,7 @@ int poll_control_pipe() {
             printf("Set TA to ");
             if(ta) printf("ON\n"); else printf("OFF\n");
 #endif
-            return CONTROL_PIPE_TA_SET;
+            return 1;
         }
 	if(res[0] == 'T' && res[1] == 'P') {
             int tp = ( strcmp(arg, "ON") == 0 );
@@ -85,7 +85,7 @@ int poll_control_pipe() {
             printf("Set TP to ");
             if(tp) printf("ON\n"); else printf("OFF\n");
 #endif
-            return CONTROL_PIPE_TP_SET;
+            return 1;
         }
 	if(res[0] == 'M' && res[1] == 'S') {
             int ms = ( strcmp(arg, "ON") == 0 );
@@ -94,7 +94,7 @@ int poll_control_pipe() {
             printf("Set MS to ");
             if(ms) printf("ON\n"); else printf("OFF\n");
 #endif
-            return CONTROL_PIPE_MS_SET;
+            return 1;
         }
 	if(res[0] == 'A' && res[1] == 'B') {
             int ab = ( strcmp(arg, "ON") == 0 );
@@ -103,7 +103,7 @@ int poll_control_pipe() {
             printf("Set AB to ");
             if(ab) printf("ON\n"); else printf("OFF\n");
 #endif
-            return CONTROL_PIPE_AB_SET;
+            return 1;
         }
     }
 
@@ -125,7 +125,7 @@ int poll_control_pipe() {
                 printf("Wrong PTY identifier! The PTY range is 0 - 31.\n");
 #endif
             }
-            return CONTROL_PIPE_PTY_SET;
+            return 1;
         }
         if (res[0] == 'R' && res[1] == 'T' && res[2] == 'P') {
             unsigned int type_1, start_1, len_1, type_2, start_2, len_2;
@@ -147,19 +147,19 @@ int poll_control_pipe() {
                 printf("Could not parse RT+ tag info.\n");
             }
 #endif
-            return CONTROL_PIPE_RTP_SET;
+            return 1;
         }
         if (res[0] == 'M' && res[1] == 'P' && res[2] == 'X') {
             int level_19, level_38, level_57;
             if (sscanf(arg, "%d,%d,%d", &level_19, &level_38, &level_57) == 3) {
-                if (level_19 < -1 || level_19 > 125) level_19 = 100;
-                if (level_38 < -1 || level_38 > 125) level_38 = 100;
-                if (level_57 < -1 || level_57 > 125) level_57 = 100;
+                if (level_19 < -1 || level_19 > 200) level_19 = 100;
+                if (level_38 < -1 || level_38 > 200) level_38 = 100;
+                if (level_57 < -1 || level_57 > 200) level_57 = 100;
                 set_19_level(level_19);
                 set_38_level(level_38);
                 set_57_level(level_57);
             }
-            return CONTROL_PIPE_MPX_SET;
+            return 1;
         }
     }
     if (strlen(res) > 5 && res[4] == ' ') {
@@ -180,7 +180,7 @@ int poll_control_pipe() {
                 printf("Could not parse RT+ flags.\n");
             }
 #endif
-	    return CONTROL_PIPE_RTP_FLAGS_SET;
+	    return 1;
         }
         if (res[0] == 'P' && res[1] == 'T' && res[2] == 'Y' && res[3] == 'N') {
             arg[8] = 0;
@@ -195,7 +195,7 @@ int poll_control_pipe() {
 #endif
                 set_rds_ptyn(arg, 1);
             }
-            return CONTROL_PIPE_PTYN_SET;
+            return 1;
         }
     }
     return -1;

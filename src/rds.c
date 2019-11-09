@@ -15,8 +15,6 @@
 #include "fm_mpx.h"
 #include "rds.h"
 
-#define GROUP_LENGTH 4
-
 struct {
     uint16_t pi;
     int ta;
@@ -49,19 +47,6 @@ struct {
    warning on -Wmissing-braces with GCC < 4.8.3
    (bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53119)
 */
-
-/* The RDS error-detection code generator polynomial is
-   x^10 + x^8 + x^7 + x^5 + x^4 + x^3 + x^0
-*/
-#define POLY 0x1B9
-#define POLY_DEG 10
-#define MSB_BIT 0x8000
-#define BLOCK_SIZE 16
-
-#define BITS_PER_GROUP (GROUP_LENGTH * (BLOCK_SIZE+POLY_DEG))
-#define SAMPLES_PER_BIT 192
-#define FILTER_SIZE (sizeof(waveform_biphase)/sizeof(float))
-#define SAMPLE_BUFFER_SIZE (SAMPLES_PER_BIT + FILTER_SIZE)
 
 uint16_t offset_words[] = {0x0FC, 0x198, 0x168, 0x1B4};
 // We don't handle offset word C' here for the sake of simplicity
@@ -262,6 +247,8 @@ void get_rds_group(uint16_t *blocks) {
     // Basic block data
     blocks[0] = rds_params.pi;
     blocks[1] = rds_params.tp << 10 | rds_params.pty << 5;
+    blocks[2] = 0;
+    blocks[3] = 0;
 
     // Generate block content
     if(!get_rds_ct_group(blocks)) { // CT (clock time) has priority on other group types
@@ -292,7 +279,7 @@ void get_rds_group(uint16_t *blocks) {
 }
 
 void get_rds_bits(int *out_buffer) {
-    uint16_t out_blocks[GROUP_LENGTH] = {0};
+    static uint16_t out_blocks[GROUP_LENGTH];
     get_rds_group(out_blocks);
 
     // Calculate the checkword for each block and emit the bits
@@ -310,10 +297,12 @@ void get_rds_bits(int *out_buffer) {
     }
 }
 
+size_t count = 0;
+
 /* Get a number of RDS samples. This generates the envelope of the waveform using
    pre-generated elementary waveform samples.
  */
-void get_rds_samples(float *buffer, int count) {
+void get_rds_samples(float *buffer) {
     static int bit_buffer[BITS_PER_GROUP];
     static int bit_pos = BITS_PER_GROUP;
     static float sample_buffer[SAMPLE_BUFFER_SIZE];
@@ -368,7 +357,8 @@ void get_rds_samples(float *buffer, int count) {
     }
 }
 
-void rds_encoder_init(uint16_t init_pi, char *init_ps, char *init_rt, int init_pty, int init_tp) {
+void rds_encoder_init(size_t buf_len, uint16_t init_pi, char *init_ps, char *init_rt, int init_pty, int init_tp) {
+    count = buf_len;
     set_rds_pi(init_pi);
     set_rds_ps(init_ps);
     set_rds_ab(1);
