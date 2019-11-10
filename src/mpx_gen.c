@@ -22,14 +22,20 @@
 ao_device *device;
 SRC_STATE *src_state;
 
-static void terminate(int num)
+void shutdown()
 {
-    fm_mpx_close();
-    close_control_pipe();
-    ao_close(device);
-    ao_shutdown();
-    src_delete(src_state);
-    exit(num);
+	fm_mpx_close();
+	close_control_pipe();
+	ao_close(device);
+	ao_shutdown();
+	src_delete(src_state);
+}
+
+int stop_mpx = 0;
+
+void stop() {
+	printf("\nStopping...\n");
+	stop_mpx = 1;
 }
 
 int out_channels = 2;
@@ -43,10 +49,10 @@ int postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 			fprintf(stderr, "overmodulation! (%.7f)\n", inbuf[i]);
 			return 1;
 		}
-		// scale samples
-		inbuf[i] *= 32767;
 		// volume control
 		inbuf[i] *= (volume / 100);
+		// scale samples
+		inbuf[i] *= 32767;
 
 		if (out_channels == 2) {
 			// stereo upmix
@@ -65,7 +71,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 		struct sigaction sa;
 
 		memset(&sa, 0, sizeof(sa));
-		sa.sa_handler = terminate;
+		sa.sa_handler = stop;
 		sigaction(i, &sa, NULL);
 	}
 
@@ -93,7 +99,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 			return 1;
 		}
 	} else {
-		ao_driver = ao_driver_id("alsa");
+		ao_driver = ao_default_driver_id();
 		if ((device = ao_open_live(ao_driver, &format, NULL)) == NULL) {
 			fprintf(stderr, "Error: cannot open sound device.\n");
 			return 1;
@@ -164,6 +170,8 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 			fprintf(stderr, "Error: could not play audio.\n");
 			break;
 		}
+
+		if (stop_mpx) break;
 	}
 
 	return 0;
@@ -280,13 +288,14 @@ int main(int argc, char **argv) {
 	}
 
 	if (audio_file == NULL && !rds) {
-		fprintf(stderr, "Nothing to encode. Exiting.\n");
-		return 0;
+		fprintf(stderr, "Nothing to do. Exiting.\n");
+		return 1;
 	}
 
 	alternative_freq[0] = af_size;
 
 	int errcode = generate_mpx(audio_file, output_file, rds, pi, ps, rt, alternative_freq, mpx, control_pipe, pty, tp);
 
-	terminate(errcode);
+	shutdown(errcode);
+	return errcode;
 }
