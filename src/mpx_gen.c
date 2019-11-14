@@ -22,8 +22,7 @@
 ao_device *device;
 SRC_STATE *src_state;
 
-void shutdown()
-{
+void shutdown() {
 	fm_mpx_close();
 	close_control_pipe();
 	ao_close(device);
@@ -34,7 +33,6 @@ void shutdown()
 int stop_mpx = 0;
 
 void stop() {
-	printf("\nStopping...\n");
 	stop_mpx = 1;
 }
 
@@ -66,13 +64,14 @@ int postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 }
 
 int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, float mpx, char *control_pipe, int pty, int tp) {
-	// Catch only important signals
-	for (int i = 0; i < 25; i++) {
+	// Gracefully stop the encoder on SIGINT or SIGTERM
+	int signals[] = {SIGINT, SIGTERM};
+	for (int i = 0; i < 2; i++) {
 		struct sigaction sa;
 
 		memset(&sa, 0, sizeof(sa));
 		sa.sa_handler = stop;
-		sigaction(i, &sa, NULL);
+		sigaction(signals[i], &sa, NULL);
 	}
 
 	// Data structures for baseband data
@@ -84,7 +83,6 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 	ao_initialize();
 	int ao_driver;
 	ao_sample_format format;
-	memset(&format, 0, sizeof(format));
 	format.bits = 16;
 	format.channels = 2;
 	format.rate = 192000;
@@ -171,7 +169,10 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 			break;
 		}
 
-		if (stop_mpx) break;
+		if (stop_mpx) {
+			printf("Stopping...\n");
+			break;
+		}
 	}
 
 	return 0;
@@ -296,6 +297,6 @@ int main(int argc, char **argv) {
 
 	int errcode = generate_mpx(audio_file, output_file, rds, pi, ps, rt, alternative_freq, mpx, control_pipe, pty, tp);
 
-	shutdown(errcode);
+	shutdown();
 	return errcode;
 }

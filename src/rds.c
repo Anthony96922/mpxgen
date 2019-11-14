@@ -90,7 +90,7 @@ int get_rds_ct_group(uint16_t *blocks) {
                   (int)((utc->tm_year - l) * 365.25) +
                   (int)((utc->tm_mon + 2 + l*12) * 30.6001);
 
-        blocks[1] |= 0x4000 | (mjd>>15);
+        blocks[1] |= 4 << 12 | (mjd>>15);
         blocks[2] = (mjd<<1) | (utc->tm_hour>>4);
         blocks[3] = (utc->tm_hour & 0xF)<<12 | utc->tm_min<<6;
 
@@ -107,10 +107,10 @@ int get_rds_ct_group(uint16_t *blocks) {
 /* PS group (0A)
  */
 void get_rds_ps_group(uint16_t *blocks) {
-	static int ps_state, af_state;
 	static char ps_text[8];
+	static int ps_state, af_state;
 
-	blocks[1] |= 0x0000 | rds_params.ta << 4 | rds_params.ms << 3 | ps_state;
+	blocks[1] |= 0 << 12 | rds_params.ta << 4 | rds_params.ms << 3 | ps_state;
 	if (ps_state == 3 && channels == 2) blocks[1] |= 4; // DI = 1 - Stereo
 	if (rds_params.af[0]) { // AF
 		if (af_state == 0) {
@@ -137,8 +137,8 @@ void get_rds_ps_group(uint16_t *blocks) {
 /* RT group (2A)
  */
 void get_rds_rt_group(uint16_t *blocks) {
-	static int rt_state;
 	static char rt_text[64];
+	static int rt_state;
 
 begin:
 	if (rds_params.rt_update) {
@@ -152,7 +152,7 @@ begin:
 		goto begin;
 	}
 
-	blocks[1] |= 0x2000 | rds_params.ab << 4 | rt_state;
+	blocks[1] |= 2 << 12 | rds_params.ab << 4 | rt_state;
 	blocks[2] = rt_text[rt_state*4+0] << 8 | rt_text[rt_state*4+1];
 	blocks[3] = rt_text[rt_state*4+2] << 8 | rt_text[rt_state*4+3];
 
@@ -165,7 +165,7 @@ begin:
 void get_rds_oda_group(uint16_t *blocks) {
 	static int oda_state;
 
-	blocks[1] |= 0x3000;
+	blocks[1] |= 3 << 12;
 
 	switch (oda_state) {
 	case 0: // RT+
@@ -182,10 +182,10 @@ void get_rds_oda_group(uint16_t *blocks) {
 /* PTYN group (10A)
  */
 void get_rds_ptyn_group(uint16_t *blocks) {
-	static int ptyn_state;
 	static char ptyn_text[8];
+	static int ptyn_state;
 
-	blocks[1] |= 0xA000 | ptyn_state;
+	blocks[1] |= 10 << 12 | ptyn_state;
 	blocks[2] = ptyn_text[ptyn_state*4+0] << 8 | ptyn_text[ptyn_state*4+1];
 	blocks[3] = ptyn_text[ptyn_state*4+2] << 8 | ptyn_text[ptyn_state*4+3];
 	ptyn_state++;
@@ -202,7 +202,7 @@ void get_rds_ptyn_group(uint16_t *blocks) {
  */
 void get_rds_rtp_group(uint16_t *blocks) {
 	// RT+ block format
-	blocks[1] |= 0xB000 | rds_params.rt_p_toggle << 4 | rds_params.rt_p_running << 3 |
+	blocks[1] |= 11 << 12 | rds_params.rt_p_toggle << 4 | rds_params.rt_p_running << 3 |
 		    (rds_params.rt_p_type_1 & 0x38) >> 3;
 	blocks[2] = (rds_params.rt_p_type_1 & 0x7) << 13 | (rds_params.rt_p_start_1 & 0x3F) << 7 |
 		    (rds_params.rt_p_len_1 & 0x3F) << 1 | (rds_params.rt_p_type_2 & 0x20) >> 5;
@@ -244,6 +244,7 @@ next:
 */
 void get_rds_group(uint16_t *blocks) {
     static int state;
+
     // Basic block data
     blocks[0] = rds_params.pi;
     blocks[1] = rds_params.tp << 10 | rds_params.pty << 5;
@@ -384,11 +385,9 @@ void set_rds_rt(char *rt) {
 }
 
 void set_rds_ps(char *ps) {
-    int i;
-
     rds_params.ps_update = 1;
     strncpy(rds_params.ps, ps, 8);
-    for(i=0; i<8; i++) {
+    for(int i=0; i<8; i++) {
         if(rds_params.ps[i] == 0) rds_params.ps[i] = 32;
     }
 }
@@ -425,6 +424,9 @@ void set_rds_ptyn(char *ptyn, int enable) {
 
     rds_params.ptyn_update = 1;
     strncpy(rds_params.ptyn, ptyn, 8);
+    for(int i=0; i<8; i++) {
+        if(rds_params.ptyn[i] == 0) rds_params.ptyn[i] = 32;
+    }
 }
 
 void set_rds_ta(int ta) {
