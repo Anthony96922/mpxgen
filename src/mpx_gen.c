@@ -30,22 +30,21 @@ void shutdown() {
 	src_delete(src_state);
 }
 
-int stop_mpx = 0;
+int stop_mpx;
 
 void stop() {
 	stop_mpx = 1;
 }
 
 int out_channels = 2;
-float volume = 0;
+float volume;
 
-int postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
+void postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 	int j = 0;
 
 	for (int i = 0; i < inbufsize; i++) {
 		if (inbuf[i] <= -1 || inbuf[i] >= 1) {
 			fprintf(stderr, "overmodulation! (%.7f)\n", inbuf[i]);
-			return 1;
 		}
 		// volume control
 		inbuf[i] *= (volume / 100);
@@ -60,7 +59,6 @@ int postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 			outbuf[i] = inbuf[i];
 		}
 	}
-	return 0;
 }
 
 int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char *ps, char *rt, int *af_array, float mpx, char *control_pipe, int pty, int tp) {
@@ -126,13 +124,13 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 	if(rds) {
 		rds_encoder_init(DATA_SIZE, pi, ps, rt, pty, tp);
 		printf("RDS Options:\n");
-		printf("PI: %04X, PS: \"%s\", PTY: %d\n", pi, ps, pty);
+		printf("PI: %04X, PS: \"%s\", PTY: %d, TP: %d\n", pi, ps, pty, tp);
 		printf("RT: \"%s\"\n", rt);
 		if(af_array[0]) {
 			set_rds_af(af_array);
-			printf("AF: ");
+			printf("AF: %d, ", af_array[0]);
 			for(int f = 1; f < af_array[0]+1; f++) {
-				printf("%.1f MHz ", (float)(af_array[f]+875)/10);
+				printf("%.1f ", (float)(af_array[f]+875)/10);
 			}
 			printf("\n");
 		}
@@ -162,7 +160,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 		}
 
 		generated_frames = src_data.output_frames_gen;
-		if (postprocess(resample_out, dev_out, generated_frames)) break;
+		postprocess(resample_out, dev_out, generated_frames);
 		// num_bytes = generated_frames * channels * bytes per sample
 		if (!ao_play(device, (char *)dev_out, generated_frames * out_channels * 2)) {
 			fprintf(stderr, "Error: could not play audio.\n");
@@ -264,8 +262,10 @@ int main(int argc, char **argv) {
 			case 'A': //af
 				af_size++;
 				alternative_freq[af_size] = (int)(10*atof(optarg))-875;
-				if(alternative_freq[af_size] < 1 || alternative_freq[af_size] > 204)
+				if(alternative_freq[af_size] < 1 || alternative_freq[af_size] > 204) {
 					fprintf(stderr, "Alternative Frequency has to be set in range of 87.6 MHz - 107.9 MHz\n");
+					return 1;
+				}
 				break;
 
 			case 'C': //ctl

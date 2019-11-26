@@ -18,30 +18,30 @@
 
 // coefficients of the low-pass FIR filter
 float low_pass_fir[FIR_HALF_SIZE];
-float fir_buffer_left[FIR_SIZE] = {0};
-float fir_buffer_right[FIR_SIZE] = {0};
+float fir_buffer_left[FIR_SIZE];
+float fir_buffer_right[FIR_SIZE];
 
-int fir_index = 0;
+int fir_index;
 
 float carrier_19[] = {0, 0.5, 0.8660254, 1, 0.8660254, 0.5, 0, -0.5, -0.8660254, -1, -0.8660254, -0.5};
 float carrier_38[] = {0, 0.8660254, 0.8660254, 0, -0.8660254, -0.8660254};
 float carrier_57[] = {0, 1, 0, -1};
-int phase_19 = 0;
-int phase_38 = 0;
-int phase_57 = 0;
+int phase_19;
+int phase_38;
+int phase_57;
 
-size_t length = 0;
-float downsample_factor = 0;
+size_t length;
+float upsample_factor;
 
 float *audio_buffer;
 float *rds_buffer;
 
-int audio_index = 0;
-int audio_len = 0;
-float audio_pos = 0;
+int audio_index;
+int audio_len;
+float audio_pos;
 
-int channels = 0;
-int rds = 0;
+int channels;
+int rds;
 
 float level_19 = 1;
 float level_38 = 1;
@@ -84,39 +84,30 @@ int fm_mpx_open(char *filename, size_t len, int rds_on) {
 		}
 
 		int in_samplerate = sfinfo.samplerate;
-		downsample_factor = 228000. / in_samplerate;
-
-		printf("Input: %d Hz, upsampling factor: %.2f\n", in_samplerate, downsample_factor);
-
+		upsample_factor = 228000. / in_samplerate;
 		channels = sfinfo.channels;
-		if(channels == 2) {
-			printf("2 channels, generating stereo multiplex.\n");
-		} else {
-			printf("1 channel, monophonic operation.\n");
-		}
+
+		printf("Input: %d Hz, %d channels, upsampling factor: %.2f\n", in_samplerate, channels, upsample_factor);
 
 		int cutoff_freq = 17000;
 		if(in_samplerate/2 < cutoff_freq) cutoff_freq = in_samplerate/2;
 
-		low_pass_fir[FIR_HALF_SIZE-1] = 2 * cutoff_freq / 228000 /2;
 		// Here we divide this coefficient by two because it will be counted twice
 		// when applying the filter
+		low_pass_fir[FIR_HALF_SIZE-1] = 2 * cutoff_freq / 228000 /2;
 
 		// Only store half of the filter since it is symmetric
 		for(int i=1; i<FIR_HALF_SIZE; i++) {
 			low_pass_fir[FIR_HALF_SIZE-1-i] =
 				sin(2 * M_PI * cutoff_freq * i / 228000) / (M_PI * i) // sinc
-				* (.54 - .46 * cos(2*M_PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
+				* (.54 - .46 * cos(2 * M_PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
 		}
 
-		printf("Created low-pass FIR filter for audio channels, with cutoff at %.1i Hz\n", cutoff_freq);
+		printf("Created low-pass FIR filter for audio channels, with cutoff at %d Hz\n", cutoff_freq);
 
-		audio_pos = downsample_factor;
+		audio_pos = upsample_factor;
 		audio_buffer = alloc_empty_buffer(length * channels);
 		if(audio_buffer == NULL) return -1;
-	}
-	else {
-		inf = NULL;
 	}
 
 	if (rds) {
@@ -140,8 +131,8 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 	}
 
 	for(int i=0; i<length; i++) {
-		if(audio_pos >= downsample_factor) {
-			audio_pos -= downsample_factor;
+		if(audio_pos >= upsample_factor) {
+			audio_pos -= upsample_factor;
 
 			if(audio_len <= channels) {
 				for(int j=0; j<2; j++) { // one retry
@@ -161,6 +152,7 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 				audio_len -= channels;
 			}
 		}
+		audio_pos++;
 
 		// First store the current sample(s) into the FIR filter's ring buffer
 		fir_buffer_left[fir_index] = audio_buffer[audio_index];
@@ -201,8 +193,8 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		if (channels == 2) {
 			// audio signals need to be limited to 45% to remain within modulation limits
 			mpx_buffer[i] = out_mono * 0.45 +
-			carrier_19[phase_19++] * 0.05 * level_19 +
-			carrier_38[phase_38++] * out_stereo * 0.45 * level_38;
+				carrier_19[phase_19++] * 0.05 * level_19 +
+				carrier_38[phase_38++] * out_stereo * 0.45 * level_38;
 
 			if (phase_19 == 12) phase_19 = 0;
 			if (phase_38 == 6) phase_38 = 0;
@@ -211,12 +203,12 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 			mpx_buffer[i] = out_mono * 0.9;
 		}
 
-		mpx_buffer[i] +=
-		carrier_57[phase_57++] * rds_buffer[i] * 0.05 * level_57;
+		if (rds) {
+			mpx_buffer[i] +=
+				carrier_57[phase_57++] * rds_buffer[i] * 0.05 * level_57;
+		}
 
 		if (phase_57 == 4) phase_57 = 0;
-
-		audio_pos++;
 	}
 
 	return 0;
@@ -234,15 +226,12 @@ void set_38_level(int new_level) {
 
 void set_57_level(int new_level) {
 	if (new_level == -1) return;
-	rds = (new_level == 0) ? 0 : 1;
 	level_57 = (new_level / 100.0);
 }
 
-int fm_mpx_close() {
+void fm_mpx_close() {
 	if(sf_close(inf)) fprintf(stderr, "Error closing audio file\n");
 
 	if(audio_buffer != NULL) free(audio_buffer);
 	if (rds_buffer != NULL) free(rds_buffer);
-
-	return 0;
 }

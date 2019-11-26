@@ -7,7 +7,7 @@
 
 extern int fm_mpx_open(char *filename, size_t len, int rds_on);
 extern int fm_mpx_get_samples(float *mpx_buffer);
-extern int fm_mpx_close();
+extern void fm_mpx_close();
 extern int channels;
 extern void set_19_level(int level);
 extern void set_38_level(int level);

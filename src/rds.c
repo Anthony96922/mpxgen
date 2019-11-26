@@ -110,7 +110,7 @@ void get_rds_ps_group(uint16_t *blocks) {
 	static char ps_text[8];
 	static int ps_state, af_state;
 
-	blocks[1] |= 0 << 12 | rds_params.ta << 4 | rds_params.ms << 3 | ps_state;
+	blocks[1] |= /* 0 << 12 | */ rds_params.ta << 4 | rds_params.ms << 3 | ps_state;
 	if (ps_state == 3 && channels == 2) blocks[1] |= 4; // DI = 1 - Stereo
 	if (rds_params.af[0]) { // AF
 		if (af_state == 0) {
@@ -258,24 +258,26 @@ void get_rds_group(uint16_t *blocks) {
 	case 2:
 	case 4:
 	case 6:
-	case 8: // Type 0A groups
+	case 8:
+	case 10: // Type 0A groups
 	    get_rds_ps_group(blocks);
 	    break;
 	case 1:
 	case 3:
 	case 5:
 	case 7:
-	case 9: // Type 2A groups
+	case 9:
+	case 11: // Type 2A groups
 	    get_rds_rt_group(blocks);
 	    break;
-	case 10:
-	case 11: // Other groups
+	case 12:
+	case 13: // Other groups
 	    get_rds_other_groups(blocks);
 	    break;
 	}
 
 	state++;
-	if(state == 12) state = 0;
+	if(state == 14) state = 0;
     }
 }
 
