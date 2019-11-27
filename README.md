@@ -10,11 +10,12 @@ This program generates FM multiplex baseband audio that can be fed through a 192
 - RDS can be updated through control pipe
 - RT+ support
 
-It won't replace commercial broadcasting software but it uses less resources than [JMPX](https://github.com/jontio/JMPX) as it doesn't require a GUI to use.
+It won't replace commercial broadcasting software but it uses less resources and doesn't require a GUI to use.
 
 #### To do
 - SSB stereo
 - SCA
+- JACK support (?)
 
 ## Build
 This app depends on the sndfile, ao and samplerate libraries. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libao-dev libsamplerate0-dev` to install them.
@@ -37,7 +38,7 @@ To test audio output, you can use the provided stereo_44100.wav file.
 ```
 ./mpxgen --audio stereo_44100.wav
 ```
-If the audio sounds distorted, you may be overmodulating the transmitter. Adjust the sound card's volume until audio sounds clear and no clipping can be heard.
+If the audio sounds distorted, you may be overmodulating the transmitter. Adjust the sound card's volume until audio sounds clear and no distortion can be heard.
 
 There are more options that can be given to mpxgen:
 * `--audio` specifies an audio file to play as audio. The sample rate does not matter: mpxgen will resample and filter it. If a stereo file is provided, mpxgen will produce an FM Stereo signal. Example: `--audio sound.wav`. The supported formats depend on `libsndfile`. This includes WAV and Ogg/Vorbis (among others) but not MP3. Specify `-` as the file name to read audio data on standard input (useful for piping audio into mpxgen, see below).
@@ -62,13 +63,18 @@ Basic audio processing with ffmpeg:
 ```
 ffmpeg -i <file or stream URL> \
   -af "
-    crossfeed,
+    crossfeed=strength=0.1,
+    deesser,
+    volume=9dB,
     acrossover[a][b],
-    [a]acompressor=threshold=0.0015:release=1000:makeup=20[aa],
-    [b]acompressor=threshold=0.0015:release=1000:makeup=20[ba],
+    [a]acompressor=threshold=0.001:release=5000:makeup=20[aa],
+    [b]acompressor=threshold=0.001:release=5000:makeup=20[ba],
     [aa][ba]amix,
-    volume=5dB,
-    alimiter=release=100:level=disabled" \
+    bass=gain=3,
+    aemphasis=mode=production:type=75fm,
+    alimiter,
+    firequalizer=gain='if(lt(f, 15500), 0, -INF)'
+  " \
   -f wav - | ./mpxgen --audio -
 ```
 Or to pipe the AUX input of a sound card into mpxgen:
@@ -104,4 +110,4 @@ Syntax for RT+ is comma-separated values specifying content type, start offset a
 RTP <content type 1>,<start 1>,<length 1>,<content type 2>,<start 2>,<length 2>
 RTPF <running bit>,<toggle bit>
 ```
-For more information, see http://www.nprlabs.org/sites/nprlabs/files/documents/pad/RDSPlus_Description.pdf
+For more information, see [RDSPlus_Description.pdf](https://web.archive.org/web/20170312183239/http://www.nprlabs.org/sites/nprlabs/files/documents/pad/RDSPlus_Description.pdf)
