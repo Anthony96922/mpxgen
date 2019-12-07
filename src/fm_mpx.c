@@ -1,9 +1,20 @@
 /*
-    mpxgen - FM multiplex encoder with Stereo and RDS
-    Copyright (C) 2019 Anthony96922
-
-    See https://github.com/Anthony96922/mpxgen
-*/
+ * mpxgen - FM multiplex encoder with Stereo and RDS
+ * Copyright (C) 2019 Anthony96922
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #include <sndfile.h>
 #include <stdlib.h>
@@ -195,7 +206,6 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 			mpx_buffer[i] = out_mono * 0.45 +
 				carrier_19[phase_19++] * 0.05 * level_19 +
 				carrier_38[phase_38++] * out_stereo * 0.45 * level_38;
-
 			if (phase_19 == 12) phase_19 = 0;
 			if (phase_38 == 6) phase_38 = 0;
 		} else {
@@ -206,9 +216,8 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		if (rds) {
 			mpx_buffer[i] +=
 				carrier_57[phase_57++] * rds_buffer[i] * 0.05 * level_57;
+			if (phase_57 == 4) phase_57 = 0;
 		}
-
-		if (phase_57 == 4) phase_57 = 0;
 	}
 
 	return 0;

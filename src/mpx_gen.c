@@ -1,9 +1,20 @@
 /*
-    mpxgen - FM multiplex encoder with Stereo and RDS
-    Copyright (C) 2019 Anthony96922
-
-    See https://github.com/Anthony96922/mpxgen
-*/
+ * mpxgen - FM multiplex encoder with Stereo and RDS
+ * Copyright (C) 2019 Anthony96922
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -17,7 +28,7 @@
 #include "control_pipe.h"
 
 #define DATA_SIZE 4096
-#define OUTPUT_DATA_SIZE (DATA_SIZE * 2)
+#define OUTPUT_DATA_SIZE 8192 // (DATA_SIZE * 2)
 
 int stop_mpx;
 
@@ -115,8 +126,17 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 	// Initialize the RDS modulator
 	if(rds) {
 		rds_encoder_init(DATA_SIZE, pi, ps, rt, pty, tp);
+		// RBDS PTY list
+		char *ptys[] = {"None", "News", "Information", "Sports",
+				"Talk", "Rock", "Classic rock", "Adult hits",
+				"Soft rock" , "Top 40", "Country", "Oldies",
+				"Soft music", "Nostalgia", "Jazz", "Classical",
+				"R&B", "Soft R&B", "Language", "Religious music",
+				"Religious talk", "Personality", "Public", "College",
+				"Spanish talk", "Spanish music", "Hip-Hop", "Unassigned",
+				"Unassigned", "Weather", "Emergency test", "Emergency"};
 		printf("RDS Options:\n");
-		printf("PI: %04X, PS: \"%s\", PTY: %d, TP: %d\n", pi, ps, pty, tp);
+		printf("PI: %04X, PS: \"%s\", PTY: %d (%s), TP: %d\n", pi, ps, pty, ptys[pty], tp);
 		printf("RT: \"%s\"\n", rt);
 		if(af_array[0]) {
 			set_rds_af(af_array);
@@ -267,9 +287,9 @@ int main(int argc, char **argv) {
 			case 'h': //help
 				fprintf(stderr, "Help: %s\n"
 				      "	[--audio (-a) file] [--output-file (-o) PCM out] [--mpx (-m) mpx-volume]\n"
-				      "	[--rds rds-switch] [--pi pi-code] [--ps ps-text]\n"
-				      "	[--rt radiotext] [--tp traffic-program] [--pty program-type]\n"
-				      "	[--af alternative-freq] [--ctl (-C) control-pipe]\n", argv[0]);
+				      "	[--rds (-R) rds-switch] [--pi (-i) pi-code] [--ps (-s) ps-text]\n"
+				      "	[--rt (-r) radiotext] [--pty (-p) program-type] [--tp (-T) traffic-program]\n"
+				      "	[--af (-A) alternative-freq] [--ctl (-C) control-pipe]\n", argv[0]);
 				return 1;
 				break;
 

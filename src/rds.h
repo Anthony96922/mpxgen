@@ -1,9 +1,20 @@
 /*
-    mpxgen - FM multiplex encoder with Stereo and RDS
-    Copyright (C) 2019 Anthony96922
-
-    See https://github.com/Anthony96922/mpxgen
-*/
+ * mpxgen - FM multiplex encoder with Stereo and RDS
+ * Copyright (C) 2019 Anthony96922
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #ifndef RDS_H
 #define RDS_H
@@ -19,10 +30,10 @@
 #define BLOCK_SIZE 16
 
 #define GROUP_LENGTH 4
-#define BITS_PER_GROUP 104 //(GROUP_LENGTH * (BLOCK_SIZE+POLY_DEG))
+#define BITS_PER_GROUP 104 // (GROUP_LENGTH * (BLOCK_SIZE+POLY_DEG))
 #define SAMPLES_PER_BIT 192
 #define FILTER_SIZE 576
-#define SAMPLE_BUFFER_SIZE 768 //(SAMPLES_PER_BIT + FILTER_SIZE)
+#define SAMPLE_BUFFER_SIZE 768 // (SAMPLES_PER_BIT + FILTER_SIZE)
 
 extern void rds_encoder_init(size_t buf_len, uint16_t init_pi, char *init_ps,
                              char *init_rt, int init_pty, int init_tp);

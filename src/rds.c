@@ -1,12 +1,22 @@
 /*
-    mpxgen - FM multiplex encoder with Stereo and RDS
-    Copyright (C) 2019 Anthony96922
-
-    See https://github.com/Anthony96922/mpxgen
-*/
+ * mpxgen - FM multiplex encoder with Stereo and RDS
+ * Copyright (C) 2019 Anthony96922
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #include <string.h>
-#include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
 
@@ -121,6 +131,8 @@ void get_rds_ps_group(uint16_t *blocks) {
 		}
 		af_state += 2;
 		if (af_state > rds_params.af[0]) af_state = 0;
+	} else {
+		blocks[2] = 0xCDCD; // no AF
 	}
 	blocks[3] = ps_text[ps_state*2] << 8 | ps_text[ps_state*2+1];
 	ps_state++;
@@ -425,9 +437,6 @@ void set_rds_ptyn(char *ptyn, int enable) {
 
     rds_params.ptyn_update = 1;
     strncpy(rds_params.ptyn, ptyn, 8);
-    for(int i=0; i<8; i++) {
-        if(rds_params.ptyn[i] == 0) rds_params.ptyn[i] = 32;
-    }
 }
 
 void set_rds_ta(int ta) {
