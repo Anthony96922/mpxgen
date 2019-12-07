@@ -19,17 +19,6 @@
 #define DATA_SIZE 4096
 #define OUTPUT_DATA_SIZE (DATA_SIZE * 2)
 
-ao_device *device;
-SRC_STATE *src_state;
-
-void shutdown() {
-	fm_mpx_close();
-	close_control_pipe();
-	ao_close(device);
-	ao_shutdown();
-	src_delete(src_state);
-}
-
 int stop_mpx;
 
 void stop() {
@@ -44,7 +33,7 @@ void postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 
 	for (int i = 0; i < inbufsize; i++) {
 		if (inbuf[i] <= -1 || inbuf[i] >= 1) {
-			fprintf(stderr, "overmodulation! (%.7f)\n", inbuf[i]);
+			fprintf(stderr, "overshoot! (%.7f)\n", inbuf[i]);
 		}
 		// volume control
 		inbuf[i] *= (volume / 100);
@@ -78,13 +67,15 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 	short dev_out[OUTPUT_DATA_SIZE];
 
 	// AO
-	ao_initialize();
-	int ao_driver;
+	ao_device *device;
 	ao_sample_format format;
 	format.bits = 16;
 	format.channels = 2;
 	format.rate = 192000;
 	format.byte_format = AO_FMT_LITTLE;
+
+	ao_initialize();
+	int ao_driver;
 
 	if (output_file != NULL) {
 		ao_driver = ao_driver_id("raw");
@@ -106,6 +97,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 	int src_error;
 	size_t generated_frames;
 
+	SRC_STATE *src_state;
 	SRC_DATA src_data;
 	src_data.src_ratio = 192000. / 228000;
 	src_data.input_frames = DATA_SIZE;
@@ -173,6 +165,14 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 		}
 	}
 
+	close_control_pipe();
+	fm_mpx_close();
+
+	ao_close(device);
+	ao_shutdown();
+
+	src_delete(src_state);
+
 	return 0;
 }
 
@@ -225,10 +225,6 @@ int main(int argc, char **argv) {
 
 			case 'm': //mpx
 				mpx = atoi(optarg);
-				if (mpx < 1 || mpx > 100) {
-					fprintf(stderr, "MPX volume must be between 1 - 100.\n");
-					return 1;
-				}
 				break;
 
 			case 'R': //rds
@@ -249,10 +245,6 @@ int main(int argc, char **argv) {
 
 			case 'p': //pty
 				pty = atoi(optarg);
-				if (pty < 0 || pty > 31) {
-					fprintf(stderr, "PTY must be between 0 - 31.\n");
-					return 1;
-				}
 				break;
 
 			case 'T': //tp
@@ -293,10 +285,19 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	if (mpx < 1 || mpx > 100) {
+		fprintf(stderr, "MPX volume must be between 1 - 100.\n");
+		return 1;
+	}
+
+	if (pty < 0 || pty > 31) {
+		fprintf(stderr, "PTY must be between 0 - 31.\n");
+		return 1;
+	}
+
 	alternative_freq[0] = af_size;
 
 	int errcode = generate_mpx(audio_file, output_file, rds, pi, ps, rt, alternative_freq, mpx, control_pipe, pty, tp);
 
-	shutdown();
 	return errcode;
 }

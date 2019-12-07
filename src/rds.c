@@ -5,7 +5,6 @@
     See https://github.com/Anthony96922/mpxgen
 */
 
-#include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
