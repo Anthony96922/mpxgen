@@ -28,7 +28,6 @@
 #include "control_pipe.h"
 
 #define DATA_SIZE 4096
-#define OUTPUT_DATA_SIZE 8192 // (DATA_SIZE * 2)
 
 int stop_mpx;
 
@@ -43,20 +42,17 @@ void postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 	int j = 0;
 
 	for (int i = 0; i < inbufsize; i++) {
+#if 0
 		if (inbuf[i] <= -1 || inbuf[i] >= 1) {
 			fprintf(stderr, "overshoot! (%.7f)\n", inbuf[i]);
 		}
-		// volume control
-		inbuf[i] *= (volume / 100);
-		// scale samples
-		inbuf[i] *= 32767;
+#endif
 
 		if (out_channels == 2) {
-			// stereo upmix
-			outbuf[j] = outbuf[j+1] = inbuf[i];
+			outbuf[j] = outbuf[j+1] = (inbuf[i] * (volume / 100)) * 32767;
 			j += 2;
 		} else {
-			outbuf[i] = inbuf[i];
+			outbuf[i] = (inbuf[i] * (volume / 100)) * 32767;
 		}
 	}
 }
@@ -75,7 +71,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 	// Data structures for baseband data
 	float mpx_data[DATA_SIZE];
 	float resample_out[DATA_SIZE];
-	short dev_out[OUTPUT_DATA_SIZE];
+	short dev_out[DATA_SIZE*2];
 
 	// AO
 	ao_device *device;
@@ -89,7 +85,7 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 	int ao_driver;
 
 	if (output_file != NULL) {
-		ao_driver = ao_driver_id("raw");
+		ao_driver = ao_driver_id("wav");
 		out_channels = 1;
 		format.channels = 1;
 		if ((device = ao_open_file(ao_driver, output_file, 1, &format, NULL)) == NULL) {
@@ -106,16 +102,15 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 
 	// SRC
 	int src_error;
-	size_t generated_frames;
 
 	SRC_STATE *src_state;
 	SRC_DATA src_data;
 	src_data.src_ratio = 192000. / 228000;
 	src_data.input_frames = DATA_SIZE;
-	src_data.output_frames = OUTPUT_DATA_SIZE;
+	src_data.output_frames = DATA_SIZE;
 	src_data.data_out = resample_out;
 
-	if ((src_state = src_new(SRC_SINC_MEDIUM_QUALITY, 1, &src_error)) == NULL) {
+	if ((src_state = src_new(SRC_SINC_FASTEST, 1, &src_error)) == NULL) {
 		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_error));
 		return 1;
 	}
@@ -171,10 +166,9 @@ int generate_mpx(char *audio_file, char *output_file, int rds, uint16_t pi, char
 			break;
 		}
 
-		generated_frames = src_data.output_frames_gen;
-		postprocess(resample_out, dev_out, generated_frames);
-		// num_bytes = generated_frames * channels * bytes per sample
-		if (!ao_play(device, (char *)dev_out, generated_frames * out_channels * 2)) {
+		postprocess(resample_out, dev_out, src_data.output_frames_gen);
+		// num_bytes = src_data.output_frames_gen * channels * bytes per sample
+		if (!ao_play(device, (char *)dev_out, src_data.output_frames_gen * out_channels * 2)) {
 			fprintf(stderr, "Error: could not play audio.\n");
 			break;
 		}
@@ -286,7 +280,7 @@ int main(int argc, char **argv) {
 
 			case 'h': //help
 				fprintf(stderr, "Help: %s\n"
-				      "	[--audio (-a) file] [--output-file (-o) PCM out] [--mpx (-m) mpx-volume]\n"
+				      "	[--audio (-a) file] [--output-file (-o) WAVE out] [--mpx (-m) mpx-volume]\n"
 				      "	[--rds (-R) rds-switch] [--pi (-i) pi-code] [--ps (-s) ps-text]\n"
 				      "	[--rt (-r) radiotext] [--pty (-p) program-type] [--tp (-T) traffic-program]\n"
 				      "	[--af (-A) alternative-freq] [--ctl (-C) control-pipe]\n", argv[0]);

@@ -132,7 +132,7 @@ void get_rds_ps_group(uint16_t *blocks) {
 		af_state += 2;
 		if (af_state > rds_params.af[0]) af_state = 0;
 	} else {
-		blocks[2] = 0xCDCD; // no AF
+		blocks[2] = 0xE0CD; // no AF
 	}
 	blocks[3] = ps_text[ps_state*2] << 8 | ps_text[ps_state*2+1];
 	ps_state++;
@@ -293,18 +293,19 @@ void get_rds_group(uint16_t *blocks) {
 }
 
 void get_rds_bits(int *out_buffer) {
+    int i, j;
     static uint16_t out_blocks[GROUP_LENGTH];
     get_rds_group(out_blocks);
 
     // Calculate the checkword for each block and emit the bits
-    for(int i=0; i<GROUP_LENGTH; i++) {
+    for(i=0; i<GROUP_LENGTH; i++) {
         uint16_t block = out_blocks[i];
         uint16_t check = crc(block) ^ offset_words[i];
-        for(int j=0; j<BLOCK_SIZE; j++) {
+        for(j=0; j<BLOCK_SIZE; j++) {
             *out_buffer++ = ((block & (1<<(BLOCK_SIZE-1))) != 0);
             block <<= 1;
         }
-        for(int j=0; j<POLY_DEG; j++) {
+        for(j=0; j<POLY_DEG; j++) {
             *out_buffer++ = ((check & (1<<(POLY_DEG-1))) != 0);
             check <<= 1;
         }
