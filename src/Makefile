@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -O2 -pedantic
+CFLAGS = -Wall -O2 -std=gnu99 -pedantic
 
 MPXGEN_OBJ = mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o
 
