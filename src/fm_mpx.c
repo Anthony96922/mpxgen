@@ -24,7 +24,7 @@
 #include "rds.h"
 #include "fm_mpx.h"
 
-#define FIR_HALF_SIZE	64
+#define FIR_HALF_SIZE	128
 #define FIR_SIZE	(2*FIR_HALF_SIZE-1)
 
 // coefficients of the low-pass FIR filter
@@ -53,6 +53,7 @@ float audio_pos;
 
 int channels;
 int rds;
+int audio_wait;
 
 float level_19 = 1;
 float level_38 = 1;
@@ -69,8 +70,9 @@ float *alloc_empty_buffer(size_t length) {
     return p;
 }
 
-int fm_mpx_open(char *filename, size_t len, int rds_on) {
+int fm_mpx_open(char *filename, size_t len, int wait_for_audio, int rds_on) {
 	length = len;
+	audio_wait = wait_for_audio;
 	rds = rds_on;
 
 	if(filename != NULL) {
@@ -100,7 +102,7 @@ int fm_mpx_open(char *filename, size_t len, int rds_on) {
 
 		printf("Input: %d Hz, %d channels, upsampling factor: %.2f\n", in_samplerate, channels, upsample_factor);
 
-		int cutoff_freq = 17000;
+		int cutoff_freq = 15500;
 		if(in_samplerate/2 < cutoff_freq) cutoff_freq = in_samplerate/2;
 
 		// Here we divide this coefficient by two because it will be counted twice
@@ -152,7 +154,14 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 						fprintf(stderr, "Error reading audio\n");
 						return -1;
 					} else if (audio_len == 0) {
-						if( sf_seek(inf, 0, SEEK_SET) < 0 ) break;
+						if( sf_seek(inf, 0, SEEK_SET) < 0 ) {
+							if (audio_wait) {
+								break;
+							} else {
+								fprintf(stderr, "Could not rewind in audio file, terminating\n");
+								return -1;
+							}
+						}
 					} else {
 						break;
 					}

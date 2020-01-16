@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern int fm_mpx_open(char *filename, size_t len, int rds_on);
+extern int fm_mpx_open(char *filename, size_t len, int wait_for_audio, int rds_on);
 extern int fm_mpx_get_samples(float *mpx_buffer);
 extern void fm_mpx_close();
 extern int channels;

@@ -19,6 +19,7 @@
 #include <string.h>
 #include <time.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "waveforms.h"
 #include "fm_mpx.h"
@@ -30,32 +31,39 @@ struct {
     int pty;
     int tp;
     int ms;
-    int ab;
-    int af[100];
+    int af[MAX_AF+1];
     // PS
     char ps[8];
-    int ps_update;
     // RT
     char rt[64];
-    int rt_update;
     // PTYN
     char ptyn[8];
-    int ptyn_update;
-    int enable_ptyn;
-    // RT+
-    int rt_p_running;
-    int rt_p_toggle;
-    int rt_p_type_1;
-    int rt_p_start_1;
-    int rt_p_len_1;
-    int rt_p_type_2;
-    int rt_p_start_2;
-    int rt_p_len_2;
-} rds_params = { 0 };
+} rds_params;
 /* Here, the first member of the struct must be a scalar to avoid a
    warning on -Wmissing-braces with GCC < 4.8.3
    (bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53119)
 */
+
+// RDS data controls
+struct {
+    int ab;
+    int ps_update;
+    int rt_update;
+    int ptyn_update;
+    int enable_ptyn;
+} rds_controls;
+
+// RT+
+struct {
+    int running;
+    int toggle;
+    int type_1;
+    int start_1;
+    int len_1;
+    int type_2;
+    int start_2;
+    int len_2;
+} rtp_params;
 
 uint16_t offset_words[] = {0x0FC, 0x198, 0x168, 0x1B4};
 // We don't handle offset word C' here for the sake of simplicity
@@ -85,7 +93,7 @@ int get_rds_ct_group(uint16_t *blocks) {
 
     // Check time
     time_t now;
-    struct tm *utc;
+    static struct tm *utc;
 
     now = time (NULL);
     utc = gmtime (&now);
@@ -138,9 +146,9 @@ void get_rds_ps_group(uint16_t *blocks) {
 	ps_state++;
 	if (ps_state == 4) {
 		ps_state = 0;
-		if (rds_params.ps_update) {
+		if (rds_controls.ps_update) {
 			strncpy(ps_text, rds_params.ps, 8);
-			rds_params.ps_update = 0;
+			rds_controls.ps_update = 0;
 		}
 	}
 }
@@ -151,19 +159,19 @@ void get_rds_rt_group(uint16_t *blocks) {
 	static char rt_text[64];
 	static int rt_state;
 
-begin:
-	if (rds_params.rt_update) {
+start_over:
+	if (rds_controls.rt_update) {
 		strncpy(rt_text, rds_params.rt, 64);
-		rds_params.rt_update = 0;
+		rds_controls.rt_update = 0;
 		rt_state = 0;
 	}
 
 	if (rt_text[rt_state*4] == 0) {
 		rt_state = 0;
-		goto begin;
+		goto start_over;
 	}
 
-	blocks[1] |= 2 << 12 | rds_params.ab << 4 | rt_state;
+	blocks[1] |= 2 << 12 | rds_controls.ab << 4 | rt_state;
 	blocks[2] = rt_text[rt_state*4+0] << 8 | rt_text[rt_state*4+1];
 	blocks[3] = rt_text[rt_state*4+2] << 8 | rt_text[rt_state*4+3];
 
@@ -178,7 +186,7 @@ void get_rds_oda_group(uint16_t *blocks) {
 
 	blocks[1] |= 3 << 12;
 
-	switch (oda_state) {
+	switch (oda_state++) {
 	case 0: // RT+
 		// Assign the RT+ AID to group 11A
 		blocks[1] |= 11 << 1;
@@ -186,7 +194,6 @@ void get_rds_oda_group(uint16_t *blocks) {
 		break;
 	}
 
-	oda_state++;
 	if (oda_state == 1) oda_state = 0;
 }
 
@@ -202,9 +209,9 @@ void get_rds_ptyn_group(uint16_t *blocks) {
 	ptyn_state++;
 	if (ptyn_state == 2) {
 		ptyn_state = 0;
-		if (rds_params.ptyn_update) {
+		if (rds_controls.ptyn_update) {
 			strncpy(ptyn_text, rds_params.ptyn, 8);
-			rds_params.ptyn_update = 0;
+			rds_controls.ptyn_update = 0;
 		}
 	}
 }
@@ -213,12 +220,12 @@ void get_rds_ptyn_group(uint16_t *blocks) {
  */
 void get_rds_rtp_group(uint16_t *blocks) {
 	// RT+ block format
-	blocks[1] |= 11 << 12 | rds_params.rt_p_toggle << 4 | rds_params.rt_p_running << 3 |
-		    (rds_params.rt_p_type_1 & 0x38) >> 3;
-	blocks[2] = (rds_params.rt_p_type_1 & 0x7) << 13 | (rds_params.rt_p_start_1 & 0x3F) << 7 |
-		    (rds_params.rt_p_len_1 & 0x3F) << 1 | (rds_params.rt_p_type_2 & 0x20) >> 5;
-	blocks[3] = (rds_params.rt_p_type_2 & 0x1F) << 11 | (rds_params.rt_p_start_2 & 0x3F) << 5 |
-		    (rds_params.rt_p_len_2 & 0x1F);
+	blocks[1] |= 11 << 12 | rtp_params.toggle << 4 | rtp_params.running << 3 |
+		    (rtp_params.type_1 & 0x38) >> 3;
+	blocks[2] = (rtp_params.type_1 & 0x7) << 13 | (rtp_params.start_1 & 0x3F) << 7 |
+		    (rtp_params.len_1 & 0x3F) << 1 | (rtp_params.type_2 & 0x20) >> 5;
+	blocks[3] = (rtp_params.type_2 & 0x1F) << 11 | (rtp_params.start_2 & 0x3F) << 5 |
+		    (rtp_params.len_2 & 0x1F);
 }
 
 /* Lower priority groups are placed in a subsequence
@@ -233,7 +240,7 @@ next:
 		break;
 	case 1: // Type 10A groups
 		// Do not generate a 10A group if PTYN is off
-		if (!rds_params.enable_ptyn) {
+		if (!rds_controls.enable_ptyn) {
 			state++;
 			goto next;
 		}
@@ -249,9 +256,6 @@ next:
 }
 
 /* Creates an RDS group. This generates sequences of the form 0A, 2A, 0A, 2A, 0A, 2A, etc.
-   The pattern is of length 8, the variable 'state' keeps track of where we are in the
-   pattern. 'ps_state' and 'rt_state' keep track of where we are in the PS (0A) sequence
-   or RT (2A) sequence, respectively.
 */
 void get_rds_group(uint16_t *blocks) {
     static int state;
@@ -281,8 +285,7 @@ void get_rds_group(uint16_t *blocks) {
 	case 11: // Type 2A groups
 	    get_rds_rt_group(blocks);
 	    break;
-	case 12:
-	case 13: // Other groups
+	default: // Other groups
 	    get_rds_other_groups(blocks);
 	    break;
 	}
@@ -298,9 +301,10 @@ void get_rds_bits(int *out_buffer) {
     get_rds_group(out_blocks);
 
     // Calculate the checkword for each block and emit the bits
+    uint16_t block, check;
     for(i=0; i<GROUP_LENGTH; i++) {
-        uint16_t block = out_blocks[i];
-        uint16_t check = crc(block) ^ offset_words[i];
+        block = out_blocks[i];
+        check = crc(block) ^ offset_words[i];
         for(j=0; j<BLOCK_SIZE; j++) {
             *out_buffer++ = ((block & (1<<(BLOCK_SIZE-1))) != 0);
             block <<= 1;
@@ -330,6 +334,8 @@ void get_rds_samples(float *buffer) {
 
     static int in_sample_index;
     static int out_sample_index = SAMPLE_BUFFER_SIZE-1;
+
+    float sample;
 
     for(int i=0; i<count; i++) {
         if(sample_count == SAMPLES_PER_BIT) {
@@ -362,7 +368,7 @@ void get_rds_samples(float *buffer) {
             sample_count = 0;
         }
 
-        float sample = sample_buffer[out_sample_index];
+        sample = sample_buffer[out_sample_index];
 
         sample_buffer[out_sample_index++] = 0;
         if(out_sample_index == SAMPLE_BUFFER_SIZE) out_sample_index = 0;
@@ -372,14 +378,46 @@ void get_rds_samples(float *buffer) {
     }
 }
 
-void rds_encoder_init(size_t buf_len, uint16_t init_pi, char *init_ps, char *init_rt, int init_pty, int init_tp) {
+// RBDS PTY list
+char *ptys[] = {
+	"None", "News", "Information", "Sports",
+	"Talk", "Rock", "Classic rock", "Adult hits",
+	"Soft rock" , "Top 40", "Country", "Oldies",
+	"Soft music", "Nostalgia", "Jazz", "Classical",
+	"R&B", "Soft R&B", "Language", "Religious music",
+	"Religious talk", "Personality", "Public", "College",
+	"Spanish talk", "Spanish music", "Hip-Hop", "Unassigned",
+	"Unassigned", "Weather", "Emergency test", "Emergency"
+};
+
+void rds_encoder_init(size_t buf_len, uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_array, char *ptyn) {
     count = buf_len;
-    set_rds_pi(init_pi);
-    set_rds_ps(init_ps);
+
+    printf("RDS Options:\n");
+    printf("PI: %04X, PS: \"%s\", PTY: %d (%s), TP: %d\n",
+	pi, ps, pty, ptys[pty], tp);
+    printf("RT: \"%s\"\n", rt);
+
+    // AF
+    if(af_array[0]) {
+	set_rds_af(af_array);
+	printf("AF: %d,", af_array[0]);
+	for(int f = 1; f < af_array[0]+1; f++) {
+	    printf(" %.1f", (float)(af_array[f]+875)/10);
+	}
+	printf("\n");
+    }
+
+    set_rds_pi(pi);
+    set_rds_ps(ps);
     set_rds_ab(1);
-    set_rds_rt(init_rt);
-    set_rds_pty(init_pty);
-    set_rds_tp(init_tp);
+    set_rds_rt(rt);
+    set_rds_pty(pty);
+    if (ptyn != NULL) {
+	printf("PTYN: \"%s\"\n", ptyn);
+	set_rds_ptyn(ptyn, 1);
+    }
+    set_rds_tp(tp);
     set_rds_ms(1);
 }
 
@@ -390,8 +428,8 @@ void set_rds_pi(uint16_t pi_code) {
 void set_rds_rt(char *rt) {
     int rt_len = strlen(rt);
 
-    rds_params.rt_update = 1;
-    rds_params.ab ^= 1;
+    rds_controls.rt_update = 1;
+    rds_controls.ab ^= 1;
     strncpy(rds_params.rt, rt, 64);
 
     // Terminate RT with '\r' (carriage return) if RT is < 64 characters long
@@ -399,26 +437,26 @@ void set_rds_rt(char *rt) {
 }
 
 void set_rds_ps(char *ps) {
-    rds_params.ps_update = 1;
+    rds_controls.ps_update = 1;
     strncpy(rds_params.ps, ps, 8);
     for(int i=0; i<8; i++) {
         if(rds_params.ps[i] == 0) rds_params.ps[i] = 32;
     }
 }
 
-void set_rds_rtp_flags(int rt_p_running, int rt_p_toggle) {
-    rds_params.rt_p_running = rt_p_running;
-    rds_params.rt_p_toggle = rt_p_toggle;
+void set_rds_rtp_flags(int running, int toggle) {
+    rtp_params.running = running;
+    rtp_params.toggle = toggle;
 }
 
-void set_rds_rtp_tags(int rt_p_type_1, int rt_p_start_1, int rt_p_len_1,
-                      int rt_p_type_2, int rt_p_start_2, int rt_p_len_2) {
-    rds_params.rt_p_type_1 = rt_p_type_1;
-    rds_params.rt_p_start_1 = rt_p_start_1;
-    rds_params.rt_p_len_1 = rt_p_len_1;
-    rds_params.rt_p_type_2 = rt_p_type_2;
-    rds_params.rt_p_start_2 = rt_p_start_2;
-    rds_params.rt_p_len_2 = rt_p_len_2;
+void set_rds_rtp_tags(int type_1, int start_1, int len_1,
+                      int type_2, int start_2, int len_2) {
+    rtp_params.type_1 = type_1;
+    rtp_params.start_1 = start_1;
+    rtp_params.len_1 = len_1;
+    rtp_params.type_2 = type_2;
+    rtp_params.start_2 = start_2;
+    rtp_params.len_2 = len_2;
 }
 
 void set_rds_af(int *af_array) {
@@ -433,10 +471,10 @@ void set_rds_pty(int pty) {
 }
 
 void set_rds_ptyn(char *ptyn, int enable) {
-    rds_params.enable_ptyn = enable;
-    if (!rds_params.enable_ptyn) return;
+    rds_controls.enable_ptyn = enable;
+    if (!rds_controls.enable_ptyn) return;
 
-    rds_params.ptyn_update = 1;
+    rds_controls.ptyn_update = 1;
     strncpy(rds_params.ptyn, ptyn, 8);
 }
 
@@ -453,5 +491,5 @@ void set_rds_ms(int ms) {
 }
 
 void set_rds_ab(int ab) {
-    rds_params.ab = ab;
+    rds_controls.ab = ab;
 }
