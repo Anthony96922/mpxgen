@@ -37,10 +37,10 @@
 
 #define MAX_AF 25
 
-extern void rds_encoder_init(size_t buf_len, uint16_t pi, char *ps,
-                             char *rt, int pty, int tp, int *af_array, char *ptyn);
+extern void rds_encoder_init(uint16_t pi, char *ps, char *rt, int pty,
+                             int tp, int *af_array, char *ptyn);
 
-extern void get_rds_samples(float *buffer);
+extern float get_rds_sample();
 
 extern void set_rds_pi(uint16_t pi_code);
 extern void set_rds_rt(char *rt);

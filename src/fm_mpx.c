@@ -24,7 +24,7 @@
 #include "rds.h"
 #include "fm_mpx.h"
 
-#define FIR_HALF_SIZE	128
+#define FIR_HALF_SIZE	64
 #define FIR_SIZE	(2*FIR_HALF_SIZE-1)
 
 // coefficients of the low-pass FIR filter
@@ -34,18 +34,14 @@ float fir_buffer_right[FIR_SIZE];
 
 int fir_index;
 
-float carrier_19[] = {0, 0.5, 0.8660254, 1, 0.8660254, 0.5, 0, -0.5, -0.8660254, -1, -0.8660254, -0.5};
-float carrier_38[] = {0, 0.8660254, 0.8660254, 0, -0.8660254, -0.8660254};
-float carrier_57[] = {0, 1, 0, -1};
-int phase_19;
-int phase_38;
-int phase_57;
+float carrier_19k[] = {0, 0.5, 0.8660254, 1, 0.8660254, 0.5, 0, -0.5, -0.8660254, -1, -0.8660254, -0.5};
+float carrier_38k[] = {0, 0.8660254, 0.8660254, 0, -0.8660254, -0.8660254};
+float carrier_57k[] = {0, 1, 0, -1};
 
 size_t length;
 float upsample_factor;
 
 float *audio_buffer;
-float *rds_buffer;
 
 int audio_index;
 int audio_len;
@@ -55,9 +51,9 @@ int channels;
 int rds;
 int audio_wait;
 
-float level_19 = 1;
-float level_38 = 1;
-float level_57 = 1;
+float level_19k = 1;
+float level_38k = 1;
+float level_57k = 1;
 
 SNDFILE *inf;
 
@@ -68,6 +64,42 @@ float *alloc_empty_buffer(size_t length) {
     bzero(p, length * sizeof(float));
 
     return p;
+}
+
+float get_19k_carrier() {
+	static int phase;
+	float c = carrier_19k[phase++] * level_19k;
+	if (phase == 12) phase = 0;
+	return c;
+}
+
+float get_38k_carrier() {
+	static int phase;
+	float c = carrier_38k[phase++] * level_38k;
+	if (phase == 6) phase = 0;
+	return c;
+}
+
+float get_57k_carrier() {
+	static int phase;
+	float c = carrier_57k[phase++] * level_57k;
+	if (phase == 4) phase = 0;
+	return c;
+}
+
+void set_19k_level(int new_level) {
+	if (new_level == -1) return;
+	level_19k = (new_level / 100.0);
+}
+
+void set_38k_level(int new_level) {
+	if (new_level == -1) return;
+	level_38k = (new_level / 100.0);
+}
+
+void set_57k_level(int new_level) {
+	if (new_level == -1) return;
+	level_57k = (new_level / 100.0);
 }
 
 int fm_mpx_open(char *filename, size_t len, int wait_for_audio, int rds_on) {
@@ -123,22 +155,15 @@ int fm_mpx_open(char *filename, size_t len, int wait_for_audio, int rds_on) {
 		if(audio_buffer == NULL) return -1;
 	}
 
-	if (rds) {
-		rds_buffer = alloc_empty_buffer(length);
-		if (rds_buffer == NULL) return -1;
-	}
-
 	return 0;
 }
 
 int fm_mpx_get_samples(float *mpx_buffer) {
 
-	if(rds) get_rds_samples(rds_buffer);
-
 	if (inf == NULL) {
 		for (int i=0; i<length; i++) {
-			mpx_buffer[i] = rds_buffer[i] * carrier_57[phase_57++] * 0.05 * level_57;
-			if (phase_57 == 4) phase_57 = 0;
+			mpx_buffer[i] = get_57k_carrier() * get_rds_sample() * 0.05;
+			mpx_buffer[i] *= 0.5; // Limit MPX to -6dBFS
 		}
 		return 0;
 	}
@@ -213,10 +238,8 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		if (channels == 2) {
 			// audio signals need to be limited to 45% to remain within modulation limits
 			mpx_buffer[i] = out_mono * 0.45 +
-				carrier_19[phase_19++] * 0.05 * level_19 +
-				carrier_38[phase_38++] * out_stereo * 0.45 * level_38;
-			if (phase_19 == 12) phase_19 = 0;
-			if (phase_38 == 6) phase_38 = 0;
+				get_19k_carrier() * 0.05 +
+				get_38k_carrier() * out_stereo * 0.45;
 		} else {
 			// mono audio is limited to 90%
 			mpx_buffer[i] = out_mono * 0.9;
@@ -224,32 +247,17 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 
 		if (rds) {
 			mpx_buffer[i] +=
-				carrier_57[phase_57++] * rds_buffer[i] * 0.05 * level_57;
-			if (phase_57 == 4) phase_57 = 0;
+				get_57k_carrier() * get_rds_sample() * 0.05;
 		}
+
+		mpx_buffer[i] *= 0.5; // Limit MPX to -6dBFS
 	}
 
 	return 0;
-}
-
-void set_19_level(int new_level) {
-	if (new_level == -1) return;
-	level_19 = (new_level / 100.0);
-}
-
-void set_38_level(int new_level) {
-	if (new_level == -1) return;
-	level_38 = (new_level / 100.0);
-}
-
-void set_57_level(int new_level) {
-	if (new_level == -1) return;
-	level_57 = (new_level / 100.0);
 }
 
 void fm_mpx_close() {
 	if(sf_close(inf)) fprintf(stderr, "Error closing audio file\n");
 
 	if(audio_buffer != NULL) free(audio_buffer);
-	if (rds_buffer != NULL) free(rds_buffer);
 }

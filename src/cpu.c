@@ -16,10 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern int fm_mpx_open(char *filename, size_t len, int wait_for_audio, int rds_on);
-extern int fm_mpx_get_samples(float *mpx_buffer);
-extern void fm_mpx_close();
-extern int channels;
-extern void set_19k_level(int new_level);
-extern void set_38k_level(int new_level);
-extern void set_57k_level(int new_level);
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <sched.h>
+
+void set_affinity(int cpu) {
+	cpu_set_t mask;
+	CPU_ZERO(&mask);
+	CPU_SET(cpu, &mask);
+	if (sched_setaffinity(0, sizeof(mask), &mask) == -1) {
+		fprintf(stderr, "Warning: Could not set CPU affinity\n");
+	}
+}

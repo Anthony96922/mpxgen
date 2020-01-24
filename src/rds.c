@@ -316,12 +316,10 @@ void get_rds_bits(int *out_buffer) {
     }
 }
 
-size_t count = 0;
-
-/* Get a number of RDS samples. This generates the envelope of the waveform using
+/* Get an RDS sample. This generates the envelope of the waveform using
    pre-generated elementary waveform samples.
  */
-void get_rds_samples(float *buffer) {
+float get_rds_sample() {
     static int bit_buffer[BITS_PER_GROUP];
     static int bit_pos = BITS_PER_GROUP;
     static float sample_buffer[SAMPLE_BUFFER_SIZE];
@@ -336,46 +334,43 @@ void get_rds_samples(float *buffer) {
     static int out_sample_index = SAMPLE_BUFFER_SIZE-1;
 
     float sample;
-
-    for(int i=0; i<count; i++) {
-        if(sample_count == SAMPLES_PER_BIT) {
-            if(bit_pos == BITS_PER_GROUP) {
-                get_rds_bits(bit_buffer);
-                bit_pos = 0;
-            }
-
-            // do differential encoding
-            cur_bit = bit_buffer[bit_pos];
-            prev_output = cur_output;
-            cur_output = prev_output ^ cur_bit;
-
-            inverting = (cur_output == 1);
-
-            float *src = waveform_biphase;
-            int idx = in_sample_index;
-
-            for(int j=0; j<FILTER_SIZE; j++) {
-                float val = (*src++);
-                if(inverting) val = -val;
-                sample_buffer[idx++] += val;
-                if(idx == SAMPLE_BUFFER_SIZE) idx = 0;
-            }
-
-            in_sample_index += SAMPLES_PER_BIT;
-            if(in_sample_index == SAMPLE_BUFFER_SIZE) in_sample_index -= SAMPLE_BUFFER_SIZE;
-
-            bit_pos++;
-            sample_count = 0;
+    if(sample_count == SAMPLES_PER_BIT) {
+        if(bit_pos == BITS_PER_GROUP) {
+            get_rds_bits(bit_buffer);
+            bit_pos = 0;
         }
 
-        sample = sample_buffer[out_sample_index];
+        // do differential encoding
+        cur_bit = bit_buffer[bit_pos];
+        prev_output = cur_output;
+        cur_output = prev_output ^ cur_bit;
 
-        sample_buffer[out_sample_index++] = 0;
-        if(out_sample_index == SAMPLE_BUFFER_SIZE) out_sample_index = 0;
+        inverting = (cur_output == 1);
 
-        *buffer++ = sample;
-        sample_count++;
+        float *src = waveform_biphase;
+        int idx = in_sample_index;
+
+        for(int j=0; j<FILTER_SIZE; j++) {
+            float val = (*src++);
+            if(inverting) val = -val;
+            sample_buffer[idx++] += val;
+            if(idx == SAMPLE_BUFFER_SIZE) idx = 0;
+        }
+
+        in_sample_index += SAMPLES_PER_BIT;
+        if(in_sample_index == SAMPLE_BUFFER_SIZE) in_sample_index -= SAMPLE_BUFFER_SIZE;
+
+        bit_pos++;
+        sample_count = 0;
     }
+
+    sample = sample_buffer[out_sample_index];
+
+    sample_buffer[out_sample_index++] = 0;
+    if(out_sample_index == SAMPLE_BUFFER_SIZE) out_sample_index = 0;
+
+    sample_count++;
+    return sample;
 }
 
 // RBDS PTY list
@@ -390,8 +385,7 @@ char *ptys[] = {
 	"Unassigned", "Weather", "Emergency test", "Emergency"
 };
 
-void rds_encoder_init(size_t buf_len, uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_array, char *ptyn) {
-    count = buf_len;
+void rds_encoder_init(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_array, char *ptyn) {
 
     printf("RDS Options:\n");
     printf("PI: %04X, PS: \"%s\", PTY: %d (%s), TP: %d\n",

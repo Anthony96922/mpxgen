@@ -26,8 +26,9 @@
 #include "rds.h"
 #include "fm_mpx.h"
 #include "control_pipe.h"
+#include "cpu.h"
 
-#define DATA_SIZE 4096
+#define DATA_SIZE 1024
 
 int stop_mpx;
 
@@ -35,23 +36,18 @@ void stop() {
 	stop_mpx = 1;
 }
 
-float volume;
+float mpx_vol;
 
 void postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
 	int j = 0;
 
 	for (int i = 0; i < inbufsize; i++) {
-#if 0
-		if (inbuf[i] <= -1 || inbuf[i] >= 1) {
-			fprintf(stderr, "overshoot! (%.7f)\n", inbuf[i]);
-		}
-#endif
-		outbuf[j] = outbuf[j+1] = (inbuf[i] * (volume / 100)) * 32767;
+		outbuf[j] = outbuf[j+1] = (inbuf[i] * (mpx_vol / 100)) * 32767;
 		j += 2;
 	}
 }
 
-int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float mpx, int wait, int rds, uint16_t pi, char *ps, char *rt, int pty, int tp, int *af, char *ptyn) {
+int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float mpx, float ppm, int wait, int rds, uint16_t pi, char *ps, char *rt, int pty, int tp, int *af, char *ptyn) {
 	// Gracefully stop the encoder on SIGINT or SIGTERM
 	int signals[] = {SIGINT, SIGTERM};
 	for (int i = 0; i < 2; i++) {
@@ -61,6 +57,9 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 		sa.sa_handler = stop;
 		sigaction(signals[i], &sa, NULL);
 	}
+
+	// Work around random audio ticks
+	set_affinity(3);
 
 	// Data structures for baseband data
 	float mpx_data[DATA_SIZE];
@@ -97,9 +96,10 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 
 	SRC_STATE *src_state;
 	SRC_DATA src_data;
-	src_data.src_ratio = 192000. / 228000;
+	src_data.src_ratio = (192000 / 228000.0) + (ppm / 1000000);
 	src_data.input_frames = DATA_SIZE;
 	src_data.output_frames = DATA_SIZE;
+	src_data.data_in = mpx_data;
 	src_data.data_out = resample_out;
 
 	if ((src_state = src_new(SRC_SINC_FASTEST, 1, &src_error)) == NULL) {
@@ -112,7 +112,7 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 
 	// Initialize the RDS modulator
 	if(rds) {
-		rds_encoder_init(DATA_SIZE, pi, ps, rt, pty, tp, af, ptyn);
+		rds_encoder_init(pi, ps, rt, pty, tp, af, ptyn);
 	}
 
 	// Initialize the control pipe reader
@@ -125,13 +125,12 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 		}
 	}
 
-	volume = mpx;
+	mpx_vol = mpx;
 
 	for (;;) {
 		if(control_pipe) poll_control_pipe();
 
 		if (fm_mpx_get_samples(mpx_data) < 0) break;
-		src_data.data_in = mpx_data;
 
 		if ((src_error = src_process(src_state, &src_data))) {
 			fprintf(stderr, "Error: src_process failed: %s\n", src_strerror(src_error));
@@ -168,7 +167,7 @@ int main(int argc, char **argv) {
 	char *output_file = NULL;
 	char *control_pipe = NULL;
 	int rds = 1;
-	int alternative_freq[MAX_AF+1] = {0};
+	int alternative_freq[MAX_AF+1];
 	int af_size = 0;
 	char *ps = "mpxgen";
 	char *rt = "mpxgen: FM Stereo and RDS encoder";
@@ -176,15 +175,17 @@ int main(int argc, char **argv) {
 	uint16_t pi = 0xFFFF;
 	int pty = 0;
 	int tp = 0;
+	float ppm = 0;
 	float mpx = 100;
 	int wait = 1;
 
-	const char	*short_opt = "a:o:m:W:R:i:s:r:p:T:A:C:h";
+	const char	*short_opt = "a:o:m:x:W:R:i:s:r:p:T:A:C:h";
 	struct option	long_opt[] =
 	{
 		{"audio", 	required_argument, NULL, 'a'},
 		{"output-file",	required_argument, NULL, 'o'},
 		{"mpx",		required_argument, NULL, 'm'},
+		{"ppm",		required_argument, NULL, 'x'},
 		{"wait",	required_argument, NULL, 'W'},
 
 		{"rds", 	required_argument, NULL, 'R'},
@@ -215,6 +216,10 @@ int main(int argc, char **argv) {
 
 			case 'm': //mpx
 				mpx = atoi(optarg);
+				break;
+
+			case 'x': //ppm
+				ppm = atof(optarg);
 				break;
 
 			case 'W': //wait
@@ -268,10 +273,20 @@ int main(int argc, char **argv) {
 
 			case 'h': //help
 				fprintf(stderr, "Help: %s\n"
-				      "	[--audio (-a) file] [--output-file (-o) WAVE out] [--mpx (-m) mpx-volume]\n"
-				      " [--wait (-W) wait-switch] [--rds (-R) rds-switch] [--pi (-i) pi-code] [--ps (-s) ps-text]\n"
-				      "	[--rt (-r) radiotext] [--pty (-p) program-type] [--tp (-T) traffic-program]\n"
-				      "	[--af (-A) alternative-freq] [--ptyn (-P) pty-name] [--ctl (-C) control-pipe]\n", argv[0]);
+				      "	[--audio (-a) file]\n"
+				      "	[--output-file (-o) WAVE out]\n"
+				      "	[--ppm (-x) clock correction]\n"
+				      "	[--mpx (-m) mpx-volume]\n"
+				      "	[--wait (-W) wait-switch]\n"
+				      "	[--rds (-R) rds-switch]\n"
+				      "	[--pi (-i) pi-code]\n"
+				      "	[--ps (-s) ps-text]\n"
+				      "	[--rt (-r) radiotext]\n"
+				      "	[--pty (-p) program-type]\n"
+				      "	[--tp (-T) traffic-program]\n"
+				      "	[--af (-A) alternative-freq]\n"
+				      "	[--ptyn (-P) pty-name]\n"
+				      "	[--ctl (-C) control-pipe]\n", argv[0]);
 				return 1;
 
 			default:
@@ -297,7 +312,7 @@ int main(int argc, char **argv) {
 
 	alternative_freq[0] = af_size;
 
-	int errcode = generate_mpx(audio_file, output_file, control_pipe, mpx, wait, rds, pi, ps, rt, pty, tp, alternative_freq, ptyn);
+	int errcode = generate_mpx(audio_file, output_file, control_pipe, mpx, ppm, wait, rds, pi, ps, rt, pty, tp, alternative_freq, ptyn);
 
 	return errcode;
 }

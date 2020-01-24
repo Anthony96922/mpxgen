@@ -161,14 +161,14 @@ int poll_control_pipe() {
             return 1;
         }
         if (res[0] == 'M' && res[1] == 'P' && res[2] == 'X') {
-            int level_19, level_38, level_57;
-            if (sscanf(arg, "%d,%d,%d", &level_19, &level_38, &level_57) == 3) {
-                if (level_19 < -1 || level_19 > 200) level_19 = 100;
-                if (level_38 < -1 || level_38 > 200) level_38 = 100;
-                if (level_57 < -1 || level_57 > 200) level_57 = 100;
-                set_19_level(level_19);
-                set_38_level(level_38);
-                set_57_level(level_57);
+            int level_19k, level_38k, level_57k;
+            if (sscanf(arg, "%d,%d,%d", &level_19k, &level_38k, &level_57k) == 3) {
+                if (level_19k < -1 || level_19k > 200) level_19k = 100;
+                if (level_38k < -1 || level_38k > 200) level_38k = 100;
+                if (level_57k < -1 || level_57k > 200) level_57k = 100;
+                set_19k_level(level_19k);
+                set_38k_level(level_38k);
+                set_57k_level(level_57k);
             }
             return 1;
         }
