@@ -28,7 +28,7 @@
 #include "control_pipe.h"
 #include "cpu.h"
 
-#define DATA_SIZE 1024
+#define DATA_SIZE 512
 
 int stop_mpx;
 
@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
 	float mpx = 100;
 	int wait = 1;
 
-	const char	*short_opt = "a:o:m:x:W:R:i:s:r:p:T:A:C:h";
+	const char	*short_opt = "a:o:m:x:W:R:i:s:r:p:T:A:P:C:h";
 	struct option	long_opt[] =
 	{
 		{"audio", 	required_argument, NULL, 'a'},
@@ -312,7 +312,5 @@ int main(int argc, char **argv) {
 
 	alternative_freq[0] = af_size;
 
-	int errcode = generate_mpx(audio_file, output_file, control_pipe, mpx, ppm, wait, rds, pi, ps, rt, pty, tp, alternative_freq, ptyn);
-
-	return errcode;
+	return generate_mpx(audio_file, output_file, control_pipe, mpx, ppm, wait, rds, pi, ps, rt, pty, tp, alternative_freq, ptyn);
 }

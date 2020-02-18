@@ -296,20 +296,19 @@ void get_rds_group(uint16_t *blocks) {
 }
 
 void get_rds_bits(int *out_buffer) {
-    int i, j;
     static uint16_t out_blocks[GROUP_LENGTH];
     get_rds_group(out_blocks);
 
     // Calculate the checkword for each block and emit the bits
     uint16_t block, check;
-    for(i=0; i<GROUP_LENGTH; i++) {
+    for(int i=0; i<GROUP_LENGTH; i++) {
         block = out_blocks[i];
         check = crc(block) ^ offset_words[i];
-        for(j=0; j<BLOCK_SIZE; j++) {
+        for(int j=0; j<BLOCK_SIZE; j++) {
             *out_buffer++ = ((block & (1<<(BLOCK_SIZE-1))) != 0);
             block <<= 1;
         }
-        for(j=0; j<POLY_DEG; j++) {
+        for(int j=0; j<POLY_DEG; j++) {
             *out_buffer++ = ((check & (1<<(POLY_DEG-1))) != 0);
             check <<= 1;
         }
@@ -333,7 +332,6 @@ float get_rds_sample() {
     static int in_sample_index;
     static int out_sample_index = SAMPLE_BUFFER_SIZE-1;
 
-    float sample;
     if(sample_count == SAMPLES_PER_BIT) {
         if(bit_pos == BITS_PER_GROUP) {
             get_rds_bits(bit_buffer);
@@ -364,7 +362,7 @@ float get_rds_sample() {
         sample_count = 0;
     }
 
-    sample = sample_buffer[out_sample_index];
+    float sample = sample_buffer[out_sample_index];
 
     sample_buffer[out_sample_index++] = 0;
     if(out_sample_index == SAMPLE_BUFFER_SIZE) out_sample_index = 0;
