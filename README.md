@@ -13,8 +13,7 @@ This program generates FM multiplex baseband audio that can be fed through a 192
 It won't replace commercial broadcasting software but it uses less resources and doesn't require a GUI to use.
 
 #### To do
-- SSB stereo
-- SCA
+- Improve input resampling
 - JACK support (?)
 
 ## Build
@@ -32,7 +31,7 @@ Simply run:
 ```
 ./mpxgen
 ```
-This will produce only an RDS subcarrier with no audio. If you have an FM transmitter plugged in to the sound card, tune an RDS-enabled radio to your transmitter's frequency. You should see "mpxgen" appear on the display.
+This will produce only an RDS subcarrier with no audio. If you have an FM transmitter plugged in to the sound card, tune an RDS-enabled radio to your transmitter's frequency. You should see "mpxgen" appear on the display. Your transmitter must be able to pass the entire MPX spectrum for RDS to work.
 
 To test audio output, you can use the provided stereo_44100.wav file.
 ```
@@ -41,39 +40,74 @@ To test audio output, you can use the provided stereo_44100.wav file.
 If the audio sounds distorted, you may be overmodulating the transmitter. Adjust the sound card's volume until audio sounds clear and no distortion can be heard.
 
 There are more options that can be given to mpxgen:
-* `--audio` specifies an audio file to play as audio. The sample rate does not matter: mpxgen will resample and filter it. If a stereo file is provided, mpxgen will produce an FM Stereo signal. Example: `--audio sound.wav`. The supported formats depend on `libsndfile`. This includes WAV and Ogg/Vorbis (among others) but not MP3. Specify `-` as the file name to read audio data on standard input (useful for piping audio into mpxgen, see below).
-* `--pi` specifies the PI code of the RDS broadcast. 4 hexadecimal digits. Example: `--pi FFFF`.
-* `--ps` specifies the station name (Program Service name, PS) of the RDS broadcast. Limit: 8 characters. Example: `--ps KPSK-FM`.
-* `--rt` specifies the radiotext (RT) to be transmitted. Limit: 64 characters. Example:  `--rt 'Hello, world!'`.
-* `--af` specifies alternative frequencies (AF). Example:  `--af 107.9 --af 99.2`.
-* `--pty` specifies the program type. Valid range: 0 - 31. Example: `--pty 9` (US: Top 40). See https://en.wikipedia.org/wiki/Radio_Data_System for more program types.
-* `--tp` specifies if the program carries traffic information.  Example `--tp 0`.
-* `--mpx` specifies the MPX output volume in percent. Default 100. Example `--mpx 50`. Use this if your sound card does not have a software volume control.
-* `--ctl` specifies a named pipe (FIFO) to use as a control channel to change PS and RT at run-time (see below).
-* `--rds` RDS broadcast switch.
-* `--wait` specifies whether mpxgen should wait for the the audio pipe or terminate as soon as there is no audio. It's set to 1 by default.
-* `--output-file` outputs raw PCM data to a file instead of playing through the sound card. FIFO pipes can be specified.
+```
+--audio
+  Audio file to play as audio. The sample rate does not matter: mpxgen will
+  resample and filter it. If a stereo file is provided, mpxgen
+  will produce an FM Stereo signal. Example: --audio sound.wav .
+  The supported formats depend on libsndfile. This includes WAV and
+  Ogg/Vorbis (among others) but not MP3. Specify '-' as the file name to
+  read audio data on standard input (useful for piping audio into mpxgen, see below).
+
+--pi
+  PI code of the RDS broadcast. 4 hexadecimal digits. Example: --pi FFFF .
+
+--ps
+  Station name (Program Service name, PS) of the RDS broadcast.
+  Limit: 8 characters. Example: --ps KPSK-FM .
+
+--rt
+  Radiotext (RT). Limit: 64 characters. Example: --rt 'Hello, world!' .
+
+--af
+  List of alternative frequencies (AF). Multiple AFs can be used.
+  Example:  --af 107.9 --af 99.2 .
+
+--pty
+  Program Type. Valid range: 0 - 31. Example: --pty 9 (US: Top 40).
+  See https://en.wikipedia.org/wiki/Radio_Data_System for more program types.
+
+--tp
+  Traffic program.  Default: 0.
+
+--ptyn
+  Program Type Name is a more specific format. Example: --ptyn CHR.
+
+--mpx
+  MPX output volume in percent. Default 100. Use this if your sound card does not have a software volume control.
+
+--ctl
+  Named pipe (FIFO) to use as a control channel to change PS and RT and others at run-time (see below).
+
+--rds
+  RDS broadcast switch. Enabled by default.
+
+--wait
+  Wait for the the audio pipe or terminate as soon as there is no audio. It's set to 1 by default.
+
+--output-file
+  outputs raw PCM data to a file instead of playing through the sound card. FIFO pipes can be specified.
+```
 
 ### Piping audio into mpxgen
 If you use the argument `--audio -`, mpxgen reads audio data on standard input. This allows you to pipe the output of a program into mpxgen. For instance, this can be used to read MP3 files using Sox:
 ```
-sox -t mp3 http://www.linuxvoice.com/episodes/lv_s02e01.mp3 -t wav -  | ./mpxgen --audio -
+sox -t mp3 <file or stream URL> -t wav - | ./mpxgen --audio -
 ```
 Basic audio processing with ffmpeg:
 ```
 ffmpeg -i <file or stream URL> \
   -af "
-    crossfeed=strength=0.1,
     deesser,
-    volume=9dB,
+    volume=23dB,
     acrossover[a][b],
-    [a]acompressor=threshold=0.001:release=5000:makeup=20[aa],
-    [b]acompressor=threshold=0.001:release=5000:makeup=20[ba],
+    [a]acompressor=threshold=0.001:release=5000:makeup=8[aa],
+    [b]acompressor=threshold=0.001:release=5000:makeup=8[ba],
     [aa][ba]amix,
-    bass=gain=3,
+    bass=gain=2,
+    volume=-6dB,
     aemphasis=mode=production:type=75fm,
-    alimiter,
-    firequalizer=gain='if(lt(f, 15500), 0, -INF)'
+    alimiter
   " \
   -f wav - | ./mpxgen --audio -
 ```
