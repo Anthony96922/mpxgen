@@ -20,42 +20,43 @@ float carrier_19k[] = {0, 0.5, 0.8660254, 1, 0.8660254, 0.5, 0, -0.5, -0.8660254
 float carrier_38k[] = {0, 0.8660254, 0.8660254, 0, -0.8660254, -0.8660254};
 float carrier_57k[] = {0, 1, 0, -1};
 
+int phase_19k;
+int phase_38k;
+int phase_57k;
+
 float level_19k = 1;
 float level_38k = 1;
 float level_57k = 1;
 
 float get_19k_carrier() {
-        static int phase;
-        float c = carrier_19k[phase++] * level_19k;
-        if (phase == 12) phase = 0;
-        return c;
+	return carrier_19k[phase_19k] * level_19k;
 }
 
 float get_38k_carrier() {
-        static int phase;
-        float c = carrier_38k[phase++] * level_38k;
-        if (phase == 6) phase = 0;
-        return c;
+	return carrier_38k[phase_38k] * level_38k;
 }
 
 float get_57k_carrier() {
-        static int phase;
-        float c = carrier_57k[phase++] * level_57k;
-        if (phase == 4) phase = 0;
-        return c;
+	return carrier_57k[phase_57k] * level_57k;
+}
+
+void update_carrier_phase() {
+	if (++phase_19k == 12) phase_19k = 0;
+	if (++phase_38k == 6) phase_38k = 0;
+	if (++phase_57k == 4) phase_57k = 0;
 }
 
 void set_19k_level(int new_level) {
-        if (new_level == -1) return;
-        level_19k = (new_level / 100.0);
+	if (new_level == -1) return;
+	level_19k = (new_level / 100.0);
 }
 
 void set_38k_level(int new_level) {
-        if (new_level == -1) return;
-        level_38k = (new_level / 100.0);
+	if (new_level == -1) return;
+	level_38k = (new_level / 100.0);
 }
 
 void set_57k_level(int new_level) {
-        if (new_level == -1) return;
-        level_57k = (new_level / 100.0);
+	if (new_level == -1) return;
+	level_57k = (new_level / 100.0);
 }

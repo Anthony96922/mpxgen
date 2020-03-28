@@ -23,7 +23,7 @@
 
 #include "rds.h"
 #include "control_pipe.h"
-#include "fm_mpx.h"
+#include "mpx_carriers.h"
 
 //#define CONTROL_PIPE_MESSAGES
 

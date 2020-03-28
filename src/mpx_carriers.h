@@ -19,3 +19,7 @@
 extern float get_19k_carrier();
 extern float get_38k_carrier();
 extern float get_57k_carrier();
+extern void set_19k_level(int level_19k);
+extern void set_38k_level(int level_38k);
+extern void set_57k_level(int level_57k);
+extern void update_carrier_phase();

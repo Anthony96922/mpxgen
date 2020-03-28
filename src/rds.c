@@ -31,6 +31,7 @@ struct {
     int pty;
     int tp;
     int ms;
+    int di;
     int af[MAX_AF+1];
     // PS
     char ps[8];
@@ -51,6 +52,7 @@ struct {
     int rt_update;
     int ptyn_update;
     int enable_ptyn;
+    int encode_ctime;
 } rds_controls;
 
 // RT+
@@ -78,9 +80,7 @@ uint16_t crc(uint16_t block) {
 
         int msb = (crc >> (POLY_DEG-1)) & 1;
         crc <<= 1;
-        if((msb ^ bit) != 0) {
-            crc ^= POLY;
-        }
+        if((msb ^ bit) != 0) crc ^= POLY;
     }
     return crc;
 }
@@ -89,6 +89,8 @@ uint16_t crc(uint16_t block) {
    Returns 1 if the CT group was generated, 0 otherwise
 */
 int get_rds_ct_group(uint16_t *blocks) {
+    if (!rds_controls.encode_ctime) return 0;
+
     static int latest_minutes = -1;
 
     // Check time
@@ -128,8 +130,12 @@ void get_rds_ps_group(uint16_t *blocks) {
 	static int ps_state, af_state;
 
 	blocks[1] |= /* 0 << 12 | */ rds_params.ta << 4 | rds_params.ms << 3 | ps_state;
-	if (ps_state == 3 && channels == 2) blocks[1] |= 4; // DI = 1 - Stereo
-	if (rds_params.af[0]) { // AF
+
+	// DI
+	blocks[1] |= ((rds_params.di >> (3 - ps_state)) & 1) << 2;
+
+	// AF
+	if (rds_params.af[0]) {
 		if (af_state == 0) {
 			blocks[2] = (rds_params.af[0] + 224) << 8 | rds_params.af[1];
 		} else {
@@ -142,6 +148,7 @@ void get_rds_ps_group(uint16_t *blocks) {
 	} else {
 		blocks[2] = 0xE0CD; // no AF
 	}
+
 	blocks[3] = ps_text[ps_state*2] << 8 | ps_text[ps_state*2+1];
 	ps_state++;
 	if (ps_state == 4) {
@@ -230,29 +237,36 @@ void get_rds_rtp_group(uint16_t *blocks) {
 
 /* Lower priority groups are placed in a subsequence
  */
-void get_rds_other_groups(uint16_t *blocks) {
+int get_rds_other_groups(uint16_t *blocks) {
 	static int state;
+	static int timer;
 
+	timer++;
+	if (timer == 12) {
 next:
-	switch (state) {
-	case 0: // Type 3A groups
-		get_rds_oda_group(blocks);
-		break;
-	case 1: // Type 10A groups
-		// Do not generate a 10A group if PTYN is off
-		if (!rds_controls.enable_ptyn) {
-			state++;
-			goto next;
+		switch (state) {
+		case 0: // Type 3A groups
+			get_rds_oda_group(blocks);
+			break;
+		case 1: // Type 10A groups
+			// Do not generate a 10A group if PTYN is off
+			if (!rds_controls.enable_ptyn) {
+				state++;
+				goto next;
+			}
+			get_rds_ptyn_group(blocks);
+			break;
+		case 2: // Type 11A groups
+			get_rds_rtp_group(blocks);
+			break;
 		}
-		get_rds_ptyn_group(blocks);
-		break;
-	case 2: // Type 11A groups
-		get_rds_rtp_group(blocks);
-		break;
-	}
 
-	state++;
-	if (state == 3) state = 0;
+		state++;
+		if (state == 3) state = 0;
+
+		timer = 0;
+		return 1;
+	} else return 0;
 }
 
 /* Creates an RDS group. This generates sequences of the form 0A, 2A, 0A, 2A, 0A, 2A, etc.
@@ -268,30 +282,15 @@ void get_rds_group(uint16_t *blocks) {
 
     // Generate block content
     if(!get_rds_ct_group(blocks)) { // CT (clock time) has priority on other group types
-	switch (state) {
-	case 0:
-	case 2:
-	case 4:
-	case 6:
-	case 8:
-	case 10: // Type 0A groups
-	    get_rds_ps_group(blocks);
-	    break;
-	case 1:
-	case 3:
-	case 5:
-	case 7:
-	case 9:
-	case 11: // Type 2A groups
-	    get_rds_rt_group(blocks);
-	    break;
-	default: // Other groups
-	    get_rds_other_groups(blocks);
-	    break;
+	if (!get_rds_other_groups(blocks)) { // Other groups
+		if (!state) { // Type 0A groups
+		    get_rds_ps_group(blocks);
+		} else { // Type 2A groups
+		    get_rds_rt_group(blocks);
+		}
+		state++;
+		if(state == 2) state = 0;
 	}
-
-	state++;
-	if(state == 14) state = 0;
     }
 }
 
@@ -410,7 +409,10 @@ void rds_encoder_init(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_
 	set_rds_ptyn(ptyn, 1);
     }
     set_rds_tp(tp);
+    set_rds_ct(1);
     set_rds_ms(1);
+    if (channels == 2)
+	set_rds_di(1); // 1 - Stereo
 }
 
 void set_rds_pi(uint16_t pi_code) {
@@ -484,4 +486,12 @@ void set_rds_ms(int ms) {
 
 void set_rds_ab(int ab) {
     rds_controls.ab = ab;
+}
+
+void set_rds_di(int di) {
+    rds_params.di = di;
+}
+
+void set_rds_ct(int ct) {
+    rds_controls.encode_ctime = ct;
 }
