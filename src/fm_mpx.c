@@ -129,7 +129,10 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		return INPUT_DATA_SIZE;
 	}
 
-	int audio_len = sf_readf_float(inf, audio_input, INPUT_DATA_SIZE);
+	int audio_len;
+
+get_audio:
+	audio_len = sf_readf_float(inf, audio_input, INPUT_DATA_SIZE);
 
 	if (audio_len < 0) {
 		fprintf(stderr, "Error reading audio\n");
@@ -144,7 +147,7 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 				fprintf(stderr, "Could not rewind in audio file, terminating\n");
 				return -1;
 			}
-		}
+		} else goto get_audio; // Try to get new audio
 	} else {
 		src_data.input_frames = audio_len;
 		if ((src_errorcode = src_process(src_state, &src_data))) {
