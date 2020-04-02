@@ -17,7 +17,6 @@
  */
 
 #include <stdio.h>
-#include <string.h>
 #include <signal.h>
 #include <getopt.h>
 #include <ao/ao.h>
@@ -26,8 +25,6 @@
 #include "fm_mpx.h"
 #include "control_pipe.h"
 #include "cpu.h"
-
-#define DATA_SIZE 2048
 
 int stop_mpx;
 
@@ -55,14 +52,8 @@ void postprocess_2ch(float *inbuf, short *outbuf, size_t inbufsize) {
 
 int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float mpx, float ppm, int wait, int rds, uint16_t pi, char *ps, char *rt, int pty, int tp, int *af, char *ptyn) {
 	// Gracefully stop the encoder on SIGINT or SIGTERM
-	int signals[] = {SIGINT, SIGTERM};
-	for (int i = 0; i < 2; i++) {
-		struct sigaction sa;
-
-		memset(&sa, 0, sizeof(sa));
-		sa.sa_handler = stop;
-		sigaction(signals[i], &sa, NULL);
-	}
+	signal(SIGINT, stop);
+	signal(SIGTERM, stop);
 
 	// Work around random audio ticks
 	set_affinity(3);

@@ -18,17 +18,14 @@
 
 #include <sndfile.h>
 #include <stdlib.h>
-#include <strings.h>
+#include <string.h>
 #include <math.h>
 
 #include "rds.h"
 #include "fm_mpx.h"
 #include "mpx_carriers.h"
 
-#define INPUT_DATA_SIZE	512
-#define RESAMPLED_DATA_SIZE	8192
-
-#define FIR_HALF_SIZE	32
+#define FIR_HALF_SIZE	30
 #define FIR_SIZE	(2*FIR_HALF_SIZE-1)
 
 // coefficients of the low-pass FIR filter
@@ -51,15 +48,6 @@ int src_errorcode;
 
 SRC_STATE *src_state;
 SRC_DATA src_data;
-
-float *alloc_empty_buffer(size_t length) {
-    float *p = malloc(length * sizeof(float));
-    if(p == NULL) return NULL;
-
-    bzero(p, length * sizeof(float));
-
-    return p;
-}
 
 int fm_mpx_open(char *filename, int wait_for_audio, int rds_on, int exit_on_audio_end) {
 	audio_wait = wait_for_audio;
@@ -95,7 +83,7 @@ int fm_mpx_open(char *filename, int wait_for_audio, int rds_on, int exit_on_audi
 	printf("Input: %d Hz, %d channels, upsampling factor: %.2f\n", in_samplerate, channels, upsample_factor);
 
 	int cutoff_freq = 15500;
-	if(in_samplerate/2 < cutoff_freq) cutoff_freq = in_samplerate/2;
+	if(cutoff_freq > in_samplerate/2) cutoff_freq = in_samplerate/2;
 
 	// Here we divide this coefficient by two because it will be counted twice
 	// when applying the filter
@@ -110,11 +98,13 @@ int fm_mpx_open(char *filename, int wait_for_audio, int rds_on, int exit_on_audi
 
 	printf("Created low-pass FIR filter for audio channels, with cutoff at %d Hz\n", cutoff_freq);
 
-	audio_input = alloc_empty_buffer(INPUT_DATA_SIZE * channels);
-	resampled_input = alloc_empty_buffer(RESAMPLED_DATA_SIZE * channels);
+	audio_input = malloc(INPUT_DATA_SIZE * channels * sizeof(float));
+	resampled_input = malloc(DATA_SIZE * channels * sizeof(float));
+	if(audio_input == NULL) return -1;
+	if(resampled_input == NULL) return -1;
 
 	src_data.src_ratio = upsample_factor;
-	src_data.output_frames = RESAMPLED_DATA_SIZE;
+	src_data.output_frames = DATA_SIZE;
 	src_data.data_in = audio_input;
 	src_data.data_out = resampled_input;
 
@@ -128,18 +118,18 @@ int fm_mpx_open(char *filename, int wait_for_audio, int rds_on, int exit_on_audi
 
 int fm_mpx_get_samples(float *mpx_buffer) {
 	static int fir_index;
-	int audio_len;
+	int buf_size = 0;
 	int j = 0;
 
 	if (inf == NULL) {
 		for (int i = 0; i < INPUT_DATA_SIZE; i++) {
-			mpx_buffer[i] = get_57k_carrier() * get_rds_sample() * 0.05;
+			mpx_buffer[i] = get_57k_carrier() * get_rds_sample() * 0.02;
 			update_carrier_phase();
 		}
 		return INPUT_DATA_SIZE;
 	}
 
-	audio_len = sf_readf_float(inf, audio_input, INPUT_DATA_SIZE / channels);
+	int audio_len = sf_readf_float(inf, audio_input, INPUT_DATA_SIZE);
 
 	if (audio_len < 0) {
 		fprintf(stderr, "Error reading audio\n");
@@ -148,8 +138,8 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		if (stop_audio) return -1;
 		if( sf_seek(inf, 0, SEEK_SET) < 0 ) {
 			if (audio_wait) {
-				bzero(resampled_input, RESAMPLED_DATA_SIZE * sizeof(float));
-				goto mpx;
+				memset(resampled_input, 0, INPUT_DATA_SIZE * channels * sizeof(float));
+				buf_size = INPUT_DATA_SIZE;
 			} else {
 				fprintf(stderr, "Could not rewind in audio file, terminating\n");
 				return -1;
@@ -161,10 +151,10 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 			fprintf(stderr, "Error: src_process failed: %s\n", src_strerror(src_errorcode));
 			return -1;
 		}
+		buf_size = src_data.output_frames_gen;
 	}
 
-mpx:
-	for (int i = 0; i < src_data.output_frames_gen; i++) {
+	for (int i = 0; i < buf_size; i++) {
 		// First store the current sample(s) into the FIR filter's ring buffer
 		fir_buffer_left[fir_index] = resampled_input[j];
 		if (channels == 2) {
@@ -220,7 +210,7 @@ mpx:
 		update_carrier_phase();
 	}
 
-	return src_data.output_frames_gen;
+	return buf_size;
 }
 
 void fm_mpx_close() {
