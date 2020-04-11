@@ -22,7 +22,6 @@
 #include <stdio.h>
 
 #include "waveforms.h"
-#include "fm_mpx.h"
 #include "rds.h"
 
 struct {
@@ -47,6 +46,7 @@ struct {
 
 // RDS data controls
 struct {
+    int on;
     int ab;
     int ps_update;
     int rt_update;
@@ -283,13 +283,13 @@ void get_rds_group(uint16_t *blocks) {
     // Generate block content
     if(!get_rds_ct_group(blocks)) { // CT (clock time) has priority on other group types
 	if (!get_rds_other_groups(blocks)) { // Other groups
-		if (!state) { // Type 0A groups
-		    get_rds_ps_group(blocks);
-		} else { // Type 2A groups
-		    get_rds_rt_group(blocks);
-		}
-		state++;
-		if(state == 2) state = 0;
+            if (!state) { // Type 0A groups
+                get_rds_ps_group(blocks);
+            } else { // Type 2A groups
+                get_rds_rt_group(blocks);
+            }
+            state++;
+            if(state == 2) state = 0;
 	}
     }
 }
@@ -330,6 +330,8 @@ float get_rds_sample() {
 
     static int in_sample_index;
     static int out_sample_index = SAMPLE_BUFFER_SIZE-1;
+
+    if (!rds_controls.on) return 0;
 
     if(sample_count == SAMPLES_PER_BIT) {
         if(bit_pos == BITS_PER_GROUP) {
@@ -382,7 +384,14 @@ char *ptys[] = {
 	"Unassigned", "Weather", "Emergency test", "Emergency"
 };
 
-void rds_encoder_init(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_array, char *ptyn) {
+extern int channels;
+
+int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_array, char *ptyn) {
+
+    if (pty < 0 || pty > 31) {
+	fprintf(stderr, "PTY must be between 0 - 31.\n");
+	return -1;
+    }
 
     printf("RDS Options:\n");
     printf("PI: %04X, PS: \"%s\", PTY: %d (%s), TP: %d\n",
@@ -413,6 +422,8 @@ void rds_encoder_init(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_
     set_rds_ms(1);
     if (channels == 2)
 	set_rds_di(1); // 1 - Stereo
+
+    return 0;
 }
 
 void set_rds_pi(uint16_t pi_code) {
@@ -494,4 +505,8 @@ void set_rds_di(int di) {
 
 void set_rds_ct(int ct) {
     rds_controls.encode_ctime = ct;
+}
+
+void set_rds_switch(int on) {
+    rds_controls.on = on;
 }

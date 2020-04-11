@@ -32,20 +32,16 @@ void stop() {
 	stop_mpx = 1;
 }
 
-int out_channels;
-float mpx_vol;
-
-void postprocess(float *inbuf, short *outbuf, size_t inbufsize) {
+void scale(float *inbuf, short *outbuf, size_t inbufsize) {
 	for (int i = 0; i < inbufsize; i++) {
-		outbuf[i] = (inbuf[i] * (mpx_vol / 100)) * 32767;
+		outbuf[i] = inbuf[i] * 32767;
 	}
 }
 
-void postprocess_2ch(float *inbuf, short *outbuf, size_t inbufsize) {
+void scale_2ch(float *inbuf, short *outbuf, size_t inbufsize) {
 	int j = 0;
-
 	for (int i = 0; i < inbufsize; i++) {
-		outbuf[j] = outbuf[j+1] = (inbuf[i] * (mpx_vol / 100)) * 32767;
+		outbuf[j] = outbuf[j+1] = inbuf[i] * 32767;
 		j += 2;
 	}
 }
@@ -71,21 +67,16 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 	format.byte_format = AO_FMT_LITTLE;
 
 	ao_initialize();
-	int ao_driver;
 
 	if (output_file != NULL) {
-		out_channels = 1;
 		format.channels = 1;
-		ao_driver = ao_driver_id("wav");
-		if ((device = ao_open_file(ao_driver, output_file, 1, &format, NULL)) == NULL) {
+		if ((device = ao_open_file(ao_driver_id("wav"), output_file, 1, &format, NULL)) == NULL) {
 			fprintf(stderr, "Error: cannot open output file.\n");
 			return 1;
 		}
 	} else {
-		out_channels = 2;
 		format.channels = 2;
-		ao_driver = ao_default_driver_id();
-		if ((device = ao_open_live(ao_driver, &format, NULL)) == NULL) {
+		if ((device = ao_open_live(ao_default_driver_id(), &format, NULL)) == NULL) {
 			fprintf(stderr, "Error: cannot open sound device.\n");
 			return 1;
 		}
@@ -107,15 +98,12 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 	}
 
 	// Initialize the baseband generator
-	if(fm_mpx_open(audio_file, wait, rds, 0) < 0) {
-		fm_mpx_close();
-		return 1;
-	}
+	if(fm_mpx_open(audio_file, wait, 0) < 0) return 1;
+	set_output_volume(mpx);
 
 	// Initialize the RDS modulator
-	if(rds) {
-		rds_encoder_init(pi, ps, rt, pty, tp, af, ptyn);
-	}
+	if (init_rds_encoder(pi, ps, rt, pty, tp, af, ptyn) < 0) return 1;
+	set_rds_switch(rds);
 
 	// Initialize the control pipe reader
 	if(control_pipe) {
@@ -127,8 +115,6 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 		}
 	}
 
-	mpx_vol = mpx;
-
 	for (;;) {
 		if(control_pipe) poll_control_pipe();
 
@@ -139,13 +125,13 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 			break;
 		}
 
-		if (out_channels == 2)
-			postprocess_2ch(resample_out, dev_out, src_data.output_frames_gen);
+		if (format.channels == 2)
+			scale_2ch(resample_out, dev_out, src_data.output_frames_gen);
 		else
-			postprocess(resample_out, dev_out, src_data.output_frames_gen);
+			scale(resample_out, dev_out, src_data.output_frames_gen);
 
 		// num_bytes = src_data.output_frames_gen * channels * bytes per sample
-		if (!ao_play(device, (char *)dev_out, src_data.output_frames_gen * out_channels * 2)) {
+		if (!ao_play(device, (char *)dev_out, src_data.output_frames_gen * format.channels * sizeof(short))) {
 			fprintf(stderr, "Error: could not play audio.\n");
 			break;
 		}
@@ -182,7 +168,7 @@ int main(int argc, char **argv) {
 	int pty = 0;
 	int tp = 0;
 	float ppm = 0;
-	float mpx = 100;
+	float mpx = 50;
 	int wait = 1;
 
 	const char	*short_opt = "a:o:m:x:W:R:i:s:r:p:T:A:P:C:h";
@@ -222,6 +208,10 @@ int main(int argc, char **argv) {
 
 			case 'm': //mpx
 				mpx = atoi(optarg);
+				if (mpx < 1 || mpx > 100) {
+					fprintf(stderr, "MPX volume must be between 1 - 100.\n");
+					return 1;
+				}
 				break;
 
 			case 'x': //ppm
@@ -303,16 +293,6 @@ int main(int argc, char **argv) {
 
 	if (audio_file == NULL && !rds) {
 		fprintf(stderr, "Nothing to do. Exiting.\n");
-		return 1;
-	}
-
-	if (mpx < 1 || mpx > 100) {
-		fprintf(stderr, "MPX volume must be between 1 - 100.\n");
-		return 1;
-	}
-
-	if (pty < 0 || pty > 31) {
-		fprintf(stderr, "PTY must be between 0 - 31.\n");
 		return 1;
 	}
 

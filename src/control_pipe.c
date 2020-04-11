@@ -22,6 +22,7 @@
 #include <stdio.h>
 
 #include "rds.h"
+#include "fm_mpx.h"
 #include "control_pipe.h"
 #include "mpx_carriers.h"
 
@@ -64,6 +65,15 @@ int poll_control_pipe() {
     if(strlen(res) > 3 && res[2] == ' ') {
         char *arg = res+3;
         if(arg[strlen(arg)-1] == '\n') arg[strlen(arg)-1] = 0;
+        if(res[0] == 'P' && res[1] == 'I') {
+            arg[4] = 0;
+            uint16_t pi = (uint16_t) strtol(arg, NULL, 16);
+            set_rds_pi(pi);
+#ifdef CONTROL_PIPE_MESSAGES
+            printf("PI set to: \"%04X\"\n", pi);
+#endif
+            return 1;
+        }
         if(res[0] == 'P' && res[1] == 'S') {
             arg[8] = 0;
             set_rds_ps(arg);
@@ -84,8 +94,7 @@ int poll_control_pipe() {
             int ta = ( strcmp(arg, "ON") == 0 );
             set_rds_ta(ta);
 #ifdef CONTROL_PIPE_MESSAGES
-            printf("Set TA to ");
-            if(ta) printf("ON\n"); else printf("OFF\n");
+            printf("Set TA to %s\n", ta ? "ON" : "OFF");
 #endif
             return 1;
         }
@@ -93,8 +102,7 @@ int poll_control_pipe() {
             int tp = ( strcmp(arg, "ON") == 0 );
             set_rds_tp(tp);
 #ifdef CONTROL_PIPE_MESSAGES
-            printf("Set TP to ");
-            if(tp) printf("ON\n"); else printf("OFF\n");
+            printf("Set TP to %s\n", tp ? "ON" : "OFF");
 #endif
             return 1;
         }
@@ -102,17 +110,15 @@ int poll_control_pipe() {
             int ms = ( strcmp(arg, "ON") == 0 );
             set_rds_ms(ms);
 #ifdef CONTROL_PIPE_MESSAGES
-            printf("Set MS to ");
-            if(ms) printf("ON\n"); else printf("OFF\n");
+            printf("Set MS to %s\n", ms ? "ON" : "OFF");
 #endif
             return 1;
         }
 	if(res[0] == 'A' && res[1] == 'B') {
-            int ab = ( strcmp(arg, "ON") == 0 );
+            int ab = ( strcmp(arg, "A") == 0 );
             set_rds_ab(ab);
 #ifdef CONTROL_PIPE_MESSAGES
-            printf("Set AB to ");
-            if(ab) printf("ON\n"); else printf("OFF\n");
+            printf("Set AB to %s\n", ab ? "A" : "B");
 #endif
             return 1;
         }
@@ -169,6 +175,15 @@ int poll_control_pipe() {
                 set_19k_level(level_19k);
                 set_38k_level(level_38k);
                 set_57k_level(level_57k);
+                set_rds_switch(level_57k != 0);
+            }
+            return 1;
+        }
+        if (res[0] == 'V' && res[1] == 'O' && res[2] == 'L') {
+            unsigned int volume;
+            if (sscanf(arg, "%u", &volume) == 1) {
+                if (volume > 100) volume = 100;
+                set_output_volume(volume);
             }
             return 1;
         }

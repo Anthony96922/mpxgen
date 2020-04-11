@@ -20,10 +20,10 @@
 
 #define CONVERTER_TYPE SRC_SINC_FASTEST
 
-#define INPUT_DATA_SIZE 64
-#define DATA_SIZE 2048
+#define INPUT_DATA_SIZE 1024
+#define DATA_SIZE INPUT_DATA_SIZE * 32
 
-extern int fm_mpx_open(char *filename, int wait_for_audio, int rds_on, int exit_on_audio_end);
+extern int fm_mpx_open(char *filename, int wait_for_audio, int exit_on_audio_end);
 extern int fm_mpx_get_samples(float *mpx_buffer);
 extern void fm_mpx_close();
-extern int channels;
+extern void set_output_volume(int vol);
