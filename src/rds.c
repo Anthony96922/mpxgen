@@ -50,6 +50,7 @@ struct {
     int ab;
     int ps_update;
     int rt_update;
+    int rt_segments;
     int ptyn_update;
     int enable_ptyn;
     int encode_ctime;
@@ -129,6 +130,12 @@ void get_rds_ps_group(uint16_t *blocks) {
 	static char ps_text[8];
 	static int ps_state, af_state;
 
+	if (rds_controls.ps_update) {
+		strncpy(ps_text, rds_params.ps, 8);
+		rds_controls.ps_update = 0;
+		ps_state = 0; // rewind when new data arrives
+	}
+
 	blocks[1] |= /* 0 << 12 | */ rds_params.ta << 4 | rds_params.ms << 3 | ps_state;
 
 	// DI
@@ -139,9 +146,8 @@ void get_rds_ps_group(uint16_t *blocks) {
 		if (af_state == 0) {
 			blocks[2] = (rds_params.af[0] + 224) << 8 | rds_params.af[1];
 		} else {
-			blocks[2] = rds_params.af[af_state] << 8;
-			blocks[2] |= rds_params.af[af_state+1] ?
-					rds_params.af[af_state+1] : 0xCD;
+			blocks[2] = rds_params.af[af_state] << 8 |
+					rds_params.af[af_state+1] ? rds_params.af[af_state+1] : 0xCD;
 		}
 		af_state += 2;
 		if (af_state > rds_params.af[0]) af_state = 0;
@@ -150,14 +156,9 @@ void get_rds_ps_group(uint16_t *blocks) {
 	}
 
 	blocks[3] = ps_text[ps_state*2] << 8 | ps_text[ps_state*2+1];
+
 	ps_state++;
-	if (ps_state == 4) {
-		ps_state = 0;
-		if (rds_controls.ps_update) {
-			strncpy(ps_text, rds_params.ps, 8);
-			rds_controls.ps_update = 0;
-		}
-	}
+	if (ps_state == 4) ps_state = 0;
 }
 
 /* RT group (2A)
@@ -166,16 +167,10 @@ void get_rds_rt_group(uint16_t *blocks) {
 	static char rt_text[64];
 	static int rt_state;
 
-start_over:
 	if (rds_controls.rt_update) {
 		strncpy(rt_text, rds_params.rt, 64);
 		rds_controls.rt_update = 0;
-		rt_state = 0;
-	}
-
-	if (rt_text[rt_state*4] == 0) {
-		rt_state = 0;
-		goto start_over;
+		rt_state = 0; // rewind when new data arrives
 	}
 
 	blocks[1] |= 2 << 12 | rds_controls.ab << 4 | rt_state;
@@ -183,25 +178,18 @@ start_over:
 	blocks[3] = rt_text[rt_state*4+2] << 8 | rt_text[rt_state*4+3];
 
 	rt_state++;
-	if (rt_state == 16) rt_state = 0;
+	if (rt_state == rds_controls.rt_segments) rt_state = 0;
 }
 
 /* ODA group (3A)
  */
 void get_rds_oda_group(uint16_t *blocks) {
-	static int oda_state;
-
 	blocks[1] |= 3 << 12;
 
-	switch (oda_state++) {
-	case 0: // RT+
-		// Assign the RT+ AID to group 11A
-		blocks[1] |= 11 << 1;
-		blocks[3] = 0x4BD7; // RT+ AID
-		break;
-	}
-
-	if (oda_state == 1) oda_state = 0;
+	// RT+
+	// Assign the RT+ AID to group 11A
+	blocks[1] |= 11 << 1;
+	blocks[3] = 0x4BD7; // RT+ AID
 }
 
 /* PTYN group (10A)
@@ -210,17 +198,18 @@ void get_rds_ptyn_group(uint16_t *blocks) {
 	static char ptyn_text[8];
 	static int ptyn_state;
 
+	if (rds_controls.ptyn_update) {
+		strncpy(ptyn_text, rds_params.ptyn, 8);
+		rds_controls.ptyn_update = 0;
+		ptyn_state = 0; // rewind when new data arrives
+	}
+
 	blocks[1] |= 10 << 12 | ptyn_state;
 	blocks[2] = ptyn_text[ptyn_state*4+0] << 8 | ptyn_text[ptyn_state*4+1];
 	blocks[3] = ptyn_text[ptyn_state*4+2] << 8 | ptyn_text[ptyn_state*4+3];
+
 	ptyn_state++;
-	if (ptyn_state == 2) {
-		ptyn_state = 0;
-		if (rds_controls.ptyn_update) {
-			strncpy(ptyn_text, rds_params.ptyn, 8);
-			rds_controls.ptyn_update = 0;
-		}
-	}
+	if (ptyn_state == 2) ptyn_state = 0;
 }
 
 /* RT+ group (assigned to 11A)
@@ -238,35 +227,36 @@ void get_rds_rtp_group(uint16_t *blocks) {
 /* Lower priority groups are placed in a subsequence
  */
 int get_rds_other_groups(uint16_t *blocks) {
-	static int state;
-	static int timer;
+	static int group3A;
+	static int group10A;
+	static int group11A;
+	int group_coded = 0;
 
-	timer++;
-	if (timer == 12) {
-next:
-		switch (state) {
-		case 0: // Type 3A groups
-			get_rds_oda_group(blocks);
-			break;
-		case 1: // Type 10A groups
+	// Type 3A groups
+	if (group3A++ == 10) {
+		group3A = 0;
+		get_rds_oda_group(blocks);
+		group_coded = 1;
+	}
+
+	// Type 10A groups
+	if (!group_coded && group10A++ == 10) {
+		group10A = 0;
+		if (rds_controls.enable_ptyn) {
 			// Do not generate a 10A group if PTYN is off
-			if (!rds_controls.enable_ptyn) {
-				state++;
-				goto next;
-			}
 			get_rds_ptyn_group(blocks);
-			break;
-		case 2: // Type 11A groups
-			get_rds_rtp_group(blocks);
-			break;
+			group_coded = 1;
 		}
+	}
 
-		state++;
-		if (state == 3) state = 0;
+	// Type 11A groups
+	if (!group_coded && group11A++ == 10) {
+		group11A = 0;
+		get_rds_rtp_group(blocks);
+		group_coded = 1;
+	}
 
-		timer = 0;
-		return 1;
-	} else return 0;
+	return group_coded;
 }
 
 /* Creates an RDS group. This generates sequences of the form 0A, 2A, 0A, 2A, 0A, 2A, etc.
@@ -283,12 +273,11 @@ void get_rds_group(uint16_t *blocks) {
     // Generate block content
     if(!get_rds_ct_group(blocks)) { // CT (clock time) has priority on other group types
 	if (!get_rds_other_groups(blocks)) { // Other groups
-            if (!state) { // Type 0A groups
+            if (!state++) { // Type 0A groups
                 get_rds_ps_group(blocks);
             } else { // Type 2A groups
                 get_rds_rt_group(blocks);
             }
-            state++;
             if(state == 2) state = 0;
 	}
     }
@@ -393,19 +382,23 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_a
 	return -1;
     }
 
-    printf("RDS Options:\n");
-    printf("PI: %04X, PS: \"%s\", PTY: %d (%s), TP: %d\n",
-	pi, ps, pty, ptys[pty], tp);
-    printf("RT: \"%s\"\n", rt);
+    if (rds_controls.on) {
+	printf("RDS Options:\n");
+	printf("PI: %04X, PS: \"%s\", PTY: %d (%s), TP: %d\n",
+	    pi, ps, pty, ptys[pty], tp);
+	printf("RT: \"%s\"\n", rt);
+    }
 
     // AF
     if(af_array[0]) {
 	set_rds_af(af_array);
-	printf("AF: %d,", af_array[0]);
-	for(int f = 1; f < af_array[0]+1; f++) {
-	    printf(" %.1f", (float)(af_array[f]+875)/10);
+	if (rds_controls.on) {
+	    printf("AF: %d,", af_array[0]);
+	    for(int f = 1; f < af_array[0]+1; f++) {
+		printf(" %.1f", (float)(af_array[f]+875)/10);
+	    }
+	    printf("\n");
 	}
-	printf("\n");
     }
 
     set_rds_pi(pi);
@@ -413,8 +406,8 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_a
     set_rds_ab(1);
     set_rds_rt(rt);
     set_rds_pty(pty);
-    if (ptyn != NULL) {
-	printf("PTYN: \"%s\"\n", ptyn);
+    if (ptyn[0] != 0) {
+	if (rds_controls.on) printf("PTYN: \"%s\"\n", ptyn);
 	set_rds_ptyn(ptyn, 1);
     }
     set_rds_tp(tp);
@@ -439,6 +432,13 @@ void set_rds_rt(char *rt) {
 
     // Terminate RT with '\r' (carriage return) if RT is < 64 characters long
     if (rt_len < 64) rds_params.rt[rt_len] = '\r';
+
+    for (int i = 1; i <= 16; i++) {
+        if (i * 4 >= rt_len) {
+            rds_controls.rt_segments = i;
+            break; // We have reached the end of the text string
+        }
+    }
 }
 
 void set_rds_ps(char *ps) {
@@ -477,8 +477,6 @@ void set_rds_pty(int pty) {
 
 void set_rds_ptyn(char *ptyn, int enable) {
     rds_controls.enable_ptyn = enable;
-    if (!rds_controls.enable_ptyn) return;
-
     rds_controls.ptyn_update = 1;
     strncpy(rds_params.ptyn, ptyn, 8);
 }

@@ -214,7 +214,8 @@ int poll_control_pipe() {
 #ifdef CONTROL_PIPE_MESSAGES
                 printf("PTYN disabled\n");
 #endif
-                set_rds_ptyn(NULL, 0);
+                char tmp[8] = {0};
+                set_rds_ptyn(tmp, 0);
             } else {
 #ifdef CONTROL_PIPE_MESSAGES
                 printf("PTYN set to: \"%s\"\n", arg);
