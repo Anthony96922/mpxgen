@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <signal.h>
 #include <getopt.h>
+#include <string.h>
 #include <ao/ao.h>
 
 #include "rds.h"
@@ -32,17 +33,25 @@ void stop() {
 	stop_mpx = 1;
 }
 
-void scale(float *inbuf, short *outbuf, size_t inbufsize) {
+void float2char(float *inbuf, char *outbuf, size_t inbufsize) {
+	int j = 0;
+	short sample;
 	for (int i = 0; i < inbufsize; i++) {
-		outbuf[i] = inbuf[i] * 32767;
+		sample = inbuf[i] * 32767;
+		outbuf[j+0] = sample & 255;
+		outbuf[j+1] = sample >> 8;
+		j += 2;
 	}
 }
 
-void scale_2ch(float *inbuf, short *outbuf, size_t inbufsize) {
+void float2char_2ch(float *inbuf, char *outbuf, size_t inbufsize) {
 	int j = 0;
+	short sample;
 	for (int i = 0; i < inbufsize; i++) {
-		outbuf[j] = outbuf[j+1] = inbuf[i] * 32767;
-		j += 2;
+		sample = inbuf[i] * 32767;
+		outbuf[j+0] = outbuf[j+2] = sample & 255;
+		outbuf[j+1] = outbuf[j+3] = sample >> 8;
+		j += 4;
 	}
 }
 
@@ -57,7 +66,7 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 	// Data structures for baseband data
 	float mpx_data[DATA_SIZE];
 	float resample_out[DATA_SIZE];
-	short dev_out[DATA_SIZE];
+	char dev_out[DATA_SIZE];
 
 	// AO
 	ao_device *device;
@@ -98,12 +107,12 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 	}
 
 	// Initialize the baseband generator
-	if(fm_mpx_open(audio_file, wait, 0) < 0) return 1;
+	if(fm_mpx_open(audio_file, wait) < 0) return 1;
 	set_output_volume(mpx);
 
 	// Initialize the RDS modulator
-	if (init_rds_encoder(pi, ps, rt, pty, tp, af, ptyn) < 0) return 1;
 	set_rds_switch(rds);
+	if (init_rds_encoder(pi, ps, rt, pty, tp, af, ptyn) < 0) return 1;
 
 	// Initialize the control pipe reader
 	if(control_pipe) {
@@ -126,12 +135,12 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 		}
 
 		if (format.channels == 2)
-			scale_2ch(resample_out, dev_out, src_data.output_frames_gen);
+			float2char_2ch(resample_out, dev_out, src_data.output_frames_gen);
 		else
-			scale(resample_out, dev_out, src_data.output_frames_gen);
+			float2char(resample_out, dev_out, src_data.output_frames_gen);
 
 		// num_bytes = src_data.output_frames_gen * channels * bytes per sample
-		if (!ao_play(device, (char *)dev_out, src_data.output_frames_gen * format.channels * sizeof(short))) {
+		if (!ao_play(device, dev_out, src_data.output_frames_gen * format.channels * sizeof(short))) {
 			fprintf(stderr, "Error: could not play audio.\n");
 			break;
 		}
@@ -161,9 +170,10 @@ int main(int argc, char **argv) {
 	int rds = 1;
 	int alternative_freq[MAX_AF+1];
 	int af_size = 0;
-	char *ps = "mpxgen";
-	char *rt = "mpxgen: FM Stereo and RDS encoder";
-	char *ptyn = NULL;
+	// Use arrays to enforce max length for RDS text items
+	char ps[9] = "mpxgen";
+	char rt[65] = "mpxgen: FM Stereo and RDS encoder";
+	char ptyn[9] = {0};
 	uint16_t pi = 0xFFFF;
 	int pty = 0;
 	int tp = 0;
@@ -231,11 +241,11 @@ int main(int argc, char **argv) {
 				break;
 
 			case 's': //ps
-				ps = optarg;
+				strncpy(ps, optarg, 8);
 				break;
 
 			case 'r': //rt
-				rt = optarg;
+				strncpy(rt, optarg, 64);
 				break;
 
 			case 'p': //pty
@@ -260,7 +270,7 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'P': //ptyn
-				ptyn = optarg;
+				strncpy(ptyn, optarg, 8);
 				break;
 
 			case 'C': //ctl

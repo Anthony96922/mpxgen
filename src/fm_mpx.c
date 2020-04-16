@@ -38,19 +38,15 @@ float *resampled_input;
 
 int channels;
 int audio_wait;
-int stop_audio;
 
 SNDFILE *inf;
 
 // SRC
-int src_errorcode;
-
 SRC_STATE *src_state;
 SRC_DATA src_data;
 
-int fm_mpx_open(char *filename, int wait_for_audio, int exit_on_audio_end) {
+int fm_mpx_open(char *filename, int wait_for_audio) {
 	audio_wait = wait_for_audio;
-	stop_audio = exit_on_audio_end;
 
 	if(filename == NULL) return 0;
 
@@ -106,8 +102,9 @@ int fm_mpx_open(char *filename, int wait_for_audio, int exit_on_audio_end) {
 	src_data.data_in = audio_input;
 	src_data.data_out = resampled_input;
 
-	if ((src_state = src_new(CONVERTER_TYPE, channels, &src_errorcode)) == NULL) {
-		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_errorcode));
+	int src_error;
+	if ((src_state = src_new(CONVERTER_TYPE, channels, &src_error)) == NULL) {
+		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_error));
 		goto error;
 	}
 
@@ -118,8 +115,11 @@ error:
 	return -1;
 }
 
+int audio_len;
+
 int get_input_audio() {
-	int audio_len;
+	int src_error;
+	static int silence;
 
 get_audio:
 	audio_len = sf_readf_float(inf, audio_input, INPUT_DATA_SIZE);
@@ -128,27 +128,32 @@ get_audio:
 		fprintf(stderr, "Error reading audio\n");
 		return -1;
 	} else if (audio_len == 0) {
-		if (stop_audio) return -1;
+		//return -1;
 		// Check if we have more audio
-		if( sf_seek(inf, 0, SEEK_SET) < 0 ) {
+		if (sf_seek(inf, 0, SEEK_SET) < 0) {
 			if (audio_wait) {
-				memset(resampled_input, 0, INPUT_DATA_SIZE * channels * sizeof(float));
-				audio_len = INPUT_DATA_SIZE;
+				if (!silence) {
+					memset(resampled_input, 0, INPUT_DATA_SIZE * channels * sizeof(float));
+					audio_len = INPUT_DATA_SIZE;
+					silence = 1;
+				}
 			} else {
 				fprintf(stderr, "Could not rewind in audio file, terminating\n");
 				return -1;
 			}
 		} else goto get_audio; // Try to get new audio
-	} else { // Upsample the input
+	} else {
+		silence = 0;
+		// Upsample the input
 		src_data.input_frames = audio_len;
-		if ((src_errorcode = src_process(src_state, &src_data))) {
-			fprintf(stderr, "Error: src_process failed: %s\n", src_strerror(src_errorcode));
+		if ((src_error = src_process(src_state, &src_data))) {
+			fprintf(stderr, "Error: src_process failed: %s\n", src_strerror(src_error));
 			return -1;
 		}
 		audio_len = src_data.output_frames_gen;
 	}
 
-	return audio_len;
+	return 0;
 }
 
 float mpx_vol;
@@ -160,19 +165,23 @@ void set_output_volume(int vol) {
 int fm_mpx_get_samples(float *mpx_buffer) {
 	if (inf == NULL) {
 		for (int i = 0; i < INPUT_DATA_SIZE; i++) {
-			mpx_buffer[i] = get_57k_carrier() * get_rds_sample() * 0.08;
+			// 6% modulation
+			mpx_buffer[i] = get_57k_carrier() * get_rds_sample() * 0.12;
+
 			update_carrier_phase();
+
 			mpx_buffer[i] *= mpx_vol;
 		}
 		return INPUT_DATA_SIZE;
 	}
 
-	int buf_size = get_input_audio();
+	if (get_input_audio() < 0) return -1;
+
+	if (!audio_len) audio_len = INPUT_DATA_SIZE;
 
 	static int fir_index;
 	int j = 0;
-
-	for (int i = 0; i < buf_size; i++) {
+	for (int i = 0; i < audio_len; i++) {
 		// First store the current sample(s) into the FIR filter's ring buffer
 		fir_buffer_left[fir_index] = resampled_input[j];
 		if (channels == 2) {
@@ -217,13 +226,14 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		if (channels == 2) {
 			// audio signals need to be limited to 45% to remain within modulation limits
 			mpx_buffer[i] = out_mono * 0.45 +
-				get_19k_carrier() * 0.08 +
+				get_19k_carrier() * 0.08 + // 8% modulation
 				get_38k_carrier() * out_stereo * 0.45;
 		} else {
 			// mono audio is limited to 90%
 			mpx_buffer[i] = out_mono * 0.9;
 		}
 
+		// 6% modulation
 		mpx_buffer[i] += get_57k_carrier() * get_rds_sample() * 0.12;
 
 		update_carrier_phase();
@@ -231,7 +241,7 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		mpx_buffer[i] *= mpx_vol;
 	}
 
-	return buf_size;
+	return audio_len;
 }
 
 void fm_mpx_close() {
