@@ -30,6 +30,7 @@ struct {
     int pty;
     int tp;
     int ms;
+    int ab;
     int di;
     int af[MAX_AF+1];
     // PS
@@ -47,7 +48,6 @@ struct {
 // RDS data controls
 struct {
     int on;
-    int ab;
     int ps_update;
     int rt_update;
     int rt_segments;
@@ -130,10 +130,9 @@ void get_rds_ps_group(uint16_t *blocks) {
 	static char ps_text[8];
 	static int ps_state, af_state;
 
-	if (rds_controls.ps_update) {
+	if (ps_state == 0 && rds_controls.ps_update) {
 		strncpy(ps_text, rds_params.ps, 8);
 		rds_controls.ps_update = 0;
-		ps_state = 0; // rewind when new data arrives
 	}
 
 	blocks[1] |= /* 0 << 12 | */ rds_params.ta << 4 | rds_params.ms << 3 | ps_state;
@@ -167,13 +166,12 @@ void get_rds_rt_group(uint16_t *blocks) {
 	static char rt_text[64];
 	static int rt_state;
 
-	if (rds_controls.rt_update) {
+	if (rt_state == 0 && rds_controls.rt_update) {
 		strncpy(rt_text, rds_params.rt, 64);
 		rds_controls.rt_update = 0;
-		rt_state = 0; // rewind when new data arrives
 	}
 
-	blocks[1] |= 2 << 12 | rds_controls.ab << 4 | rt_state;
+	blocks[1] |= 2 << 12 | rds_params.ab << 4 | rt_state;
 	blocks[2] = rt_text[rt_state*4+0] << 8 | rt_text[rt_state*4+1];
 	blocks[3] = rt_text[rt_state*4+2] << 8 | rt_text[rt_state*4+3];
 
@@ -198,10 +196,9 @@ void get_rds_ptyn_group(uint16_t *blocks) {
 	static char ptyn_text[8];
 	static int ptyn_state;
 
-	if (rds_controls.ptyn_update) {
+	if (ptyn_state == 0 && rds_controls.ptyn_update) {
 		strncpy(ptyn_text, rds_params.ptyn, 8);
 		rds_controls.ptyn_update = 0;
-		ptyn_state = 0; // rewind when new data arrives
 	}
 
 	blocks[1] |= 10 << 12 | ptyn_state;
@@ -427,17 +424,21 @@ void set_rds_rt(char *rt) {
     int rt_len = strlen(rt);
 
     rds_controls.rt_update = 1;
-    rds_controls.ab ^= 1;
+    rds_params.ab ^= 1;
     strncpy(rds_params.rt, rt, 64);
 
-    // Terminate RT with '\r' (carriage return) if RT is < 64 characters long
-    if (rt_len < 64) rds_params.rt[rt_len] = '\r';
+    if (rt_len < 64) {
+        // Terminate RT with '\r' (carriage return) if RT is < 64 characters long
+        rds_params.rt[rt_len] = '\r';
 
-    for (int i = 1; i <= 16; i++) {
-        if (i * 4 >= rt_len) {
-            rds_controls.rt_segments = i;
-            break; // We have reached the end of the text string
+        for (int i = 1; i <= 16; i++) {
+            if (i * 4 >= rt_len + 1) { // Add 1 because we're also counting the "\r"
+                rds_controls.rt_segments = i;
+                break; // We have reached the end of the text string
+            }
         }
+    } else {
+        rds_controls.rt_segments = 16; // default to 16 if RT is 64 characters long
     }
 }
 
@@ -494,7 +495,7 @@ void set_rds_ms(int ms) {
 }
 
 void set_rds_ab(int ab) {
-    rds_controls.ab = ab;
+    rds_params.ab = ab;
 }
 
 void set_rds_di(int di) {
