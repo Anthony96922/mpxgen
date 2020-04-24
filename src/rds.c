@@ -146,7 +146,7 @@ void get_rds_ps_group(uint16_t *blocks) {
 			blocks[2] = (rds_params.af[0] + 224) << 8 | rds_params.af[1];
 		} else {
 			blocks[2] = rds_params.af[af_state] << 8 |
-					rds_params.af[af_state+1] ? rds_params.af[af_state+1] : 0xCD;
+					(rds_params.af[af_state+1] ? rds_params.af[af_state+1] : 0xCD);
 		}
 		af_state += 2;
 		if (af_state > rds_params.af[0]) af_state = 0;
@@ -166,9 +166,10 @@ void get_rds_rt_group(uint16_t *blocks) {
 	static char rt_text[64];
 	static int rt_state;
 
-	if (rt_state == 0 && rds_controls.rt_update) {
+	if (rds_controls.rt_update) {
 		strncpy(rt_text, rds_params.rt, 64);
 		rds_controls.rt_update = 0;
+		rt_state = 0; // rewind when new RT arrives
 	}
 
 	blocks[1] |= 2 << 12 | rds_params.ab << 4 | rt_state;
