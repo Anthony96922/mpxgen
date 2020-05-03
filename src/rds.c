@@ -381,21 +381,21 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_a
     }
 
     if (rds_controls.on) {
-	printf("RDS Options:\n");
-	printf("PI: %04X, PS: \"%s\", PTY: %d (%s), TP: %d\n",
+	fprintf(stderr, "RDS Options:\n");
+	fprintf(stderr, "PI: %04X, PS: \"%s\", PTY: %d (%s), TP: %d\n",
 	    pi, ps, pty, ptys[pty], tp);
-	printf("RT: \"%s\"\n", rt);
+	fprintf(stderr, "RT: \"%s\"\n", rt);
     }
 
     // AF
     if(af_array[0]) {
 	set_rds_af(af_array);
 	if (rds_controls.on) {
-	    printf("AF: %d,", af_array[0]);
+	    fprintf(stderr, "AF: %d,", af_array[0]);
 	    for(int f = 1; f < af_array[0]+1; f++) {
-		printf(" %.1f", (float)(af_array[f]+875)/10);
+		fprintf(stderr, " %.1f", (float)(af_array[f]+875)/10);
 	    }
-	    printf("\n");
+	    fprintf(stderr, "\n");
 	}
     }
 
@@ -405,7 +405,7 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_a
     set_rds_rt(rt);
     set_rds_pty(pty);
     if (ptyn[0] != 0) {
-	if (rds_controls.on) printf("PTYN: \"%s\"\n", ptyn);
+	if (rds_controls.on) fprintf(stderr, "PTYN: \"%s\"\n", ptyn);
 	set_rds_ptyn(ptyn, 1);
     }
     set_rds_tp(tp);

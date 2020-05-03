@@ -59,14 +59,14 @@ int fm_mpx_open(char *filename, int wait_for_audio) {
 			fprintf(stderr, "Error: could not open stdin for audio input.\n");
 			return -1;
 		} else {
-			printf("Using stdin for audio input.\n");
+			fprintf(stderr, "Using stdin for audio input.\n");
 		}
 	} else {
 		if(!(inf = sf_open(filename, SFM_READ, &sfinfo))) {
 			fprintf(stderr, "Error: could not open input file %s.\n", filename);
 			return -1;
 		} else {
-			printf("Using audio file: %s\n", filename);
+			fprintf(stderr, "Using audio file: %s\n", filename);
 		}
 	}
 
@@ -74,7 +74,7 @@ int fm_mpx_open(char *filename, int wait_for_audio) {
 	float upsample_factor = 228000. / in_samplerate;
 	channels = sfinfo.channels;
 
-	printf("Input: %d Hz, %d channels, upsampling factor: %.2f\n", in_samplerate, channels, upsample_factor);
+	fprintf(stderr, "Input: %d Hz, %d channels, upsampling factor: %.2f\n", in_samplerate, channels, upsample_factor);
 
 	int cutoff_freq = 15500;
 	if(cutoff_freq > in_samplerate/2) cutoff_freq = in_samplerate/2;
@@ -90,7 +90,7 @@ int fm_mpx_open(char *filename, int wait_for_audio) {
 			* (.54 - .46 * cos(2 * M_PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
 	}
 
-	printf("Created low-pass FIR filter for audio channels, with cutoff at %d Hz\n", cutoff_freq);
+	fprintf(stderr, "Created low-pass FIR filter for audio channels, with cutoff at %d Hz\n", cutoff_freq);
 
 	audio_input = malloc(INPUT_DATA_SIZE * channels * sizeof(float));
 	resampled_input = malloc(DATA_SIZE * channels * sizeof(float));
