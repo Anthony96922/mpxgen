@@ -20,6 +20,7 @@
 #include <signal.h>
 #include <getopt.h>
 #include <string.h>
+#include <unistd.h>
 #include <ao/ao.h>
 
 #include "rds.h"
@@ -69,7 +70,15 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 
 	if (output_file != NULL) {
 		format.channels = 1;
-		if ((device = ao_open_file(ao_driver_id("raw"), output_file, 1, &format, NULL)) == NULL) {
+		int ao_driver = ao_driver_id("wav");
+		if (strcmp(output_file, "-") == 0) {
+			ao_driver = ao_driver_id("raw");
+			if (isatty(fileno(stdout))) {
+				fprintf(stderr, "Not writing audio data to a terminal. Exiting.\n");
+				return 1;
+			}
+		}
+		if ((device = ao_open_file(ao_driver, output_file, 1, &format, NULL)) == NULL) {
 			fprintf(stderr, "Error: cannot open output file.\n");
 			return 1;
 		}
