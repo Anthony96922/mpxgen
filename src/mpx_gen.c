@@ -25,7 +25,6 @@
 #include "rds.h"
 #include "fm_mpx.h"
 #include "control_pipe.h"
-#include "cpu.h"
 
 int stop_mpx;
 
@@ -33,25 +32,19 @@ void stop() {
 	stop_mpx = 1;
 }
 
-void float2char(float *inbuf, char *outbuf, size_t inbufsize) {
+void float2char(float *inbuf, char *outbuf, size_t inbufsize, int channels) {
 	int j = 0;
 	short sample;
 	for (int i = 0; i < inbufsize; i++) {
 		sample = inbuf[i] * 32767;
 		outbuf[j+0] = sample & 255;
 		outbuf[j+1] = sample >> 8;
+		if (channels == 2) {
+			outbuf[j+2] = outbuf[j+0];
+			outbuf[j+3] = outbuf[j+1];
+			j += 2;
+		}
 		j += 2;
-	}
-}
-
-void float2char_2ch(float *inbuf, char *outbuf, size_t inbufsize) {
-	int j = 0;
-	short sample;
-	for (int i = 0; i < inbufsize; i++) {
-		sample = inbuf[i] * 32767;
-		outbuf[j+0] = outbuf[j+2] = sample & 255;
-		outbuf[j+1] = outbuf[j+3] = sample >> 8;
-		j += 4;
 	}
 }
 
@@ -59,9 +52,6 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 	// Gracefully stop the encoder on SIGINT or SIGTERM
 	signal(SIGINT, stop);
 	signal(SIGTERM, stop);
-
-	// Work around random audio ticks
-	set_affinity(3);
 
 	// Data structures for baseband data
 	float mpx_data[DATA_SIZE];
@@ -79,7 +69,7 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 
 	if (output_file != NULL) {
 		format.channels = 1;
-		if ((device = ao_open_file(ao_driver_id("wav"), output_file, 1, &format, NULL)) == NULL) {
+		if ((device = ao_open_file(ao_driver_id("raw"), output_file, 1, &format, NULL)) == NULL) {
 			fprintf(stderr, "Error: cannot open output file.\n");
 			return 1;
 		}
@@ -134,12 +124,9 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 			break;
 		}
 
-		if (format.channels == 2)
-			float2char_2ch(resample_out, dev_out, src_data.output_frames_gen);
-		else
-			float2char(resample_out, dev_out, src_data.output_frames_gen);
+		float2char(resample_out, dev_out, src_data.output_frames_gen, format.channels);
 
-		// num_bytes = src_data.output_frames_gen * channels * bytes per sample
+		// num_bytes = audio frames * channels * bytes per sample
 		if (!ao_play(device, dev_out, src_data.output_frames_gen * format.channels * sizeof(short))) {
 			fprintf(stderr, "Error: could not play audio.\n");
 			break;
@@ -171,8 +158,8 @@ int main(int argc, char **argv) {
 	int alternative_freq[MAX_AF+1];
 	int af_size = 0;
 	// Use arrays to enforce max length for RDS text items
-	char ps[9] = "mpxgen";
-	char rt[65] = "mpxgen: FM Stereo and RDS encoder";
+	char ps[9] = "Mpxgen";
+	char rt[65] = "Mpxgen: FM Stereo and RDS encoder";
 	char ptyn[9] = {0};
 	uint16_t pi = 0xFFFF;
 	int pty = 0;
@@ -186,6 +173,7 @@ int main(int argc, char **argv) {
 	{
 		{"audio", 	required_argument, NULL, 'a'},
 		{"output-file",	required_argument, NULL, 'o'},
+
 		{"mpx",		required_argument, NULL, 'm'},
 		{"ppm",		required_argument, NULL, 'x'},
 		{"wait",	required_argument, NULL, 'W'},
@@ -278,21 +266,35 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'h': //help
-				fprintf(stderr, "Help: %s\n"
-				      "	[--audio (-a) file]\n"
-				      "	[--output-file (-o) WAVE out]\n"
-				      "	[--ppm (-x) clock correction]\n"
-				      "	[--mpx (-m) mpx-volume]\n"
-				      "	[--wait (-W) wait-switch]\n"
-				      "	[--rds (-R) rds-switch]\n"
-				      "	[--pi (-i) pi-code]\n"
-				      "	[--ps (-s) ps-text]\n"
-				      "	[--rt (-r) radiotext]\n"
-				      "	[--pty (-p) program-type]\n"
-				      "	[--tp (-T) traffic-program]\n"
-				      "	[--af (-A) alternative-freq]\n"
-				      "	[--ptyn (-P) pty-name]\n"
-				      "	[--ctl (-C) control-pipe]\n", argv[0]);
+				fprintf(stderr,
+					"This is Mpxgen, a lightweight Stereo and RDS encoder.\n"
+					"\n"
+					"Usage: %s [options]\n"
+					"\n"
+					"Audio:\n"
+					"\n"
+					"    --audio / -a        Input file or pipe\n"
+					"    --output-file / -o  PCM out\n"
+					"\n"
+					"MPX controls:\n"
+					"\n"
+					"    --mpx / -m          MPX volume\n"
+					"    --ppm / -x          Clock drift correction\n"
+					"    --wait / -W         Wait for new audio\n"
+					"\n"
+					"RDS encoder:\n"
+					"\n"
+					"    --rds / -R          RDS switch\n"
+					"    --pi / -i           Program Identification code\n"
+					"    --ps / -s           Program Service name\n"
+					"    --rt / -r           Radio Text\n"
+					"    --pty / -p          Program Type\n"
+					"    --tp / -T           Traffic Program\n"
+					"    --af / -A           Alternative Frequency (more than one AF may be passed)\n"
+					"    --ptyn / -P         PTY Name\n"
+					"    --ctl / -C          Control pipe\n"
+					"\n",
+				argv[0]);
 				return 1;
 
 			default:
