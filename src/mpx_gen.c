@@ -116,9 +116,9 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 	// Initialize the control pipe reader
 	if(control_pipe) {
 		if(open_control_pipe(control_pipe) == 0) {
-			printf("Reading control commands on %s.\n", control_pipe);
+			fprintf(stderr, "Reading control commands on %s.\n", control_pipe);
 		} else {
-			printf("Failed to open control pipe: %s.\n", control_pipe);
+			fprintf(stderr, "Failed to open control pipe: %s.\n", control_pipe);
 			control_pipe = NULL;
 		}
 	}
@@ -142,7 +142,7 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 		}
 
 		if (stop_mpx) {
-			printf("Stopping...\n");
+			fprintf(stderr, "Stopping...\n");
 			break;
 		}
 	}

@@ -70,7 +70,7 @@ int poll_control_pipe() {
             uint16_t pi = (uint16_t) strtol(arg, NULL, 16);
             set_rds_pi(pi);
 #ifdef CONTROL_PIPE_MESSAGES
-            printf("PI set to: \"%04X\"\n", pi);
+            fprintf(stderr, "PI set to: \"%04X\"\n", pi);
 #endif
             return 1;
         }
@@ -78,7 +78,7 @@ int poll_control_pipe() {
             arg[8] = 0;
             set_rds_ps(arg);
 #ifdef CONTROL_PIPE_MESSAGES
-            printf("PS set to: \"%s\"\n", arg);
+            fprintf(stderr, "PS set to: \"%s\"\n", arg);
 #endif
             return 1;
         }
@@ -86,7 +86,7 @@ int poll_control_pipe() {
             arg[64] = 0;
             set_rds_rt(arg);
 #ifdef CONTROL_PIPE_MESSAGES
-            printf("RT set to: \"%s\"\n", arg);
+            fprintf(stderr, "RT set to: \"%s\"\n", arg);
 #endif
             return 1;
         }
@@ -94,7 +94,7 @@ int poll_control_pipe() {
             int ta = ( strcmp(arg, "ON") == 0 );
             set_rds_ta(ta);
 #ifdef CONTROL_PIPE_MESSAGES
-            printf("Set TA to %s\n", ta ? "ON" : "OFF");
+            fprintf(stderr, "Set TA to %s\n", ta ? "ON" : "OFF");
 #endif
             return 1;
         }
@@ -102,7 +102,7 @@ int poll_control_pipe() {
             int tp = ( strcmp(arg, "ON") == 0 );
             set_rds_tp(tp);
 #ifdef CONTROL_PIPE_MESSAGES
-            printf("Set TP to %s\n", tp ? "ON" : "OFF");
+            fprintf(stderr, "Set TP to %s\n", tp ? "ON" : "OFF");
 #endif
             return 1;
         }
@@ -110,7 +110,7 @@ int poll_control_pipe() {
             int ms = ( strcmp(arg, "ON") == 0 );
             set_rds_ms(ms);
 #ifdef CONTROL_PIPE_MESSAGES
-            printf("Set MS to %s\n", ms ? "ON" : "OFF");
+            fprintf(stderr, "Set MS to %s\n", ms ? "ON" : "OFF");
 #endif
             return 1;
         }
@@ -118,7 +118,7 @@ int poll_control_pipe() {
             int ab = ( strcmp(arg, "A") == 0 );
             set_rds_ab(ab);
 #ifdef CONTROL_PIPE_MESSAGES
-            printf("Set AB to %s\n", ab ? "A" : "B");
+            fprintf(stderr, "Set AB to %s\n", ab ? "A" : "B");
 #endif
             return 1;
         }
@@ -133,13 +133,13 @@ int poll_control_pipe() {
                 set_rds_pty(pty);
 #ifdef CONTROL_PIPE_MESSAGES
                 if (!pty) {
-                    printf("PTY disabled\n");
+                    fprintf(stderr, "PTY disabled\n");
                 } else {
-                    printf("PTY set to: %i\n", pty);
+                    fprintf(stderr, "PTY set to: %i\n", pty);
                 }
             }
             else {
-                printf("Wrong PTY identifier! The PTY range is 0 - 31.\n");
+                fprintf(stderr, "Wrong PTY identifier! The PTY range is 0 - 31.\n");
 #endif
             }
             return 1;
@@ -154,14 +154,14 @@ int poll_control_pipe() {
                 if (len_1 > 64) len_1 = 0;
                 if (len_2 > 32) len_2 = 0;
 #ifdef CONTROL_PIPE_MESSAGES
-                printf("RT+ tag 1: type: %u, start: %u, length: %u\n", type_1, start_1, len_1);
-                printf("RT+ tag 2: type: %u, start: %u, length: %u\n", type_2, start_2, len_2);
+                fprintf(stderr, "RT+ tag 1: type: %u, start: %u, length: %u\n", type_1, start_1, len_1);
+                fprintf(stderr, "RT+ tag 2: type: %u, start: %u, length: %u\n", type_2, start_2, len_2);
 #endif
                 set_rds_rtp_tags(type_1, start_1, len_1, type_2, start_2, len_2);
             }
 #ifdef CONTROL_PIPE_MESSAGES
             else {
-                printf("Could not parse RT+ tag info.\n");
+                fprintf(stderr, "Could not parse RT+ tag info.\n");
             }
 #endif
             return 1;
@@ -197,13 +197,13 @@ int poll_control_pipe() {
                 if (running > 1) running = 0;
                 if (toggle > 1) toggle = 0;
 #ifdef CONTROL_PIPE_MESSAGES
-                printf("RT+ flags: running: %u, toggle: %u\n", running, toggle);
+                fprintf(stderr, "RT+ flags: running: %u, toggle: %u\n", running, toggle);
 #endif
                 set_rds_rtp_flags(running, toggle);
             }
 #ifdef CONTROL_PIPE_MESSAGES
             else {
-                printf("Could not parse RT+ flags.\n");
+                fprintf(stderr, "Could not parse RT+ flags.\n");
             }
 #endif
 	    return 1;
@@ -212,13 +212,13 @@ int poll_control_pipe() {
             arg[8] = 0;
             if (strcmp(arg, "OFF") == 0) {
 #ifdef CONTROL_PIPE_MESSAGES
-                printf("PTYN disabled\n");
+                fprintf(stderr, "PTYN disabled\n");
 #endif
                 char tmp[8] = {0};
                 set_rds_ptyn(tmp, 0);
             } else {
 #ifdef CONTROL_PIPE_MESSAGES
-                printf("PTYN set to: \"%s\"\n", arg);
+                fprintf(stderr, "PTYN set to: \"%s\"\n", arg);
 #endif
                 set_rds_ptyn(arg, 1);
             }
