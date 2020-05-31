@@ -287,23 +287,23 @@ int main(int argc, char **argv) {
 					"\n"
 					"MPX controls:\n"
 					"\n"
-					"    --mpx / -m          MPX volume\n"
+					"    --mpx / -m          MPX volume [ default: %.0f ]\n"
 					"    --ppm / -x          Clock drift correction\n"
-					"    --wait / -W         Wait for new audio\n"
+					"    --wait / -W         Wait for new audio [ default: %d ]\n"
 					"\n"
 					"RDS encoder:\n"
 					"\n"
-					"    --rds / -R          RDS switch\n"
-					"    --pi / -i           Program Identification code\n"
-					"    --ps / -s           Program Service name\n"
-					"    --rt / -r           Radio Text\n"
-					"    --pty / -p          Program Type\n"
-					"    --tp / -T           Traffic Program\n"
+					"    --rds / -R          RDS switch [ default: %d ]\n"
+					"    --pi / -i           Program Identification code [ default: %04X ]\n"
+					"    --ps / -s           Program Service name [ default: \"%s\" ]\n"
+					"    --rt / -r           Radio Text [ default: \"%s\" ]\n"
+					"    --pty / -p          Program Type [ default: %d ]\n"
+					"    --tp / -T           Traffic Program [ default: %d ]\n"
 					"    --af / -A           Alternative Frequency (more than one AF may be passed)\n"
 					"    --ptyn / -P         PTY Name\n"
 					"    --ctl / -C          Control pipe\n"
 					"\n",
-				argv[0]);
+				argv[0], mpx, wait, rds, pi, ps, rt, pty, tp);
 				return 1;
 
 			default:
