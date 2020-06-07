@@ -231,7 +231,7 @@ int get_rds_other_groups(uint16_t *blocks) {
 	int group_coded = 0;
 
 	// Type 3A groups
-	if (group3A++ == 10) {
+	if (group3A++ == 20) {
 		group3A = 0;
 		get_rds_oda_group(blocks);
 		group_coded = 1;
@@ -248,7 +248,7 @@ int get_rds_other_groups(uint16_t *blocks) {
 	}
 
 	// Type 11A groups
-	if (!group_coded && group11A++ == 10) {
+	if (!group_coded && group11A++ == 20) {
 		group11A = 0;
 		get_rds_rtp_group(blocks);
 		group_coded = 1;
@@ -265,8 +265,6 @@ void get_rds_group(uint16_t *blocks) {
     // Basic block data
     blocks[0] = rds_params.pi;
     blocks[1] = rds_params.tp << 10 | rds_params.pty << 5;
-    blocks[2] = 0;
-    blocks[3] = 0;
 
     // Generate block content
     if(!get_rds_ct_group(blocks)) { // CT (clock time) has priority on other group types
@@ -282,7 +280,7 @@ void get_rds_group(uint16_t *blocks) {
 }
 
 void get_rds_bits(int *out_buffer) {
-    static uint16_t out_blocks[GROUP_LENGTH];
+    uint16_t out_blocks[GROUP_LENGTH] = {0};
     get_rds_group(out_blocks);
 
     // Calculate the checkword for each block and emit the bits
