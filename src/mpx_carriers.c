@@ -19,10 +19,23 @@
 float carrier_19k[] = {0, 0.5, 0.8660254, 1, 0.8660254, 0.5, 0, -0.5, -0.8660254, -1, -0.8660254, -0.5};
 float carrier_38k[] = {0, 0.8660254, 0.8660254, 0, -0.8660254, -0.8660254};
 float carrier_57k[] = {0, 1, 0, -1};
+#ifdef RDS2
+/* RDS 2 carriers
+ * 66.5/71.25/76
+ */
+float carrier_67k[] = {0, 0.9659258, -0.5, -0.7071068, 0.8660254, 0.258819, -1, 0.258819, 0.8660254, -0.7071068, -0.5, 0.9659258, 0, -0.9659258, 0.5, 0.7071068, -0.8660254, -0.258819, 1, -0.258819, -0.8660254, 0.7071068, 0.5, -0.9659258};
+float carrier_71k[] = {0, 0.9238795, -0.7071068, -0.3826834, 1, -0.3826834, -0.7071068, 0.9238795, 0, -0.9238795, 0.7071068, 0.3826834, -1, 0.3826834, 0.7071068, -0.9238795};
+float carrier_76k[] = {0, 0.8660254, -0.8660254, 0, 0.8660254, -0.8660254};
+#endif
 
 int phase_19k;
 int phase_38k;
 int phase_57k;
+#ifdef RDS2
+int phase_67k;
+int phase_71k;
+int phase_76k;
+#endif
 
 float level_19k = 1;
 float level_38k = 1;
@@ -40,10 +53,29 @@ float get_57k_carrier() {
 	return carrier_57k[phase_57k] * level_57k;
 }
 
+#ifdef RDS2
+float get_67k_carrier() {
+	return carrier_67k[phase_67k];
+}
+
+float get_71k_carrier() {
+	return carrier_71k[phase_71k];
+}
+
+float get_76k_carrier() {
+	return carrier_76k[phase_76k];
+}
+#endif
+
 void update_carrier_phase() {
 	if (++phase_19k == 12) phase_19k = 0;
 	if (++phase_38k == 6) phase_38k = 0;
 	if (++phase_57k == 4) phase_57k = 0;
+#ifdef RDS2
+	if (++phase_67k == 24) phase_67k = 0;
+	if (++phase_71k == 16) phase_71k = 0;
+	if (++phase_76k == 6) phase_76k = 0;
+#endif
 }
 
 void set_19k_level(int new_level) {

@@ -1,6 +1,6 @@
 /*
  * mpxgen - FM multiplex encoder with Stereo and RDS
- * Copyright (C) 2019 Anthony96922
+ * Copyright (C) 2019-2020 Anthony96922
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,13 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern float get_19k_carrier();
-extern float get_38k_carrier();
-extern float get_57k_carrier();
-extern float get_67k_carrier();
-extern float get_71k_carrier();
-extern float get_76k_carrier();
-extern void set_19k_level(int level_19k);
-extern void set_38k_level(int level_38k);
-extern void set_57k_level(int level_57k);
-extern void update_carrier_phase();
+extern float get_rds2_stream1_sample();
+extern float get_rds2_stream2_sample();
+extern float get_rds2_stream3_sample();

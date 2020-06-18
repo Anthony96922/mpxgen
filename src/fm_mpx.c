@@ -22,6 +22,9 @@
 #include <math.h>
 
 #include "rds.h"
+#ifdef RDS2
+#include "rds2.h"
+#endif
 #include "fm_mpx.h"
 #include "mpx_carriers.h"
 
@@ -168,6 +171,12 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 			// 6% modulation
 			mpx_buffer[i] = get_57k_carrier() * get_rds_sample() * 0.12;
 
+#ifdef RDS2
+			mpx_buffer[i] += get_67k_carrier() * get_rds2_stream1_sample() * 0.12;
+			mpx_buffer[i] += get_71k_carrier() * get_rds2_stream2_sample() * 0.12;
+			mpx_buffer[i] += get_76k_carrier() * get_rds2_stream3_sample() * 0.12;
+#endif
+
 			update_carrier_phase();
 
 			mpx_buffer[i] *= mpx_vol;
@@ -235,6 +244,12 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 
 		// 6% modulation
 		mpx_buffer[i] += get_57k_carrier() * get_rds_sample() * 0.12;
+
+#ifdef RDS2
+		mpx_buffer[i] += get_67k_carrier() * get_rds2_stream1_sample() * 0.12;
+		mpx_buffer[i] += get_71k_carrier() * get_rds2_stream2_sample() * 0.12;
+		mpx_buffer[i] += get_76k_carrier() * get_rds2_stream3_sample() * 0.12;
+#endif
 
 		update_carrier_phase();
 
