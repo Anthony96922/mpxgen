@@ -56,8 +56,9 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 
 	// Data structures for baseband data
 	float mpx_data[DATA_SIZE];
-	float resample_out[DATA_SIZE];
 	char dev_out[DATA_SIZE];
+
+	int samples;
 
 	// AO
 	ao_device *device;
@@ -90,23 +91,8 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 		}
 	}
 
-	// SRC
-	int src_error;
-
-	SRC_STATE *src_state;
-	SRC_DATA src_data;
-	src_data.src_ratio = (192000 / 228000.0) + (ppm / 1000000);
-	src_data.output_frames = DATA_SIZE;
-	src_data.data_in = mpx_data;
-	src_data.data_out = resample_out;
-
-	if ((src_state = src_new(CONVERTER_TYPE, 1, &src_error)) == NULL) {
-		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_error));
-		return 1;
-	}
-
 	// Initialize the baseband generator
-	if(fm_mpx_open(audio_file, wait) < 0) return 1;
+	if(fm_mpx_open(audio_file, wait, ppm) < 0) return 1;
 	set_output_volume(mpx);
 
 	// Initialize the RDS modulator
@@ -126,17 +112,12 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 	for (;;) {
 		if(control_pipe) poll_control_pipe();
 
-		if ((src_data.input_frames = fm_mpx_get_samples(mpx_data)) < 0) break;
+		if ((samples = fm_mpx_get_samples(mpx_data)) < 0) break;
 
-		if ((src_error = src_process(src_state, &src_data))) {
-			fprintf(stderr, "Error: src_process failed: %s\n", src_strerror(src_error));
-			break;
-		}
-
-		float2char(resample_out, dev_out, src_data.output_frames_gen, format.channels);
+		float2char(mpx_data, dev_out, samples, format.channels);
 
 		// num_bytes = audio frames * channels * bytes per sample
-		if (!ao_play(device, dev_out, src_data.output_frames_gen * format.channels * sizeof(short))) {
+		if (!ao_play(device, dev_out, samples * format.channels * sizeof(short))) {
 			fprintf(stderr, "Error: could not play audio.\n");
 			break;
 		}
@@ -152,8 +133,6 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 
 	ao_close(device);
 	ao_shutdown();
-
-	src_delete(src_state);
 
 	return 0;
 }
@@ -275,39 +254,37 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'h': //help
+			case '?':
+			default:
 				fprintf(stderr,
 					"This is Mpxgen, a lightweight Stereo and RDS encoder.\n"
 					"\n"
 					"Usage: %s [options]\n"
 					"\n"
-					"Audio:\n"
+					"[Audio]\n"
 					"\n"
-					"    --audio / -a        Input file or pipe\n"
-					"    --output-file / -o  PCM out\n"
+					"    -a / --audio        Input file or pipe\n"
+					"    -o / --output-file  PCM out\n"
 					"\n"
-					"MPX controls:\n"
+					"[MPX controls]\n"
 					"\n"
-					"    --mpx / -m          MPX volume [ default: %.0f ]\n"
-					"    --ppm / -x          Clock drift correction\n"
-					"    --wait / -W         Wait for new audio [ default: %d ]\n"
+					"    -m / --mpx          MPX volume [ default: %.0f ]\n"
+					"    -x / --ppm          Clock drift correction\n"
+					"    -W / --wait         Wait for new audio [ default: %d ]\n"
 					"\n"
-					"RDS encoder:\n"
+					"[RDS encoder]\n"
 					"\n"
-					"    --rds / -R          RDS switch [ default: %d ]\n"
-					"    --pi / -i           Program Identification code [ default: %04X ]\n"
-					"    --ps / -s           Program Service name [ default: \"%s\" ]\n"
-					"    --rt / -r           Radio Text [ default: \"%s\" ]\n"
-					"    --pty / -p          Program Type [ default: %d ]\n"
-					"    --tp / -T           Traffic Program [ default: %d ]\n"
-					"    --af / -A           Alternative Frequency (more than one AF may be passed)\n"
-					"    --ptyn / -P         PTY Name\n"
-					"    --ctl / -C          Control pipe\n"
+					"    -R / --rds          RDS switch [ default: %d ]\n"
+					"    -i / --pi           Program Identification code [ default: %04X ]\n"
+					"    -s / --ps           Program Service name [ default: \"%s\" ]\n"
+					"    -r / --rt           Radio Text [ default: \"%s\" ]\n"
+					"    -p / --pty          Program Type [ default: %d ]\n"
+					"    -T / --tp           Traffic Program [ default: %d ]\n"
+					"    -A / --af           Alternative Frequency (more than one AF may be passed)\n"
+					"    -P / --ptyn         PTY Name\n"
+					"    -C / --ctl          Control pipe\n"
 					"\n",
 				argv[0], mpx, wait, rds, pi, ps, rt, pty, tp);
-				return 1;
-
-			default:
-				fprintf(stderr, "(See -h / --help)\n");
 				return 1;
 		}
 	}

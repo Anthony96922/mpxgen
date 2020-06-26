@@ -15,10 +15,34 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#define INPUT_DATA_SIZE 1024
-#define DATA_SIZE INPUT_DATA_SIZE * 32
 
-extern int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm);
-extern int fm_mpx_get_samples(float *mpx_buffer);
-extern void fm_mpx_close();
-extern void set_output_volume(int vol);
+#include <stdio.h>
+#include "resampler.h"
+#include "fm_mpx.h"
+
+SRC_STATE *resampler_init(int channels) {
+	SRC_STATE *src_state;
+        int src_error;
+
+	if ((src_state = src_new(CONVERTER_TYPE, channels, &src_error)) == NULL) {
+		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_error));
+		return NULL;
+	}
+
+	return src_state;
+}
+
+int resample(SRC_STATE *src_state, SRC_DATA src_data) {
+	int src_error;
+
+	if ((src_error = src_process(src_state, &src_data))) {
+		fprintf(stderr, "Error: src_process failed: %s\n", src_strerror(src_error));
+		return -1;
+	}
+
+	return src_data.output_frames_gen;
+}
+
+void resampler_exit(SRC_STATE *src_state) {
+	src_delete(src_state);
+}

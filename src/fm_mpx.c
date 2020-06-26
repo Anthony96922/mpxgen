@@ -27,6 +27,7 @@
 #endif
 #include "fm_mpx.h"
 #include "mpx_carriers.h"
+#include "resampler.h"
 
 #define FIR_HALF_SIZE	30
 #define FIR_SIZE	(2*FIR_HALF_SIZE-1)
@@ -38,6 +39,8 @@ float fir_buffer_right[FIR_SIZE];
 
 float *audio_input;
 float *resampled_input;
+float *mpx_buffer;
+float *mpx_out;
 
 int channels;
 int audio_wait;
@@ -45,11 +48,26 @@ int audio_wait;
 SNDFILE *inf;
 
 // SRC
-SRC_STATE *src_state;
-SRC_DATA src_data;
+SRC_STATE *in_resampler;
+SRC_DATA in_resampler_data;
+SRC_STATE *mpx_resampler;
+SRC_DATA mpx_resampler_data;
 
-int fm_mpx_open(char *filename, int wait_for_audio) {
+int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 	audio_wait = wait_for_audio;
+
+	mpx_buffer = malloc(DATA_SIZE * sizeof(float));
+	mpx_out = malloc(DATA_SIZE * sizeof(float));
+
+	mpx_resampler_data.src_ratio = (192000 / 228000.0) + (out_ppm / 1000000);
+	mpx_resampler_data.output_frames = DATA_SIZE;
+	mpx_resampler_data.data_in = mpx_buffer;
+	mpx_resampler_data.data_out = mpx_out;
+
+	if ((mpx_resampler = resampler_init(1)) == NULL) {
+		fprintf(stderr, "Could not create MPX resampler.\n");
+		goto error;
+	}
 
 	if(filename == NULL) return 0;
 
@@ -57,7 +75,7 @@ int fm_mpx_open(char *filename, int wait_for_audio) {
 	SF_INFO sfinfo;
 
 	// stdin or file on the filesystem?
-	if(filename[0] == '-') {
+	if(strcmp(filename, "-") == 0) {
 		if(!(inf = sf_open_fd(fileno(stdin), SFM_READ, &sfinfo, 0))) {
 			fprintf(stderr, "Error: could not open stdin for audio input.\n");
 			return -1;
@@ -97,17 +115,14 @@ int fm_mpx_open(char *filename, int wait_for_audio) {
 
 	audio_input = malloc(INPUT_DATA_SIZE * channels * sizeof(float));
 	resampled_input = malloc(DATA_SIZE * channels * sizeof(float));
-	if(audio_input == NULL) goto error;
-	if(resampled_input == NULL) goto error;
 
-	src_data.src_ratio = upsample_factor;
-	src_data.output_frames = DATA_SIZE;
-	src_data.data_in = audio_input;
-	src_data.data_out = resampled_input;
+	in_resampler_data.src_ratio = upsample_factor;
+	in_resampler_data.output_frames = DATA_SIZE;
+	in_resampler_data.data_in = audio_input;
+	in_resampler_data.data_out = resampled_input;
 
-	int src_error;
-	if ((src_state = src_new(CONVERTER_TYPE, channels, &src_error)) == NULL) {
-		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_error));
+	if ((in_resampler = resampler_init(channels)) == NULL) {
+		fprintf(stderr, "Could not create input resampler.\n");
 		goto error;
 	}
 
@@ -121,7 +136,6 @@ error:
 int audio_len;
 
 int get_input_audio() {
-	int src_error;
 	static int silence;
 
 get_audio:
@@ -131,7 +145,6 @@ get_audio:
 		fprintf(stderr, "Error reading audio\n");
 		return -1;
 	} else if (audio_len == 0) {
-		//return -1;
 		// Check if we have more audio
 		if (sf_seek(inf, 0, SEEK_SET) < 0) {
 			if (audio_wait) {
@@ -148,12 +161,8 @@ get_audio:
 	} else {
 		silence = 0;
 		// Upsample the input
-		src_data.input_frames = audio_len;
-		if ((src_error = src_process(src_state, &src_data))) {
-			fprintf(stderr, "Error: src_process failed: %s\n", src_strerror(src_error));
-			return -1;
-		}
-		audio_len = src_data.output_frames_gen;
+		in_resampler_data.input_frames = audio_len;
+		if ((audio_len = resample(in_resampler, in_resampler_data)) < 0) return -1;
 	}
 
 	return 0;
@@ -165,7 +174,7 @@ void set_output_volume(int vol) {
 	mpx_vol = (vol / 100.0);
 }
 
-int fm_mpx_get_samples(float *mpx_buffer) {
+int fm_mpx_get_samples(float *out) {
 	if (inf == NULL) {
 		for (int i = 0; i < INPUT_DATA_SIZE; i++) {
 			// 6% modulation
@@ -181,7 +190,8 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 
 			mpx_buffer[i] *= mpx_vol;
 		}
-		return INPUT_DATA_SIZE;
+		audio_len = INPUT_DATA_SIZE;
+		goto resample;
 	}
 
 	if (get_input_audio() < 0) return -1;
@@ -256,6 +266,12 @@ int fm_mpx_get_samples(float *mpx_buffer) {
 		mpx_buffer[i] *= mpx_vol;
 	}
 
+resample:
+	mpx_resampler_data.input_frames = audio_len;
+	if ((audio_len = resample(mpx_resampler, mpx_resampler_data)) < 0) return -1;
+
+	memcpy(out, mpx_out, audio_len * sizeof(float));
+
 	return audio_len;
 }
 
@@ -264,5 +280,6 @@ void fm_mpx_close() {
 
 	if(audio_input != NULL) free(audio_input);
 	if(resampled_input != NULL) free(resampled_input);
-	src_delete(src_state);
+	resampler_exit(in_resampler);
+	resampler_exit(mpx_resampler);
 }

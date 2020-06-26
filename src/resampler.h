@@ -15,10 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#define INPUT_DATA_SIZE 1024
-#define DATA_SIZE INPUT_DATA_SIZE * 32
 
-extern int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm);
-extern int fm_mpx_get_samples(float *mpx_buffer);
-extern void fm_mpx_close();
-extern void set_output_volume(int vol);
+#include <samplerate.h>
+
+#define CONVERTER_TYPE SRC_SINC_FASTEST
+
+extern SRC_STATE *resampler_init(int channels);
+extern int resample(SRC_STATE *src_state, SRC_DATA src_data);
+extern void resampler_exit(SRC_STATE *src_state);
