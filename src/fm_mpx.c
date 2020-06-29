@@ -16,7 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <sndfile.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -28,6 +27,7 @@
 #include "fm_mpx.h"
 #include "mpx_carriers.h"
 #include "resampler.h"
+#include "input.h"
 
 #define FIR_HALF_SIZE	30
 #define FIR_SIZE	(2*FIR_HALF_SIZE-1)
@@ -43,7 +43,6 @@ float *mpx_buffer;
 float *mpx_out;
 
 int channels;
-int audio_wait;
 
 SNDFILE *inf;
 
@@ -53,8 +52,13 @@ SRC_DATA in_resampler_data;
 SRC_STATE *mpx_resampler;
 SRC_DATA mpx_resampler_data;
 
+float mpx_vol;
+
+void set_output_volume(int vol) {
+	mpx_vol = (vol / 100.0);
+}
+
 int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
-	audio_wait = wait_for_audio;
 
 	mpx_buffer = malloc(DATA_SIZE * sizeof(float));
 	mpx_out = malloc(DATA_SIZE * sizeof(float));
@@ -71,29 +75,12 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 
 	if(filename == NULL) return 0;
 
-	// Open the input file
-	SF_INFO sfinfo;
+	int in_samplerate;
 
-	// stdin or file on the filesystem?
-	if(strcmp(filename, "-") == 0) {
-		if(!(inf = sf_open_fd(fileno(stdin), SFM_READ, &sfinfo, 0))) {
-			fprintf(stderr, "Error: could not open stdin for audio input.\n");
-			return -1;
-		} else {
-			fprintf(stderr, "Using stdin for audio input.\n");
-		}
-	} else {
-		if(!(inf = sf_open(filename, SFM_READ, &sfinfo))) {
-			fprintf(stderr, "Error: could not open input file %s.\n", filename);
-			return -1;
-		} else {
-			fprintf(stderr, "Using audio file: %s\n", filename);
-		}
-	}
+	if ((inf = open_file_input(filename, &in_samplerate, &channels, wait_for_audio)) == NULL)
+		goto error;
 
-	int in_samplerate = sfinfo.samplerate;
 	float upsample_factor = 228000. / in_samplerate;
-	channels = sfinfo.channels;
 
 	fprintf(stderr, "Input: %d Hz, %d channels, upsampling factor: %.2f\n", in_samplerate, channels, upsample_factor);
 
@@ -113,7 +100,7 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 
 	fprintf(stderr, "Created low-pass FIR filter for audio channels, with cutoff at %d Hz\n", cutoff_freq);
 
-	audio_input = malloc(INPUT_DATA_SIZE * channels * sizeof(float));
+	audio_input = malloc(DATA_SIZE * channels * sizeof(float));
 	resampled_input = malloc(DATA_SIZE * channels * sizeof(float));
 
 	in_resampler_data.src_ratio = upsample_factor;
@@ -133,48 +120,19 @@ error:
 	return -1;
 }
 
-int audio_len;
-
 int get_input_audio() {
-	static int silence;
+	int audio_len;
+	if ((audio_len = read_file_input(inf, audio_input)) < 0) return -1;
 
-get_audio:
-	audio_len = sf_readf_float(inf, audio_input, INPUT_DATA_SIZE);
+	in_resampler_data.input_frames = audio_len;
+	audio_len = resample(in_resampler, in_resampler_data);
 
-	if (audio_len < 0) {
-		fprintf(stderr, "Error reading audio\n");
-		return -1;
-	} else if (audio_len == 0) {
-		// Check if we have more audio
-		if (sf_seek(inf, 0, SEEK_SET) < 0) {
-			if (audio_wait) {
-				if (!silence) {
-					memset(resampled_input, 0, INPUT_DATA_SIZE * channels * sizeof(float));
-					audio_len = INPUT_DATA_SIZE;
-					silence = 1;
-				}
-			} else {
-				fprintf(stderr, "Could not rewind in audio file, terminating\n");
-				return -1;
-			}
-		} else goto get_audio; // Try to get new audio
-	} else {
-		silence = 0;
-		// Upsample the input
-		in_resampler_data.input_frames = audio_len;
-		if ((audio_len = resample(in_resampler, in_resampler_data)) < 0) return -1;
-	}
-
-	return 0;
-}
-
-float mpx_vol;
-
-void set_output_volume(int vol) {
-	mpx_vol = (vol / 100.0);
+	return audio_len;
 }
 
 int fm_mpx_get_samples(float *out) {
+	int audio_len;
+
 	if (inf == NULL) {
 		for (int i = 0; i < INPUT_DATA_SIZE; i++) {
 			// 6% modulation
@@ -194,9 +152,7 @@ int fm_mpx_get_samples(float *out) {
 		goto resample;
 	}
 
-	if (get_input_audio() < 0) return -1;
-
-	if (!audio_len) audio_len = INPUT_DATA_SIZE;
+	if ((audio_len = get_input_audio()) < 0) return -1;
 
 	static int fir_index;
 	int j = 0;
@@ -276,8 +232,7 @@ resample:
 }
 
 void fm_mpx_close() {
-	if(sf_close(inf)) fprintf(stderr, "Error closing audio file\n");
-
+	close_file_input(inf);
 	if(audio_input != NULL) free(audio_input);
 	if(resampled_input != NULL) free(resampled_input);
 	resampler_exit(in_resampler);

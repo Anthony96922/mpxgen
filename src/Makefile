@@ -5,7 +5,7 @@ RDS2 = 0
 CC = gcc
 CFLAGS = -Wall -O2 -std=gnu99 -pedantic
 
-MPXGEN_OBJ = mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o mpx_carriers.o resampler.o
+MPXGEN_OBJ = mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o mpx_carriers.o resampler.o input.o
 
 ifeq ($(RDS2), 1)
 	CFLAGS += -DRDS2

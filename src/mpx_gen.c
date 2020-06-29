@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
 	int pty = 0;
 	int tp = 0;
 	float ppm = 0;
-	float mpx = 50;
+	int mpx = 50;
 	int wait = 1;
 
 	const char	*short_opt = "a:o:m:x:W:R:i:s:r:p:T:A:P:C:h";
@@ -268,7 +268,7 @@ int main(int argc, char **argv) {
 					"\n"
 					"[MPX controls]\n"
 					"\n"
-					"    -m / --mpx          MPX volume [ default: %.0f ]\n"
+					"    -m / --mpx          MPX volume [ default: %d ]\n"
 					"    -x / --ppm          Clock drift correction\n"
 					"    -W / --wait         Wait for new audio [ default: %d ]\n"
 					"\n"
