@@ -1,14 +1,13 @@
 # mpxgen
-Based on [PiFmAdv](https://github.com/miegl/PiFmAdv) which is based on [PiFmRds](https://github.com/ChristopheJacquet/PiFmRds)
-
-This program generates FM multiplex baseband audio that can be output to mono FM transmitter. This includes stereo audio as well as realtime RDS data.
+This program generates FM multiplex baseband audio that can be output to a mono FM transmitter. This includes stereo audio as well as realtime RDS data.
 
 #### Features
 - Low resource requirements
 - Built-in low-pass filtering
 - Support for basic RDS data fields: PS, RT, PTY and AF
-- RDS can be updated through control pipe
+- RDS items can be updated through control pipe
 - RT+ support
+- Experimental RDS2 capabilities
 
 It won't replace commercial broadcasting software but it uses less resources and doesn't require a GUI to use.
 
@@ -16,7 +15,6 @@ It won't replace commercial broadcasting software but it uses less resources and
 - Threading
 - ALSA as option for input source
 - Rewrite the RDS encoder to allow running at 192 kHz
-- RDS2 (maybe)
 
 ## Build
 This app depends on the sndfile, ao and samplerate libraries. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libao-dev libsamplerate0-dev` to install them.
@@ -28,78 +26,97 @@ cd mpxgen/src
 make
 ```
 
+To update, just run `git pull` in the directory and the latest changes will be downloaded. Don't forget to run `make` afterwards.
+
 ## How to use
+Before running, make sure you're in the audio group to access the sound card.
+
 Simply run:
 ```
 ./mpxgen
 ```
-This will produce only an RDS subcarrier with no audio. If you have an FM transmitter plugged in to the sound card, tune an RDS-enabled radio to your transmitter's frequency. You should see "mpxgen" appear on the display. Your transmitter must be able to pass the entire MPX spectrum for RDS to work.
+This will produce only an RDS subcarrier with no audio. If you have an FM transmitter plugged in to the sound card, tune an RDS-enabled radio to your transmitter's frequency. You should see "Mpxgen" appear on the display. Your transmitter must be able to pass the entire MPX spectrum for RDS to work.
 
 To test audio output, you can use the provided stereo_44100.wav file.
 ```
 ./mpxgen --audio stereo_44100.wav
 ```
-If the audio sounds distorted, you may be overmodulating the transmitter. Adjust the sound card's volume until audio sounds clear and no distortion can be heard.
+If the audio sounds distorted, you may be overmodulating the transmitter. Adjust the output volume (see `--volume` option) until audio sounds clear and no distortion can be heard.
+
+You may use MPXtool to calibrate the pilot tone level to exactly 8% modulation.
 
 There are more options that can be given to mpxgen:
 ```
---audio        Audio file to play as audio. If a stereo file is provided, mpxgen
-               will produce an FM Stereo signal. Example: --audio sound.wav .
-               The supported formats depend on libsndfile. This includes WAV and
-               Ogg/Vorbis (among others) but not MP3. Specify '-' as the file name to
-               read audio data on standard input (useful for piping audio into mpxgen, see below).
+-a / --audio        Audio file to play as audio. If a stereo file is provided, mpxgen
+                    will enable it stereo encoder and produce an FM Stereo signal.
+                    Example: --audio sound.wav .
 
---pi           PI code of the RDS broadcast. 4 hexadecimal digits. Example: --pi FFFF .
+                    The supported formats depend on libsndfile. This includes WAV and
+                    Ogg/Vorbis (among others) but not MP3. Specify '-' as the file name to
+                    read audio data on standard input (useful for piping audio into mpxgen, see below).
 
---ps           Station name (Program Service name) of the RDS broadcast.
-               Limit: 8 characters. Example: --ps KPSK1007 .
+-o / --output-file  Outputs WAVE data to a file instead of playing through the sound card. FIFO pipes
+                    can be specified. When "-" is used, raw PCM audio data without WAVE headers is output.
 
---rt           RadioText (RT). Limit: 64 characters. Example: --rt 'Hello, world!' .
+-m / --mpx          MPX output volume in percent. Default is 50.
 
---af           List of alternative frequencies (AF). Multiple AFs can be listed.
-               Example: --af 107.9 --af 99.2 .
+-x / --ppm          Sound card clock correction. This configures the output resampler to compensate
+                    for any possible clock drift on the output sound card. Usually not needed.
 
---pty          Program Type. Valid range: 0 - 31. Example: --pty 9 (US: Top 40).
-               See https://en.wikipedia.org/wiki/Radio_Data_System for more program types.
+-W / --wait         Wait for the the audio pipe or terminate as soon as there is no audio. Enabled by default.
 
---tp           Traffic program. Default: 0.
+-R / --rds          RDS broadcast switch. Enabled by default.
 
---ptyn         Program Type Name is a more specific format. Example: --ptyn CHR.
+-i / --pi           PI code of the RDS broadcast. 4 hexadecimal digits. Example: --pi FFFF .
 
---mpx          MPX output volume in percent. Default is 50.
+-s / --ps           Station name (Program Service name) of the RDS broadcast.
+                    Limit: 8 characters. Example: --ps KPSK1007 .
 
---ctl          Named pipe (FIFO) to use as a control channel to change PS and RT
-               and others at run-time (see below).
+-r / --rt           RadioText (RT). Limit: 64 characters. Example: --rt 'Hello, world!' .
 
---rds          RDS broadcast switch. Enabled by default.
+-p / --pty          Program Type. Valid range: 0 - 31. Example: --pty 9 (US: Top 40).
+                    See https://en.wikipedia.org/wiki/Radio_Data_System for more program types.
 
---wait         Wait for the the audio pipe or terminate as soon as there is no audio. Enabled by default.
+-T / --tp           Traffic program. Default: 0.
 
---output-file  Outputs WAVE data to a file instead of playing through the sound card. FIFO pipes can be specified.
-               When "-" is used, raw PCM audio data without WAVE headers is output.
+-A / --af           List of alternative frequencies (AF). Multiple AFs can be listed.
+                    Example: --af 107.9 --af 99.2 .
+
+-P / --ptyn         Program Type Name is a more specific format. Example: --ptyn CHR.
+
+
+-C / --ctl          Named pipe (FIFO) to use as a control channel to change PS, RT
+                    and others at run-time (see below).
 ```
 
 ### Piping audio into mpxgen
 If you use the argument `--audio -`, mpxgen reads audio data on standard input. This allows you to pipe the output of a program into mpxgen.
 
+The input gain is 6dB so audio needs to be reduced by -6dB to avoid clipping.
+
 Basic audio processing with ffmpeg:
 ```
 ffmpeg -i <file name or stream URL> \
   -af "
-    acrossover=split=200|1000|4000[a0][a1][a2][a3],
-    [a0]acompressor=level_in=30:threshold=0.000976563:release=5000:makeup=15[b0];
-    [a1]acompressor=level_in=30:threshold=0.000976563:release=5000:makeup=15[b1];
-    [a2]acompressor=level_in=30:threshold=0.000976563:release=5000:makeup=15[b2];
-    [a3]acompressor=level_in=30:threshold=0.000976563:release=5000:makeup=15[b3];
-    [b0][b1][b2][b3]amix=inputs=4,
-    loudnorm,
-    volume=9dB,
+    acrossover=split=200|500|1000|4000[a0][a1][a2][a3][a4],
+    [a0]acompressor=level_in=10:threshold=0.01:release=5000:makeup=10[b0];
+    [a1]acompressor=level_in=10:threshold=0.01:release=5000:makeup=10[b1];
+    [a2]acompressor=level_in=10:threshold=0.01:release=5000:makeup=10[b2];
+    [a3]acompressor=level_in=10:threshold=0.01:release=5000:makeup=10[b3];
+    [a4]acompressor=level_in=10:threshold=0.01:release=5000:makeup=10[b4];
+    [b0][b1][b2][b3][b4]amix=inputs=5,
     aemphasis=mode=production:type=75fm,
-    deesser,
+    acrossover=split=200|500|1000|4000[c0][c1][c2][c3][c4],
+    [c0]alimiter=level_in=3:level=disabled:attack=0.1:release=1:level_out=3[d0];
+    [c1]alimiter=level_in=3:level=disabled:attack=0.1:release=1:level_out=3[d1];
+    [c2]alimiter=level_in=3:level=disabled:attack=0.1:release=1:level_out=3[d2];
+    [c3]alimiter=level_in=3:level=disabled:attack=0.1:release=1:level_out=3[d3];
+    [c4]alimiter=level_in=3:level=disabled:attack=0.1:release=1:level_out=3[d4];
+    [d0][d1][d2][d3][d4]amix=inputs=5,
     asoftclip=type=sin,
-    bass=gain=3,
-    alimiter=limit=0.48:level=disabled:attack=0.1:release=1,
-    firequalizer=gain='if(lt(f,15500), 0, -inf)'
+    volume=-6dB,
+    alimiter=limit=0.55:level=disabled:attack=0.1:release=1,
+    firequalizer=gain='if(lt(f,16000), 0, -inf)'
   " \
   -f wav - | ./mpxgen --audio -
 ```
@@ -125,7 +142,7 @@ TA OFF
 ```
 Every line must start with either `PS`, `RT`, `TA` or `PTY`, followed by one space character, and the desired value. Any other line format is silently ignored. `TA ON` switches the Traffic Announcement flag to *on*, and any other value switches it to *off*.
 
-#### RT+
+### RT+
 Mpxgen implements RT+ to allow some radios to display indivdual MP3-like metadata tags like artist and song titles from within RT.
 
 Syntax for RT+ is comma-separated values specifying content type, start offset and length. RT+ flags use a similar syntax.
@@ -134,3 +151,9 @@ RTP <content type 1>,<start 1>,<length 1>,<content type 2>,<start 2>,<length 2>
 RTPF <running bit>,<toggle bit>
 ```
 For more information, see [EBU Technical Review: RadioText Plus](https://tech.ebu.ch/docs/techreview/trev_307-radiotext.pdf)
+
+### RDS2 (experimental)
+Mpxgen has an untested implementation of RDS2. To enable, look for the `RDS = 0` in the Makefile and change the `0` to a `1`. Then run `make clean && make` to rebuild with RDS2 capabilities. Feel free to improve it and and create pull requests.
+
+#### Credits
+Based on [PiFmAdv](https://github.com/miegl/PiFmAdv) which is based on [PiFmRds](https://github.com/ChristopheJacquet/PiFmRds)
