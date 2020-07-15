@@ -73,6 +73,8 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 		goto error;
 	}
 
+	create_mpx_carriers(228000);
+
 	if(filename == NULL) return 0;
 
 	int in_samplerate;
@@ -85,7 +87,6 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 	fprintf(stderr, "Input: %d Hz, %d channels, upsampling factor: %.2f\n", in_samplerate, channels, upsample_factor);
 
 	int cutoff_freq = 15500;
-	if(cutoff_freq > in_samplerate/2) cutoff_freq = in_samplerate/2;
 
 	// Here we divide this coefficient by two because it will be counted twice
 	// when applying the filter
@@ -104,6 +105,7 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 	resampled_input = malloc(DATA_SIZE * channels * sizeof(float));
 
 	in_resampler_data.src_ratio = upsample_factor;
+	in_resampler_data.input_frames = INPUT_DATA_SIZE;
 	in_resampler_data.output_frames = DATA_SIZE;
 	in_resampler_data.data_in = audio_input;
 	in_resampler_data.data_out = resampled_input;
@@ -121,13 +123,8 @@ error:
 }
 
 int get_input_audio() {
-	int audio_len;
-	if ((audio_len = read_file_input(inf, audio_input)) < 0) return -1;
-
-	in_resampler_data.input_frames = audio_len;
-	audio_len = resample(in_resampler, in_resampler_data);
-
-	return audio_len;
+	if (read_file_input(inf, audio_input, INPUT_DATA_SIZE) < 0) return -1;
+	return resample(in_resampler, in_resampler_data);
 }
 
 int fm_mpx_get_samples(float *out) {
@@ -233,8 +230,11 @@ resample:
 
 void fm_mpx_close() {
 	close_file_input(inf);
-	if(audio_input != NULL) free(audio_input);
-	if(resampled_input != NULL) free(resampled_input);
+	clear_mpx_carriers();
+	if (audio_input != NULL) free(audio_input);
+	if (resampled_input != NULL) free(resampled_input);
+	free(mpx_buffer);
+	free(mpx_out);
 	resampler_exit(in_resampler);
 	resampler_exit(mpx_resampler);
 }

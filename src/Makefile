@@ -1,11 +1,11 @@
 
-# change to "1" to enable RDS2 capabilities
+# change to "1" to enable RDS2 capabilities (don't forget to run "make clean" first)
 RDS2 = 0
 
 CC = gcc
 CFLAGS = -Wall -O2 -std=gnu99 -pedantic
 
-MPXGEN_OBJ = mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o mpx_carriers.o resampler.o input.o
+MPXGEN_OBJ = mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o mpx_carriers.o resampler.o input.o audio_conversion.o
 
 ifeq ($(RDS2), 1)
 	CFLAGS += -DRDS2

@@ -19,7 +19,6 @@
 #include <stdio.h>
 #include <string.h>
 #include "input.h"
-#include "fm_mpx.h"
 
 int channels;
 int audio_wait;
@@ -54,31 +53,36 @@ SNDFILE *open_file_input(char *filename, int *input_sample_rate, int *input_chan
 	return inf;
 }
 
-int read_file_input(SNDFILE *inf, float *audio) {
-	static int audio_len;
+int read_file_input(SNDFILE *inf, float *audio, size_t num_frames) {
+	int audio_len;
+	int frames_to_read = num_frames;
+	int buffer_offset = 0;
 
-get_audio:
-	audio_len = sf_readf_float(inf, audio, INPUT_DATA_SIZE);
+	while (frames_to_read) {
+		audio_len = sf_readf_float(inf, audio + buffer_offset, frames_to_read);
 
-	if (audio_len < 0) {
-		fprintf(stderr, "Error reading audio\n");
-		return -1;
-	} else if (audio_len == 0) {
-		// Check if we have more audio
-		if (sf_seek(inf, 0, SEEK_SET) < 0) {
-			if (audio_wait) {
-				memset(audio, 0, INPUT_DATA_SIZE * channels * sizeof(float));
-				audio_len = INPUT_DATA_SIZE;
-			} else {
-				fprintf(stderr, "Could not rewind in audio file, terminating\n");
-				return -1;
-			}
+		if (audio_len < 0) {
+			fprintf(stderr, "Error reading audio\n");
+			return -1;
 		} else {
-			goto get_audio; // Try to get new audio
+			buffer_offset += audio_len;
+			frames_to_read -= audio_len;
+			// Check if we have more audio
+			if (audio_len == 0) {
+				if (sf_seek(inf, 0, SEEK_SET) < 0) {
+					if (audio_wait) {
+						memset(audio, 0, num_frames * channels * sizeof(float));
+						frames_to_read = 0;
+					} else {
+						fprintf(stderr, "Could not rewind in audio file, terminating\n");
+						return -1;
+					}
+				}
+			}
 		}
 	}
 
-	return audio_len;
+	return 1;
 }
 
 void close_file_input(SNDFILE *inf) {

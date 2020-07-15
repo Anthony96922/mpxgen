@@ -16,17 +16,77 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-float carrier_19k[] = {0, 0.5, 0.8660254, 1, 0.8660254, 0.5, 0, -0.5, -0.8660254, -1, -0.8660254, -0.5};
-float carrier_38k[] = {0, 0.8660254, 0.8660254, 0, -0.8660254, -0.8660254};
-float carrier_57k[] = {0, 1, 0, -1};
-#ifdef RDS2
+#include <stdlib.h>
+#include <math.h>
+
+// Create wave constants
+int create_carrier(int sample_rate, float freq, float *carrier) {
+	float sample;
+	int sine_zero_crossings = 0;
+	int i;
+
+	// First value of a sine wave is always 0
+	*carrier++ = 0;
+
+	for (i = 1; i < sample_rate; i++) {
+		sample = sin(2 * M_PI * freq * i / sample_rate);
+		if (sample > -0.1e-7 && sample < 0.1e-7) {
+			if (++sine_zero_crossings == 2) break;
+			*carrier++ = 0;
+		} else {
+			*carrier++ = sample;
+		}
+	}
+
+	return i;
+}
+
+float *carrier_19k;
+float *carrier_38k;
+float *carrier_57k;
+int max_19k;
+int max_38k;
+int max_57k;
+
 /* RDS 2 carriers
  * 66.5/71.25/76
  */
-float carrier_67k[] = {0, 0.9659258, -0.5, -0.7071068, 0.8660254, 0.258819, -1, 0.258819, 0.8660254, -0.7071068, -0.5, 0.9659258, 0, -0.9659258, 0.5, 0.7071068, -0.8660254, -0.258819, 1, -0.258819, -0.8660254, 0.7071068, 0.5, -0.9659258};
-float carrier_71k[] = {0, 0.9238795, -0.7071068, -0.3826834, 1, -0.3826834, -0.7071068, 0.9238795, 0, -0.9238795, 0.7071068, 0.3826834, -1, 0.3826834, 0.7071068, -0.9238795};
-float carrier_76k[] = {0, 0.8660254, -0.8660254, 0, 0.8660254, -0.8660254};
+#ifdef RDS2
+float *carrier_67k;
+float *carrier_71k;
+float *carrier_76k;
+int max_67k;
+int max_71k;
+int max_76k;
 #endif
+
+void create_mpx_carriers(int sample_rate) {
+	carrier_19k = malloc(sample_rate * sizeof(float));
+	carrier_38k = malloc(sample_rate * sizeof(float));
+	carrier_57k = malloc(sample_rate * sizeof(float));
+	max_19k = create_carrier(sample_rate, 19000, carrier_19k);
+	max_38k = create_carrier(sample_rate, 38000, carrier_38k);
+	max_57k = create_carrier(sample_rate, 57000, carrier_57k);
+#ifdef RDS2
+	carrier_67k = malloc(sample_rate * sizeof(float));
+	carrier_71k = malloc(sample_rate * sizeof(float));
+	carrier_76k = malloc(sample_rate * sizeof(float));
+	max_67k = create_carrier(sample_rate, 66500, carrier_67k);
+	max_71k = create_carrier(sample_rate, 71250, carrier_71k);
+	max_76k = create_carrier(sample_rate, 76000, carrier_76k);
+#endif
+}
+
+void clear_mpx_carriers() {
+	free(carrier_19k);
+	free(carrier_38k);
+	free(carrier_57k);
+#ifdef RDS2
+	free(carrier_67k);
+	free(carrier_71k);
+	free(carrier_76k);
+#endif
+}
 
 int phase_19k;
 int phase_38k;
@@ -68,13 +128,13 @@ float get_76k_carrier() {
 #endif
 
 void update_carrier_phase() {
-	if (++phase_19k == 12) phase_19k = 0;
-	if (++phase_38k == 6) phase_38k = 0;
-	if (++phase_57k == 4) phase_57k = 0;
+	if (++phase_19k == max_19k) phase_19k = 0;
+	if (++phase_38k == max_38k) phase_38k = 0;
+	if (++phase_57k == max_57k) phase_57k = 0;
 #ifdef RDS2
-	if (++phase_67k == 24) phase_67k = 0;
-	if (++phase_71k == 16) phase_71k = 0;
-	if (++phase_76k == 6) phase_76k = 0;
+	if (++phase_67k == max_67k) phase_67k = 0;
+	if (++phase_71k == max_71k) phase_71k = 0;
+	if (++phase_76k == max_76k) phase_76k = 0;
 #endif
 }
 

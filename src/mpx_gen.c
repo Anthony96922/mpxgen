@@ -26,27 +26,12 @@
 #include "rds.h"
 #include "fm_mpx.h"
 #include "control_pipe.h"
+#include "audio_conversion.h"
 
 int stop_mpx;
 
 void stop() {
 	stop_mpx = 1;
-}
-
-void float2char(float *inbuf, char *outbuf, size_t inbufsize, int channels) {
-	int j = 0;
-	short sample;
-	for (int i = 0; i < inbufsize; i++) {
-		sample = inbuf[i] * 32767;
-		outbuf[j+0] = sample & 255;
-		outbuf[j+1] = sample >> 8;
-		if (channels == 2) {
-			outbuf[j+2] = outbuf[j+0];
-			outbuf[j+3] = outbuf[j+1];
-			j += 2;
-		}
-		j += 2;
-	}
 }
 
 int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float mpx, float ppm, int wait, int rds, uint16_t pi, char *ps, char *rt, int pty, int tp, int *af, char *ptyn) {
@@ -57,6 +42,7 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 	// Data structures for baseband data
 	float mpx_data[DATA_SIZE];
 	char dev_out[DATA_SIZE];
+	char stereo_dev_out[DATA_SIZE];
 
 	int samples;
 
@@ -114,7 +100,12 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 
 		if ((samples = fm_mpx_get_samples(mpx_data)) < 0) break;
 
-		float2char(mpx_data, dev_out, samples, format.channels);
+		float2char(mpx_data, dev_out, samples);
+
+		if (format.channels == 2) {
+			stereoize(dev_out, stereo_dev_out, samples);
+			memcpy(dev_out, stereo_dev_out, samples * sizeof(short));
+		}
 
 		// num_bytes = audio frames * channels * bytes per sample
 		if (!ao_play(device, dev_out, samples * format.channels * sizeof(short))) {
