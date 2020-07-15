@@ -42,7 +42,7 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 	// Data structures for baseband data
 	float mpx_data[DATA_SIZE];
 	char dev_out[DATA_SIZE];
-	char stereo_dev_out[DATA_SIZE];
+	char stereo_out[DATA_SIZE];
 
 	int samples;
 
@@ -103,8 +103,8 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 		float2char(mpx_data, dev_out, samples);
 
 		if (format.channels == 2) {
-			stereoize(dev_out, stereo_dev_out, samples);
-			memcpy(dev_out, stereo_dev_out, samples * sizeof(short));
+			stereoize(dev_out, stereo_out, samples);
+			memcpy(dev_out, stereo_out, samples * 2 * sizeof(short));
 		}
 
 		// num_bytes = audio frames * channels * bytes per sample

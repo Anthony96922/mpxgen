@@ -17,11 +17,13 @@
  */
 
 #include <unistd.h>
+#include "audio_conversion.h"
 
 // converts float into 16 bit shorts (stored as two 8 bit values)
 void float2char(float *inbuf, char *outbuf, size_t inbufsize) {
 	int j = 0;
 	short sample;
+
 	for (int i = 0; i < inbufsize; i++) {
 		sample = inbuf[i] * 32767;
 		outbuf[j+0] = sample & 255;
@@ -33,10 +35,10 @@ void float2char(float *inbuf, char *outbuf, size_t inbufsize) {
 // converts 16 bit shorts (stored as two 8 bit values) into floats
 void char2float(char *inbuf, float *outbuf, size_t inbufsize) {
 	int j = 0;
-
 	float sample;
+
 	for (int i = 0; i < inbufsize; i++) {
-		sample = (((inbuf[j] & 0xff) << 8) | (inbuf[j+1] & 0xff)) / 32767.0;
+		sample = ((inbuf[j+0] & 255) | ((inbuf[j+1] & 255) << 8)) / 32767.0;
 		outbuf[i] = sample;
 		j += 2;
 	}
@@ -44,9 +46,12 @@ void char2float(char *inbuf, float *outbuf, size_t inbufsize) {
 
 void stereoize(char *inbuf, char *outbuf, size_t inbufsize) {
 	int j = 0;
+	int k = 0;
+
 	for (int i = 0; i < inbufsize; i++) {
-		outbuf[j+0] = outbuf[j+2] = inbuf[i+0];
-		outbuf[j+1] = outbuf[j+3] = inbuf[i+1];
-		j += 4;
+		outbuf[k+0] = outbuf[k+2] = inbuf[j+0];
+		outbuf[k+1] = outbuf[k+3] = inbuf[j+1];
+		j += 2;
+		k += 4;
 	}
 }
