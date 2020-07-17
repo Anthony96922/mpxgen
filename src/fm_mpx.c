@@ -128,7 +128,13 @@ int get_input_audio() {
 }
 
 int fm_mpx_get_samples(float *out) {
+	int j = 0;
 	int audio_len;
+	static int fir_index;
+
+	int ifbi, dfbi;
+	float out_left, out_right;
+	float out_mono, out_stereo;
 
 	if (inf == NULL) {
 		for (int i = 0; i < INPUT_DATA_SIZE; i++) {
@@ -151,21 +157,20 @@ int fm_mpx_get_samples(float *out) {
 
 	if ((audio_len = get_input_audio()) < 0) return -1;
 
-	static int fir_index;
-	int j = 0;
 	for (int i = 0; i < audio_len; i++) {
 		// First store the current sample(s) into the FIR filter's ring buffer
 		fir_buffer_left[fir_index] = resampled_input[j];
 		if (channels == 2) {
 			fir_buffer_right[fir_index] = resampled_input[j+1];
-			j += 2;
-		} else j++;
+			j++;
+		}
+		j++;
 		fir_index++;
 		if(fir_index == FIR_SIZE) fir_index = 0;
 
 		// L/R signals
-		float out_left = 0;
-		float out_right = 0;
+		out_left  = 0;
+		out_right = 0;
 
 		// Now apply the FIR low-pass filter
 
@@ -173,8 +178,8 @@ int fm_mpx_get_samples(float *out) {
 		   the coefficients independently, but two-by-two, thus reducing
 		   the total number of multiplications by a factor of two
 		 */
-		int ifbi = fir_index;  // ifbi = increasing FIR Buffer Index
-		int dfbi = fir_index;  // dfbi = decreasing FIR Buffer Index
+		ifbi = fir_index;  // ifbi = increasing FIR Buffer Index
+		dfbi = fir_index;  // dfbi = decreasing FIR Buffer Index
 		for(int fi=0; fi<FIR_HALF_SIZE; fi++) {  // fi = Filter Index
 			dfbi--;
 			if(dfbi < 0) dfbi = FIR_SIZE-1;
@@ -192,8 +197,8 @@ int fm_mpx_get_samples(float *out) {
 		out_right *= 2;
 
 		// Create sum and difference signals
-		float out_mono   = out_left + out_right;
-		float out_stereo = out_left - out_right;
+		out_mono   = out_left + out_right;
+		out_stereo = out_left - out_right;
 
 		if (channels == 2) {
 			// audio signals need to be limited to 45% to remain within modulation limits
@@ -233,8 +238,8 @@ void fm_mpx_close() {
 	clear_mpx_carriers();
 	if (audio_input != NULL) free(audio_input);
 	if (resampled_input != NULL) free(resampled_input);
-	free(mpx_buffer);
-	free(mpx_out);
+	if (mpx_buffer != NULL) free(mpx_buffer);
+	if (mpx_out != NULL) free(mpx_out);
 	resampler_exit(in_resampler);
 	resampler_exit(mpx_resampler);
 }
