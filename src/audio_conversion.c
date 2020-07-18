@@ -19,7 +19,7 @@
 #include <unistd.h>
 #include "audio_conversion.h"
 
-// converts float into 16 bit shorts (stored as two 8 bit values)
+// converts floats to 16 bit shorts (stored as two 8 bit ints)
 void float2char(float *inbuf, char *outbuf, size_t inbufsize) {
 	int j = 0;
 	short sample;
@@ -32,21 +32,26 @@ void float2char(float *inbuf, char *outbuf, size_t inbufsize) {
 	}
 }
 
-// converts 16 bit shorts (stored as two 8 bit values) into floats
+// converts 16 bit shorts (stored as two 8 bit ints) to floats
 void char2float(char *inbuf, float *outbuf, size_t inbufsize) {
 	int j = 0;
-	float sample;
 
 	for (int i = 0; i < inbufsize; i++) {
-		sample = ((inbuf[j+0] & 255) | ((inbuf[j+1] & 255) << 8)) / 32767.0;
-		outbuf[i] = sample;
+		outbuf[i] = ((inbuf[j+0] & 255) | (inbuf[j+1] << 8)) / 32767.0;
 		j += 2;
 	}
 }
 
+// converts 16 bit shorts to floats
+void short2float(short *inbuf, float *outbuf, size_t inbufsize) {
+	for (int i = 0; i < inbufsize; i++) {
+		outbuf[i] = inbuf[i] / 32767.0;
+	}
+}
+
+// puts the same stuff into both channels
 void stereoize(char *inbuf, char *outbuf, size_t inbufsize) {
-	int j = 0;
-	int k = 0;
+	int j = 0, k = 0;
 
 	for (int i = 0; i < inbufsize; i++) {
 		outbuf[k+0] = outbuf[k+2] = inbuf[j+0];

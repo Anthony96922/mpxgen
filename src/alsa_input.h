@@ -16,7 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern void float2char(float *inbuf, char *outbuf, size_t inbufsize);
-extern void char2float(char *inbuf, float *outbuf, size_t inbufsize);
-extern void short2float(short *inbuf, float *outbuf, size_t inbufsize);
-extern void stereoize(char *inbuf, char *outbuf, size_t inbufsize);
+#include <alsa/asoundlib.h>
+
+extern snd_pcm_t *open_alsa_input(char *input_card, unsigned int sample_rate, unsigned int channels, size_t buf_size);
+extern int read_alsa_input(snd_pcm_t *capture_handle, float *buffer);
+extern int close_alsa_input(snd_pcm_t *capture_handle);

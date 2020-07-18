@@ -28,6 +28,9 @@
 #include "mpx_carriers.h"
 #include "resampler.h"
 #include "input.h"
+#ifdef ALSA
+#include "alsa_input.h"
+#endif
 
 #define FIR_HALF_SIZE	30
 #define FIR_SIZE	(2*FIR_HALF_SIZE-1)
@@ -42,7 +45,13 @@ float *resampled_input;
 float *mpx_buffer;
 float *mpx_out;
 
+#ifdef ALSA
+snd_pcm_t *alsa_input;
+#endif
+
 int channels;
+
+int input;
 
 SNDFILE *inf;
 
@@ -59,6 +68,9 @@ void set_output_volume(int vol) {
 }
 
 int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
+	int in_samplerate;
+	float upsample_factor;
+	int cutoff_freq = 15500;
 
 	mpx_buffer = malloc(DATA_SIZE * sizeof(float));
 	mpx_out = malloc(DATA_SIZE * sizeof(float));
@@ -75,18 +87,29 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 
 	create_mpx_carriers(228000);
 
-	if(filename == NULL) return 0;
+#ifdef ALSA
+	char *input_card;
+#endif
 
-	int in_samplerate;
+	if(filename != NULL) {
+		if ((inf = open_file_input(filename, &in_samplerate, &channels, wait_for_audio, INPUT_DATA_SIZE)) == NULL)
+			goto error;
+		input = 1;
+#ifdef ALSA
+	} else if (input_card != NULL) {
+		channels = 1;
+		in_samplerate = 48000;
+		if ((alsa_input = open_alsa_input(input_card, in_samplerate, channels, INPUT_DATA_SIZE)) == NULL)
+			goto error;
+		input = 2;
+#endif
+	} else {
+		return 0;
+	}
 
-	if ((inf = open_file_input(filename, &in_samplerate, &channels, wait_for_audio)) == NULL)
-		goto error;
-
-	float upsample_factor = 228000. / in_samplerate;
+	upsample_factor = 228000. / in_samplerate;
 
 	fprintf(stderr, "Input: %d Hz, %d channels, upsampling factor: %.2f\n", in_samplerate, channels, upsample_factor);
-
-	int cutoff_freq = 15500;
 
 	// Here we divide this coefficient by two because it will be counted twice
 	// when applying the filter
@@ -123,7 +146,13 @@ error:
 }
 
 int get_input_audio() {
-	if (read_file_input(inf, audio_input, INPUT_DATA_SIZE) < 0) return -1;
+	if (input == 1) {
+		if (read_file_input(inf, audio_input) < 0) return -1;
+#ifdef ALSA
+	} else if (input == 2) {
+		if (read_alsa_input(alsa_input, audio_input) < 0) return -1;
+#endif
+	}
 	return resample(in_resampler, in_resampler_data);
 }
 
@@ -136,8 +165,10 @@ int fm_mpx_get_samples(float *out) {
 	float out_left, out_right;
 	float out_mono, out_stereo;
 
-	if (inf == NULL) {
-		for (int i = 0; i < INPUT_DATA_SIZE; i++) {
+	if (!input) {
+		audio_len = DATA_SIZE;
+
+		for (int i = 0; i < audio_len; i++) {
 			// 6% modulation
 			mpx_buffer[i] = get_57k_carrier() * get_rds_sample() * 0.12;
 
@@ -151,80 +182,77 @@ int fm_mpx_get_samples(float *out) {
 
 			mpx_buffer[i] *= mpx_vol;
 		}
-		audio_len = INPUT_DATA_SIZE;
-		goto resample;
-	}
+	} else {
+		if ((audio_len = get_input_audio()) < 0) return -1;
 
-	if ((audio_len = get_input_audio()) < 0) return -1;
-
-	for (int i = 0; i < audio_len; i++) {
-		// First store the current sample(s) into the FIR filter's ring buffer
-		fir_buffer_left[fir_index] = resampled_input[j];
-		if (channels == 2) {
-			fir_buffer_right[fir_index] = resampled_input[j+1];
-			j++;
-		}
-		j++;
-		fir_index++;
-		if(fir_index == FIR_SIZE) fir_index = 0;
-
-		// L/R signals
-		out_left  = 0;
-		out_right = 0;
-
-		// Now apply the FIR low-pass filter
-
-		/* As the FIR filter is symmetric, we do not multiply all
-		   the coefficients independently, but two-by-two, thus reducing
-		   the total number of multiplications by a factor of two
-		 */
-		ifbi = fir_index;  // ifbi = increasing FIR Buffer Index
-		dfbi = fir_index;  // dfbi = decreasing FIR Buffer Index
-		for(int fi=0; fi<FIR_HALF_SIZE; fi++) {  // fi = Filter Index
-			dfbi--;
-			if(dfbi < 0) dfbi = FIR_SIZE-1;
-			out_left += low_pass_fir[fi] * (fir_buffer_left[ifbi] + fir_buffer_left[dfbi]);
-			if(channels == 2) {
-				out_right += low_pass_fir[fi] * (fir_buffer_right[ifbi] + fir_buffer_right[dfbi]);
+		for (int i = 0; i < audio_len; i++) {
+			// First store the current sample(s) into the FIR filter's ring buffer
+			fir_buffer_left[fir_index] = resampled_input[j];
+			if (channels == 2) {
+				fir_buffer_right[fir_index] = resampled_input[j+1];
+				j++;
 			}
-			ifbi++;
-			if(ifbi == FIR_SIZE) ifbi = 0;
-		}
-		// End of FIR filter
+			j++;
+			fir_index++;
+			if(fir_index == FIR_SIZE) fir_index = 0;
 
-		// 6dB input gain
-		out_left *= 2;
-		out_right *= 2;
+			// L/R signals
+			out_left  = 0;
+			out_right = 0;
 
-		// Create sum and difference signals
-		out_mono   = out_left + out_right;
-		out_stereo = out_left - out_right;
+			// Now apply the FIR low-pass filter
 
-		if (channels == 2) {
-			// audio signals need to be limited to 45% to remain within modulation limits
-			mpx_buffer[i] = out_mono * 0.45 +
-				get_19k_carrier() * 0.08 + // 8% modulation
-				get_38k_carrier() * out_stereo * 0.45;
-		} else {
-			// mono audio is limited to 90%
-			mpx_buffer[i] = out_mono * 0.9;
-		}
+			/* As the FIR filter is symmetric, we do not multiply all
+			   the coefficients independently, but two-by-two, thus reducing
+			   the total number of multiplications by a factor of two
+			 */
+			ifbi = fir_index;  // ifbi = increasing FIR Buffer Index
+			dfbi = fir_index;  // dfbi = decreasing FIR Buffer Index
+			for(int fi=0; fi<FIR_HALF_SIZE; fi++) {  // fi = Filter Index
+				dfbi--;
+				if(dfbi < 0) dfbi = FIR_SIZE-1;
+				out_left += low_pass_fir[fi] * (fir_buffer_left[ifbi] + fir_buffer_left[dfbi]);
+				if(channels == 2) {
+					out_right += low_pass_fir[fi] * (fir_buffer_right[ifbi] + fir_buffer_right[dfbi]);
+				}
+				ifbi++;
+				if(ifbi == FIR_SIZE) ifbi = 0;
+			}
+			// End of FIR filter
 
-		// 6% modulation
-		mpx_buffer[i] += get_57k_carrier() * get_rds_sample() * 0.12;
+			// 6dB input gain
+			out_left *= 2;
+			out_right *= 2;
+
+			// Create sum and difference signals
+			out_mono   = out_left + out_right;
+			out_stereo = out_left - out_right;
+
+			if (channels == 2) {
+				// audio signals need to be limited to 45% to remain within modulation limits
+				mpx_buffer[i] = out_mono * 0.45 +
+					get_19k_carrier() * 0.08 + // 8% modulation
+					get_38k_carrier() * out_stereo * 0.45;
+			} else {
+				// mono audio is limited to 90%
+				mpx_buffer[i] = out_mono * 0.9;
+			}
+
+			// 6% modulation
+			mpx_buffer[i] += get_57k_carrier() * get_rds_sample() * 0.12;
 
 #ifdef RDS2
-		mpx_buffer[i] += get_67k_carrier() * get_rds2_stream1_sample() * 0.12;
-		mpx_buffer[i] += get_71k_carrier() * get_rds2_stream2_sample() * 0.12;
-		mpx_buffer[i] += get_76k_carrier() * get_rds2_stream3_sample() * 0.12;
+			mpx_buffer[i] += get_67k_carrier() * get_rds2_stream1_sample() * 0.12;
+			mpx_buffer[i] += get_71k_carrier() * get_rds2_stream2_sample() * 0.12;
+			mpx_buffer[i] += get_76k_carrier() * get_rds2_stream3_sample() * 0.12;
 #endif
 
-		update_carrier_phase();
+			update_carrier_phase();
 
-		mpx_buffer[i] *= mpx_vol;
+			mpx_buffer[i] *= mpx_vol;
+		}
 	}
 
-resample:
 	mpx_resampler_data.input_frames = audio_len;
 	if ((audio_len = resample(mpx_resampler, mpx_resampler_data)) < 0) return -1;
 
@@ -234,7 +262,13 @@ resample:
 }
 
 void fm_mpx_close() {
-	close_file_input(inf);
+	if (input == 1) {
+		close_file_input(inf);
+#ifdef ALSA
+	} else if (input == 2) {
+		close_alsa_input(alsa_input);
+#endif
+	}
 	clear_mpx_carriers();
 	if (audio_input != NULL) free(audio_input);
 	if (resampled_input != NULL) free(resampled_input);

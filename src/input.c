@@ -22,11 +22,14 @@
 
 int channels;
 int audio_wait;
+int buffer_size;
 
-SNDFILE *open_file_input(char *filename, int *input_sample_rate, int *input_channels, int wait) {
+SNDFILE *open_file_input(char *filename, int *input_sample_rate, int *input_channels, int wait, size_t num_frames) {
 	// Open the input file
         SF_INFO sfinfo;
 	SNDFILE *inf;
+
+	buffer_size = num_frames;
 
 	// stdin or file on the filesystem?
 	if(strcmp(filename, "-") == 0) {
@@ -53,9 +56,9 @@ SNDFILE *open_file_input(char *filename, int *input_sample_rate, int *input_chan
 	return inf;
 }
 
-int read_file_input(SNDFILE *inf, float *audio, size_t num_frames) {
+int read_file_input(SNDFILE *inf, float *audio) {
 	int audio_len;
-	int frames_to_read = num_frames;
+	int frames_to_read = buffer_size;
 	int buffer_offset = 0;
 
 	while (frames_to_read) {
@@ -71,7 +74,7 @@ int read_file_input(SNDFILE *inf, float *audio, size_t num_frames) {
 			if (audio_len == 0) {
 				if (sf_seek(inf, 0, SEEK_SET) < 0) {
 					if (audio_wait) {
-						memset(audio, 0, num_frames * channels * sizeof(float));
+						memset(audio, 0, buffer_size * channels * sizeof(float));
 						frames_to_read = 0;
 					} else {
 						fprintf(stderr, "Could not rewind in audio file, terminating\n");
