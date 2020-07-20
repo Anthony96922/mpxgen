@@ -122,6 +122,15 @@ int poll_control_pipe() {
 #endif
             return 1;
         }
+	if(res[0] == 'D' && res[1] == 'I') {
+            arg[2] = 0;
+            uint8_t di = (uint8_t) strtol(arg, NULL, 8);
+            set_rds_di(di);
+#ifdef CONTROL_PIPE_MESSAGES
+            fprintf(stderr, "DI value set to %d\n", pi);
+#endif
+            return 1;
+        }
     }
 
     if(strlen(res) > 4 && res[3] == ' ') {
@@ -167,15 +176,13 @@ int poll_control_pipe() {
             return 1;
         }
         if (res[0] == 'M' && res[1] == 'P' && res[2] == 'X') {
-            int level_19k, level_38k, level_57k;
-            if (sscanf(arg, "%d,%d,%d", &level_19k, &level_38k, &level_57k) == 3) {
-                if (level_19k < -1 || level_19k > 200) level_19k = 100;
-                if (level_38k < -1 || level_38k > 200) level_38k = 100;
-                if (level_57k < -1 || level_57k > 200) level_57k = 100;
-                set_19k_level(level_19k);
-                set_38k_level(level_38k);
-                set_57k_level(level_57k);
-                set_rds_switch(level_57k != 0);
+            int gains[3] = {0};
+            if (sscanf(arg, "%d,%d,%d", &gains[0], &gains[1], &gains[2]) == 3) {
+                for (int i = 0; i < 3; i++) {
+                    if (gains[i] < -1 || gains[i] > 200) gains[i] = 100;
+                    set_level(i, gains[i]);
+                }
+                set_rds_switch(gains[2] != 0);
             }
             return 1;
         }

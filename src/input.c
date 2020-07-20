@@ -62,24 +62,22 @@ int read_file_input(SNDFILE *inf, float *audio) {
 	int buffer_offset = 0;
 
 	while (frames_to_read) {
-		audio_len = sf_readf_float(inf, audio + buffer_offset, frames_to_read);
-
-		if (audio_len < 0) {
+		if ((audio_len = sf_readf_float(inf, audio + buffer_offset, frames_to_read)) < 0) {
 			fprintf(stderr, "Error reading audio\n");
 			return -1;
-		} else {
-			buffer_offset += audio_len;
-			frames_to_read -= audio_len;
-			// Check if we have more audio
-			if (audio_len == 0) {
-				if (sf_seek(inf, 0, SEEK_SET) < 0) {
-					if (audio_wait) {
-						memset(audio, 0, buffer_size * channels * sizeof(float));
-						frames_to_read = 0;
-					} else {
-						fprintf(stderr, "Could not rewind in audio file, terminating\n");
-						return -1;
-					}
+		}
+
+		buffer_offset += audio_len;
+		frames_to_read -= audio_len;
+		// Check if we have more audio
+		if (audio_len == 0) {
+			if (sf_seek(inf, 0, SEEK_SET) < 0) {
+				if (audio_wait) {
+					memset(audio, 0, buffer_size * channels * sizeof(float));
+					frames_to_read = 0;
+				} else {
+					fprintf(stderr, "Could not rewind in audio file, terminating\n");
+					return -1;
 				}
 			}
 		}

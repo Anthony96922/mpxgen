@@ -16,6 +16,4 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern float get_rds2_stream1_sample();
-extern float get_rds2_stream2_sample();
-extern float get_rds2_stream3_sample();
+extern float get_rds2_sample(int stream_num);

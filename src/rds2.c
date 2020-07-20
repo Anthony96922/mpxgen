@@ -16,6 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdio.h>
 #include "rds.h"
 #include "waveforms.h"
 
@@ -32,11 +33,12 @@ extern uint16_t crc(uint16_t blocks);
 extern unsigned char station_logo[];
 extern unsigned int station_logo_len;
 
-// function header
+// Function Header
 // from http://www.rds.org.uk/2010/pdf/RDS%202%20-%20what%20it%20is_170127_13.pdf
+// I have not idea what this is for
 uint8_t fh = 34 << 2 | 0;
 
-// see https://www.youtube.com/watch?v=ticcJpCPoa8
+// See https://www.youtube.com/watch?v=ticcJpCPoa8
 void get_logo_group(uint16_t *blocks) {
 	static int logo_pos;
 
@@ -47,32 +49,20 @@ void get_logo_group(uint16_t *blocks) {
 	if ((logo_pos += 7) >= station_logo_len) logo_pos = 0;
 }
 
-void get_rds2_stream1_group(uint16_t *blocks) {
-	get_logo_group(blocks);
-}
-
-void get_rds2_stream2_group(uint16_t *blocks) {
-	get_logo_group(blocks);
-}
-
-void get_rds2_stream3_group(uint16_t *blocks) {
-	get_logo_group(blocks);
+void get_rds2_group(int stream_num, uint16_t *blocks) {
+    switch (stream_num) {
+    case 0:
+    case 1:
+    case 2:
+        get_logo_group(blocks);
+        break;
+    }
 }
 
 void get_rds2_bits(int stream, int *out_buffer) {
     uint16_t out_blocks[GROUP_LENGTH];
 
-    switch (stream) {
-    case 1:
-	get_rds2_stream1_group(out_blocks);
-	break;
-    case 2:
-	get_rds2_stream3_group(out_blocks);
-	break;
-    case 3:
-	get_rds2_stream3_group(out_blocks);
-	break;
-    }
+    get_rds2_group(stream, out_blocks);
 
     //fprintf(stderr, "Stream %d: %04x %04x %04x %04x\n", stream, out_blocks[0], out_blocks[1], out_blocks[2], out_blocks[3]);
 
@@ -92,161 +82,58 @@ void get_rds2_bits(int stream, int *out_buffer) {
     }
 }
 
-float get_rds2_stream1_sample() {
-    static int bit_buffer[BITS_PER_GROUP];
-    static int bit_pos = BITS_PER_GROUP;
-    static float sample_buffer[SAMPLE_BUFFER_SIZE];
+float get_rds2_sample(int stream_num) {
+    static int bit_buffer[3][BITS_PER_GROUP];
+    static int bit_pos[3] = {BITS_PER_GROUP, BITS_PER_GROUP, BITS_PER_GROUP};
+    static float sample_buffer[3][SAMPLE_BUFFER_SIZE];
 
-    static int prev_output;
-    static int cur_output;
-    static int cur_bit;
-    static int sample_count = SAMPLES_PER_BIT;
-    static int inverting;
+    static int prev_output[3];
+    static int cur_output[3];
+    static int cur_bit[3];
+    static int sample_count[3] = {SAMPLES_PER_BIT, SAMPLES_PER_BIT, SAMPLES_PER_BIT};
+    static int inverting[3];
 
-    static int in_sample_index;
-    static int out_sample_index = SAMPLE_BUFFER_SIZE-1;
+    static int in_sample_index[3];
+    static int out_sample_index[3] = {SAMPLE_BUFFER_SIZE-1, SAMPLE_BUFFER_SIZE-1, SAMPLE_BUFFER_SIZE-1};
 
-    if(sample_count == SAMPLES_PER_BIT) {
-        if(bit_pos == BITS_PER_GROUP) {
-            get_rds2_bits(1, bit_buffer);
-            bit_pos = 0;
+    stream_num--;
+
+    if(sample_count[stream_num] == SAMPLES_PER_BIT) {
+        if(bit_pos[stream_num] == BITS_PER_GROUP) {
+            get_rds2_bits(stream_num, bit_buffer[stream_num]);
+            bit_pos[stream_num] = 0;
         }
 
-        // do differential encoding
-        cur_bit = bit_buffer[bit_pos];
-        prev_output = cur_output;
-        cur_output = prev_output ^ cur_bit;
 
-        inverting = (cur_output == 1);
+        // do differential encoding
+        cur_bit[stream_num] = bit_buffer[stream_num][bit_pos[stream_num]];
+        prev_output[stream_num] = cur_output[stream_num];
+        cur_output[stream_num] = prev_output[stream_num] ^ cur_bit[stream_num];
+
+        inverting[stream_num] = (cur_output[stream_num] == 1);
 
         float *src = waveform_biphase;
-        int idx = in_sample_index;
+        int idx = in_sample_index[stream_num];
 
         for(int j=0; j<FILTER_SIZE; j++) {
             float val = (*src++);
-            if(inverting) val = -val;
-            sample_buffer[idx++] += val;
+            if(inverting[stream_num]) val = -val;
+            sample_buffer[stream_num][idx++] += val;
             if(idx == SAMPLE_BUFFER_SIZE) idx = 0;
         }
 
-        in_sample_index += SAMPLES_PER_BIT;
-        if(in_sample_index == SAMPLE_BUFFER_SIZE) in_sample_index -= SAMPLE_BUFFER_SIZE;
+        in_sample_index[stream_num] += SAMPLES_PER_BIT;
+        if(in_sample_index[stream_num] == SAMPLE_BUFFER_SIZE) in_sample_index[stream_num] -= SAMPLE_BUFFER_SIZE;
 
-        bit_pos++;
-        sample_count = 0;
+        bit_pos[stream_num]++;
+        sample_count[stream_num] = 0;
     }
 
-    float sample = sample_buffer[out_sample_index];
+    float sample = sample_buffer[stream_num][out_sample_index[stream_num]];
 
-    sample_buffer[out_sample_index++] = 0;
-    if(out_sample_index == SAMPLE_BUFFER_SIZE) out_sample_index = 0;
+    sample_buffer[stream_num][out_sample_index[stream_num]++] = 0;
+    if(out_sample_index[stream_num] == SAMPLE_BUFFER_SIZE) out_sample_index[stream_num] = 0;
 
-    sample_count++;
-    return sample;
-}
-
-float get_rds2_stream2_sample() {
-    static int bit_buffer[BITS_PER_GROUP];
-    static int bit_pos = BITS_PER_GROUP;
-    static float sample_buffer[SAMPLE_BUFFER_SIZE];
-
-    static int prev_output;
-    static int cur_output;
-    static int cur_bit;
-    static int sample_count = SAMPLES_PER_BIT;
-    static int inverting;
-
-    static int in_sample_index;
-    static int out_sample_index = SAMPLE_BUFFER_SIZE-1;
-
-    if(sample_count == SAMPLES_PER_BIT) {
-        if(bit_pos == BITS_PER_GROUP) {
-            get_rds2_bits(2, bit_buffer);
-            bit_pos = 0;
-        }
-
-        // do differential encoding
-        cur_bit = bit_buffer[bit_pos];
-        prev_output = cur_output;
-        cur_output = prev_output ^ cur_bit;
-
-        inverting = (cur_output == 1);
-
-        float *src = waveform_biphase;
-        int idx = in_sample_index;
-
-        for(int j=0; j<FILTER_SIZE; j++) {
-            float val = (*src++);
-            if(inverting) val = -val;
-            sample_buffer[idx++] += val;
-            if(idx == SAMPLE_BUFFER_SIZE) idx = 0;
-        }
-
-        in_sample_index += SAMPLES_PER_BIT;
-        if(in_sample_index == SAMPLE_BUFFER_SIZE) in_sample_index -= SAMPLE_BUFFER_SIZE;
-
-        bit_pos++;
-        sample_count = 0;
-    }
-
-    float sample = sample_buffer[out_sample_index];
-
-    sample_buffer[out_sample_index++] = 0;
-    if(out_sample_index == SAMPLE_BUFFER_SIZE) out_sample_index = 0;
-
-    sample_count++;
-    return sample;
-}
-
-float get_rds2_stream3_sample() {
-    static int bit_buffer[BITS_PER_GROUP];
-    static int bit_pos = BITS_PER_GROUP;
-    static float sample_buffer[SAMPLE_BUFFER_SIZE];
-
-    static int prev_output;
-    static int cur_output;
-    static int cur_bit;
-    static int sample_count = SAMPLES_PER_BIT;
-    static int inverting;
-
-    static int in_sample_index;
-    static int out_sample_index = SAMPLE_BUFFER_SIZE-1;
-
-    if(sample_count == SAMPLES_PER_BIT) {
-        if(bit_pos == BITS_PER_GROUP) {
-            get_rds2_bits(3, bit_buffer);
-            bit_pos = 0;
-        }
-
-        // do differential encoding
-        cur_bit = bit_buffer[bit_pos];
-        prev_output = cur_output;
-        cur_output = prev_output ^ cur_bit;
-
-        inverting = (cur_output == 1);
-
-        float *src = waveform_biphase;
-        int idx = in_sample_index;
-
-        for(int j=0; j<FILTER_SIZE; j++) {
-            float val = (*src++);
-            if(inverting) val = -val;
-            sample_buffer[idx++] += val;
-            if(idx == SAMPLE_BUFFER_SIZE) idx = 0;
-        }
-
-        in_sample_index += SAMPLES_PER_BIT;
-        if(in_sample_index == SAMPLE_BUFFER_SIZE) in_sample_index -= SAMPLE_BUFFER_SIZE;
-
-        bit_pos++;
-        sample_count = 0;
-    }
-
-    float sample = sample_buffer[out_sample_index];
-
-    sample_buffer[out_sample_index++] = 0;
-    if(out_sample_index == SAMPLE_BUFFER_SIZE) out_sample_index = 0;
-
-    sample_count++;
+    sample_count[stream_num]++;
     return sample;
 }

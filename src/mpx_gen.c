@@ -22,6 +22,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <ao/ao.h>
+#include <pthread.h>
 
 #include "rds.h"
 #include "fm_mpx.h"
@@ -98,6 +99,7 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 	for (;;) {
 		if(control_pipe) poll_control_pipe();
 
+		// TODO: run this and ao_play as separate threads
 		if ((samples = fm_mpx_get_samples(mpx_data)) < 0) break;
 
 		float2char(mpx_data, dev_out, samples);
@@ -254,7 +256,11 @@ int main(int argc, char **argv) {
 					"\n"
 					"[Audio]\n"
 					"\n"
+#ifdef ALSA
+					"    -a / --audio        Input file, pipe or ALSA capture\n"
+#else
 					"    -a / --audio        Input file or pipe\n"
+#endif
 					"    -o / --output-file  PCM out\n"
 					"\n"
 					"[MPX controls]\n"

@@ -79,6 +79,8 @@ snd_pcm_t *open_alsa_input(char *input, unsigned int sample_rate, unsigned int c
 		return NULL;
 	}
 
+	fprintf(stderr, "Using ADC input %s.\n", input);
+
 	return pcm;
 }
 

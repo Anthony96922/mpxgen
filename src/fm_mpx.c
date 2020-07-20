@@ -56,10 +56,8 @@ int input;
 SNDFILE *inf;
 
 // SRC
-SRC_STATE *in_resampler;
-SRC_DATA in_resampler_data;
-SRC_STATE *mpx_resampler;
-SRC_DATA mpx_resampler_data;
+SRC_STATE *resampler[2];
+SRC_DATA resampler_data[2];
 
 float mpx_vol;
 
@@ -75,33 +73,34 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 	mpx_buffer = malloc(DATA_SIZE * sizeof(float));
 	mpx_out = malloc(DATA_SIZE * sizeof(float));
 
-	mpx_resampler_data.src_ratio = (192000 / 228000.0) + (out_ppm / 1000000);
-	mpx_resampler_data.output_frames = DATA_SIZE;
-	mpx_resampler_data.data_in = mpx_buffer;
-	mpx_resampler_data.data_out = mpx_out;
+	resampler_data[0].src_ratio = (192000 / 228000.0) + (out_ppm / 1000000);
+	resampler_data[0].output_frames = DATA_SIZE;
+	resampler_data[0].data_in = mpx_buffer;
+	resampler_data[0].data_out = mpx_out;
 
-	if ((mpx_resampler = resampler_init(1)) == NULL) {
+	if ((resampler[0] = resampler_init(1)) == NULL) {
 		fprintf(stderr, "Could not create MPX resampler.\n");
 		goto error;
 	}
 
 	create_mpx_carriers(228000);
 
-#ifdef ALSA
-	char *input_card;
-#endif
-
 	if(filename != NULL) {
-		if ((inf = open_file_input(filename, &in_samplerate, &channels, wait_for_audio, INPUT_DATA_SIZE)) == NULL)
-			goto error;
-		input = 1;
 #ifdef ALSA
-	} else if (input_card != NULL) {
-		channels = 1;
-		in_samplerate = 48000;
-		if ((alsa_input = open_alsa_input(input_card, in_samplerate, channels, INPUT_DATA_SIZE)) == NULL)
-			goto error;
-		input = 2;
+		// TODO: better detect live capture cards
+		if (strstr(filename, ":") != NULL) {
+			channels = 1;
+			in_samplerate = 48000;
+			if ((alsa_input = open_alsa_input(filename, in_samplerate, channels, INPUT_DATA_SIZE)) == NULL)
+				goto error;
+			input = 2;
+		} else {
+#endif
+			if ((inf = open_file_input(filename, &in_samplerate, &channels, wait_for_audio, INPUT_DATA_SIZE)) == NULL)
+				goto error;
+			input = 1;
+#ifdef ALSA
+		}
 #endif
 	} else {
 		return 0;
@@ -127,13 +126,16 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 	audio_input = malloc(DATA_SIZE * channels * sizeof(float));
 	resampled_input = malloc(DATA_SIZE * channels * sizeof(float));
 
-	in_resampler_data.src_ratio = upsample_factor;
-	in_resampler_data.input_frames = INPUT_DATA_SIZE;
-	in_resampler_data.output_frames = DATA_SIZE;
-	in_resampler_data.data_in = audio_input;
-	in_resampler_data.data_out = resampled_input;
+	resampler_data[1].src_ratio = upsample_factor;
+	// output_frames: max number of frames to generate
+	// Because we're upsampling the input, the number of output frames
+	// needs to be at least the number of input_frames times the ratio.
+	resampler_data[1].input_frames = INPUT_DATA_SIZE;
+	resampler_data[1].output_frames = DATA_SIZE;
+	resampler_data[1].data_in = audio_input;
+	resampler_data[1].data_out = resampled_input;
 
-	if ((in_resampler = resampler_init(channels)) == NULL) {
+	if ((resampler[1] = resampler_init(channels)) == NULL) {
 		fprintf(stderr, "Could not create input resampler.\n");
 		goto error;
 	}
@@ -153,7 +155,7 @@ int get_input_audio() {
 		if (read_alsa_input(alsa_input, audio_input) < 0) return -1;
 #endif
 	}
-	return resample(in_resampler, in_resampler_data);
+	return resample(resampler[1], resampler_data[1]);
 }
 
 int fm_mpx_get_samples(float *out) {
@@ -166,16 +168,16 @@ int fm_mpx_get_samples(float *out) {
 	float out_mono, out_stereo;
 
 	if (!input) {
-		audio_len = DATA_SIZE;
+		audio_len = INPUT_DATA_SIZE;
 
 		for (int i = 0; i < audio_len; i++) {
 			// 6% modulation
-			mpx_buffer[i] = get_57k_carrier() * get_rds_sample() * 0.12;
+			mpx_buffer[i] = get_carrier(2) * get_rds_sample() * 0.12;
 
 #ifdef RDS2
-			mpx_buffer[i] += get_67k_carrier() * get_rds2_stream1_sample() * 0.12;
-			mpx_buffer[i] += get_71k_carrier() * get_rds2_stream2_sample() * 0.12;
-			mpx_buffer[i] += get_76k_carrier() * get_rds2_stream3_sample() * 0.12;
+			mpx_buffer[i] += get_carrier(3) * get_rds2_sample(1) * 0.12;
+			mpx_buffer[i] += get_carrier(4) * get_rds2_sample(2) * 0.12;
+			mpx_buffer[i] += get_carrier(5) * get_rds2_sample(3) * 0.12;
 #endif
 
 			update_carrier_phase();
@@ -231,20 +233,20 @@ int fm_mpx_get_samples(float *out) {
 			if (channels == 2) {
 				// audio signals need to be limited to 45% to remain within modulation limits
 				mpx_buffer[i] = out_mono * 0.45 +
-					get_19k_carrier() * 0.08 + // 8% modulation
-					get_38k_carrier() * out_stereo * 0.45;
+					get_carrier(0) * 0.08 + // 8% modulation
+					get_carrier(1) * out_stereo * 0.45;
 			} else {
 				// mono audio is limited to 90%
 				mpx_buffer[i] = out_mono * 0.9;
 			}
 
 			// 6% modulation
-			mpx_buffer[i] += get_57k_carrier() * get_rds_sample() * 0.12;
+			mpx_buffer[i] += get_carrier(2) * get_rds_sample() * 0.12;
 
 #ifdef RDS2
-			mpx_buffer[i] += get_67k_carrier() * get_rds2_stream1_sample() * 0.12;
-			mpx_buffer[i] += get_71k_carrier() * get_rds2_stream2_sample() * 0.12;
-			mpx_buffer[i] += get_76k_carrier() * get_rds2_stream3_sample() * 0.12;
+			mpx_buffer[i] += get_carrier(3) * get_rds2_sample(1) * 0.12;
+			mpx_buffer[i] += get_carrier(4) * get_rds2_sample(2) * 0.12;
+			mpx_buffer[i] += get_carrier(5) * get_rds2_sample(3) * 0.12;
 #endif
 
 			update_carrier_phase();
@@ -253,8 +255,8 @@ int fm_mpx_get_samples(float *out) {
 		}
 	}
 
-	mpx_resampler_data.input_frames = audio_len;
-	if ((audio_len = resample(mpx_resampler, mpx_resampler_data)) < 0) return -1;
+	resampler_data[0].input_frames = audio_len;
+	if ((audio_len = resample(resampler[0], resampler_data[0])) < 0) return -1;
 
 	memcpy(out, mpx_out, audio_len * sizeof(float));
 
@@ -274,6 +276,6 @@ void fm_mpx_close() {
 	if (resampled_input != NULL) free(resampled_input);
 	if (mpx_buffer != NULL) free(mpx_buffer);
 	if (mpx_out != NULL) free(mpx_out);
-	resampler_exit(in_resampler);
-	resampler_exit(mpx_resampler);
+	resampler_exit(resampler[0]);
+	if (resampler[1] != NULL) resampler_exit(resampler[1]);
 }

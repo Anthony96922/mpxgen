@@ -26,13 +26,12 @@
 
 struct {
     uint16_t pi;
-    int ta;
-    int pty;
-    int tp;
-    int ms;
-    int ab;
-    int di;
-    int af[MAX_AF+1];
+    uint8_t ta;
+    uint8_t pty;
+    uint8_t tp;
+    uint8_t ms;
+    uint8_t ab;
+    uint8_t di;
     // PS
     char ps[8];
     // RT
@@ -47,25 +46,31 @@ struct {
 
 // RDS data controls
 struct {
-    int on;
-    int ps_update;
-    int rt_update;
-    int rt_segments;
-    int ptyn_update;
-    int enable_ptyn;
-    int encode_ctime;
+    uint8_t on;
+    uint8_t ps_update;
+    uint8_t rt_update;
+    uint8_t rt_segments;
+    uint8_t ptyn_update;
+    uint8_t enable_ptyn;
+    uint8_t encode_ctime;
 } rds_controls;
+
+// AF
+struct {
+    uint8_t num_afs;
+    uint8_t afs[MAX_AF];
+} af;
 
 // RT+
 struct {
-    int running;
-    int toggle;
-    int type_1;
-    int start_1;
-    int len_1;
-    int type_2;
-    int start_2;
-    int len_2;
+    uint8_t running;
+    uint8_t toggle;
+    uint8_t type_1;
+    uint8_t start_1;
+    uint8_t len_1;
+    uint8_t type_2;
+    uint8_t start_2;
+    uint8_t len_2;
 } rtp_params;
 
 uint16_t offset_words[] = {0x0FC, 0x198, 0x168, 0x1B4};
@@ -141,15 +146,15 @@ void get_rds_ps_group(uint16_t *blocks) {
 	blocks[1] |= ((rds_params.di >> (3 - ps_state)) & 1) << 2;
 
 	// AF
-	if (rds_params.af[0]) {
+	if (af.num_afs) {
 		if (af_state == 0) {
-			blocks[2] = (rds_params.af[0] + 224) << 8 | rds_params.af[1];
+			blocks[2] = (af.num_afs + 224) << 8 | af.afs[0];
 		} else {
-			blocks[2] = rds_params.af[af_state] << 8 |
-					(rds_params.af[af_state+1] ? rds_params.af[af_state+1] : 0xCD);
+			blocks[2] = af.afs[af_state] << 8 |
+					(af.afs[af_state+1] ? af.afs[af_state+1] : 0xCD);
 		}
 		af_state += 2;
-		if (af_state > rds_params.af[0]) af_state = 0;
+		if (af_state > af.num_afs) af_state = 0;
 	} else {
 		blocks[2] = 0xE0CD; // no AF
 	}
@@ -357,8 +362,10 @@ float get_rds_sample() {
     return sample;
 }
 
-// RBDS PTY list
-char *ptys[] = {
+int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_array, char *ptyn) {
+
+    // RBDS PTY list
+    char ptys[32][16] = {
 	"None", "News", "Information", "Sports",
 	"Talk", "Rock", "Classic rock", "Adult hits",
 	"Soft rock" , "Top 40", "Country", "Oldies",
@@ -367,11 +374,8 @@ char *ptys[] = {
 	"Religious talk", "Personality", "Public", "College",
 	"Spanish talk", "Spanish music", "Hip-Hop", "Unassigned",
 	"Unassigned", "Weather", "Emergency test", "Emergency"
-};
+    };
 
-extern int channels;
-
-int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_array, char *ptyn) {
 
     if (pty < 0 || pty > 31) {
 	fprintf(stderr, "PTY must be between 0 - 31.\n");
@@ -391,7 +395,7 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_a
 	if (rds_controls.on) {
 	    fprintf(stderr, "AF: %d,", af_array[0]);
 	    for(int f = 1; f < af_array[0]+1; f++) {
-		fprintf(stderr, " %.1f", (float)(af_array[f]+875)/10);
+		fprintf(stderr, " %.1f", (af_array[f]+875)/10.0);
 	    }
 	    fprintf(stderr, "\n");
 	}
@@ -402,15 +406,14 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_a
     set_rds_ab(1);
     set_rds_rt(rt);
     set_rds_pty(pty);
-    if (ptyn[0] != 0) {
+    if (ptyn[0]) {
 	if (rds_controls.on) fprintf(stderr, "PTYN: \"%s\"\n", ptyn);
 	set_rds_ptyn(ptyn, 1);
     }
     set_rds_tp(tp);
     set_rds_ct(1);
     set_rds_ms(1);
-    if (channels == 2)
-	set_rds_di(1); // 1 - Stereo
+    set_rds_di(DI_STEREO);
 
     return 0;
 }
@@ -465,9 +468,9 @@ void set_rds_rtp_tags(int type_1, int start_1, int len_1,
 }
 
 void set_rds_af(int *af_array) {
-    rds_params.af[0] = af_array[0];
-    for(int f=1; f<af_array[0]+1; f++) {
-        rds_params.af[f] = af_array[f];
+    af.num_afs = af_array[0];
+    for(int f=0; f<af_array[0]; f++) {
+        af.afs[f] = af_array[f+1];
     }
 }
 

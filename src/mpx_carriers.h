@@ -17,14 +17,7 @@
  */
 
 extern void create_mpx_carriers(int sample_rate);
-extern void clear_mpx_carriers();
-extern float get_19k_carrier();
-extern float get_38k_carrier();
-extern float get_57k_carrier();
-extern float get_67k_carrier();
-extern float get_71k_carrier();
-extern float get_76k_carrier();
-extern void set_19k_level(int level_19k);
-extern void set_38k_level(int level_38k);
-extern void set_57k_level(int level_57k);
+extern float get_carrier(int num);
+extern void set_level(int carrier, int level);
 extern void update_carrier_phase();
+extern void clear_mpx_carriers();

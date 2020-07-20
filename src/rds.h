@@ -37,6 +37,11 @@
 
 #define MAX_AF 25
 
+#define DI_STEREO 1 // 1 - Stereo
+#define DI_AH 2 // 2 - Artificial Head
+#define DI_COMPRESSED 4 // 4 - Compressed
+#define DI_DPTY 8 // 8 - Dynamic PTY
+
 extern int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty,
                              int tp, int *af_array, char *ptyn);
 

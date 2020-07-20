@@ -30,7 +30,7 @@ int create_carrier(int sample_rate, float freq, float *carrier) {
 
 	for (i = 1; i < sample_rate; i++) {
 		sample = sin(2 * M_PI * freq * i / sample_rate);
-		if (sample > -0.1e-7 && sample < 0.1e-7) {
+		if (sample > -0.1e-6 && sample < 0.1e-6) {
 			if (++sine_zero_crossings == 2) break;
 			*carrier++ = 0;
 		} else {
@@ -41,114 +41,48 @@ int create_carrier(int sample_rate, float freq, float *carrier) {
 	return i;
 }
 
-float *carrier_19k;
-float *carrier_38k;
-float *carrier_57k;
-int max_19k;
-int max_38k;
-int max_57k;
-
 /* RDS 2 carriers
  * 66.5/71.25/76
  */
 #ifdef RDS2
-float *carrier_67k;
-float *carrier_71k;
-float *carrier_76k;
-int max_67k;
-int max_71k;
-int max_76k;
+int num_carriers = 6;
+float carrier_frequencies[6] = {19000, 38000, 57000, 66500, 71250, 76000};
+float *carrier[6];
+int phase[6][2];
+int level[6];
+#else
+int num_carriers = 3;
+float carrier_frequencies[3] = {19000, 38000, 57000};
+float *carrier[3];
+int phase[3][2]; // [carrier][current phase/max phase]
+int level[3];
 #endif
 
 void create_mpx_carriers(int sample_rate) {
-	carrier_19k = malloc(sample_rate * sizeof(float));
-	carrier_38k = malloc(sample_rate * sizeof(float));
-	carrier_57k = malloc(sample_rate * sizeof(float));
-	max_19k = create_carrier(sample_rate, 19000, carrier_19k);
-	max_38k = create_carrier(sample_rate, 38000, carrier_38k);
-	max_57k = create_carrier(sample_rate, 57000, carrier_57k);
-#ifdef RDS2
-	carrier_67k = malloc(sample_rate * sizeof(float));
-	carrier_71k = malloc(sample_rate * sizeof(float));
-	carrier_76k = malloc(sample_rate * sizeof(float));
-	max_67k = create_carrier(sample_rate, 66500, carrier_67k);
-	max_71k = create_carrier(sample_rate, 71250, carrier_71k);
-	max_76k = create_carrier(sample_rate, 76000, carrier_76k);
-#endif
+	for (int i = 0; i < num_carriers; i++) {
+		carrier[i] = malloc(sample_rate * sizeof(float));
+		phase[i][1] = create_carrier(sample_rate, carrier_frequencies[i], carrier[i]);
+		level[i] = 1;
+	}
 }
 
 void clear_mpx_carriers() {
-	free(carrier_19k);
-	free(carrier_38k);
-	free(carrier_57k);
-#ifdef RDS2
-	free(carrier_67k);
-	free(carrier_71k);
-	free(carrier_76k);
-#endif
+	for (int i = 0; i < num_carriers; i++) {
+		free(carrier[i]);
+	}
 }
 
-int phase_19k;
-int phase_38k;
-int phase_57k;
-#ifdef RDS2
-int phase_67k;
-int phase_71k;
-int phase_76k;
-#endif
-
-float level_19k = 1;
-float level_38k = 1;
-float level_57k = 1;
-
-float get_19k_carrier() {
-	return carrier_19k[phase_19k] * level_19k;
+float get_carrier(int carrier_num) {
+	return carrier[carrier_num][phase[carrier_num][0]] * level[carrier_num];
 }
-
-float get_38k_carrier() {
-	return carrier_38k[phase_38k] * level_38k;
-}
-
-float get_57k_carrier() {
-	return carrier_57k[phase_57k] * level_57k;
-}
-
-#ifdef RDS2
-float get_67k_carrier() {
-	return carrier_67k[phase_67k];
-}
-
-float get_71k_carrier() {
-	return carrier_71k[phase_71k];
-}
-
-float get_76k_carrier() {
-	return carrier_76k[phase_76k];
-}
-#endif
 
 void update_carrier_phase() {
-	if (++phase_19k == max_19k) phase_19k = 0;
-	if (++phase_38k == max_38k) phase_38k = 0;
-	if (++phase_57k == max_57k) phase_57k = 0;
-#ifdef RDS2
-	if (++phase_67k == max_67k) phase_67k = 0;
-	if (++phase_71k == max_71k) phase_71k = 0;
-	if (++phase_76k == max_76k) phase_76k = 0;
-#endif
+	for (int i = 0; i < num_carriers; i++) {
+		if (++phase[i][0] == phase[i][1]) phase[i][0] = 0;
+	}
 }
 
-void set_19k_level(int new_level) {
+void set_level(int carrier, int new_level) {
 	if (new_level == -1) return;
-	level_19k = (new_level / 100.0);
-}
-
-void set_38k_level(int new_level) {
-	if (new_level == -1) return;
-	level_38k = (new_level / 100.0);
-}
-
-void set_57k_level(int new_level) {
-	if (new_level == -1) return;
-	level_57k = (new_level / 100.0);
+	level[carrier] = (new_level / 100.0);
 }
