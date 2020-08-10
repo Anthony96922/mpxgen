@@ -28,36 +28,25 @@
 #include "mpx_carriers.h"
 #include "resampler.h"
 #include "input.h"
-#ifdef ALSA
-#include "alsa_input.h"
-#endif
 
 #define FIR_HALF_SIZE	30
 #define FIR_SIZE	(2*FIR_HALF_SIZE-1)
 
 // coefficients of the low-pass FIR filter
 float low_pass_fir[FIR_HALF_SIZE];
-float fir_buffer_left[FIR_SIZE];
-float fir_buffer_right[FIR_SIZE];
+float fir_buffer[2][FIR_SIZE];
 
-float *audio_input;
-float *resampled_input;
+float *input_buffer;
 float *mpx_buffer;
 float *mpx_out;
 
-#ifdef ALSA
-snd_pcm_t *alsa_input;
-#endif
+// SRC
+SRC_STATE *mpx_resampler;
+SRC_DATA mpx_resampler_data;
 
-int channels;
+input_params_t in;
 
 int input;
-
-SNDFILE *inf;
-
-// SRC
-SRC_STATE *resampler[2];
-SRC_DATA resampler_data[2];
 
 float mpx_vol;
 
@@ -66,49 +55,31 @@ void set_output_volume(int vol) {
 }
 
 int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
-	int in_samplerate;
-	float upsample_factor;
 	int cutoff_freq = 15500;
 
 	mpx_buffer = malloc(DATA_SIZE * sizeof(float));
 	mpx_out = malloc(DATA_SIZE * sizeof(float));
 
-	resampler_data[0].src_ratio = (192000 / 228000.0) + (out_ppm / 1000000);
-	resampler_data[0].output_frames = DATA_SIZE;
-	resampler_data[0].data_in = mpx_buffer;
-	resampler_data[0].data_out = mpx_out;
+	mpx_resampler_data.src_ratio = (192000 / 228000.0) + (out_ppm / 1000000);
+	mpx_resampler_data.output_frames = DATA_SIZE;
+	mpx_resampler_data.data_in = mpx_buffer;
+	mpx_resampler_data.data_out = mpx_out;
 
-	if ((resampler[0] = resampler_init(1)) == NULL) {
+	if ((mpx_resampler = resampler_init(1)) == NULL) {
 		fprintf(stderr, "Could not create MPX resampler.\n");
 		goto error;
 	}
 
 	create_mpx_carriers(228000);
 
-	if(filename != NULL) {
-#ifdef ALSA
-		// TODO: better detect live capture cards
-		if (strstr(filename, ":") != NULL) {
-			channels = 1;
-			in_samplerate = 48000;
-			if ((alsa_input = open_alsa_input(filename, in_samplerate, channels, INPUT_DATA_SIZE)) == NULL)
-				goto error;
-			input = 2;
-		} else {
-#endif
-			if ((inf = open_file_input(filename, &in_samplerate, &channels, wait_for_audio, INPUT_DATA_SIZE)) == NULL)
-				goto error;
-			input = 1;
-#ifdef ALSA
-		}
-#endif
-	} else {
-		return 0;
+	if (filename != NULL) {
+		in = open_input(filename, wait_for_audio);
+		if (!in.sample_rate) return -1;
 	}
 
-	upsample_factor = 228000. / in_samplerate;
+	input = 1;
 
-	fprintf(stderr, "Input: %d Hz, %d channels, upsampling factor: %.2f\n", in_samplerate, channels, upsample_factor);
+	input_buffer = malloc(DATA_SIZE * sizeof(float));
 
 	// Here we divide this coefficient by two because it will be counted twice
 	// when applying the filter
@@ -123,39 +94,11 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 
 	fprintf(stderr, "Created low-pass FIR filter for audio channels, with cutoff at %d Hz\n", cutoff_freq);
 
-	audio_input = malloc(DATA_SIZE * channels * sizeof(float));
-	resampled_input = malloc(DATA_SIZE * channels * sizeof(float));
-
-	resampler_data[1].src_ratio = upsample_factor;
-	// output_frames: max number of frames to generate
-	// Because we're upsampling the input, the number of output frames
-	// needs to be at least the number of input_frames times the ratio.
-	resampler_data[1].input_frames = INPUT_DATA_SIZE;
-	resampler_data[1].output_frames = DATA_SIZE;
-	resampler_data[1].data_in = audio_input;
-	resampler_data[1].data_out = resampled_input;
-
-	if ((resampler[1] = resampler_init(channels)) == NULL) {
-		fprintf(stderr, "Could not create input resampler.\n");
-		goto error;
-	}
-
 	return 0;
 
 error:
 	fm_mpx_close();
 	return -1;
-}
-
-int get_input_audio() {
-	if (input == 1) {
-		if (read_file_input(inf, audio_input) < 0) return -1;
-#ifdef ALSA
-	} else if (input == 2) {
-		if (read_alsa_input(alsa_input, audio_input) < 0) return -1;
-#endif
-	}
-	return resample(resampler[1], resampler_data[1]);
 }
 
 int fm_mpx_get_samples(float *out) {
@@ -185,13 +128,13 @@ int fm_mpx_get_samples(float *out) {
 			mpx_buffer[i] *= mpx_vol;
 		}
 	} else {
-		if ((audio_len = get_input_audio()) < 0) return -1;
+		if ((audio_len = read_input(input_buffer)) < 0) return -1;
 
 		for (int i = 0; i < audio_len; i++) {
 			// First store the current sample(s) into the FIR filter's ring buffer
-			fir_buffer_left[fir_index] = resampled_input[j];
-			if (channels == 2) {
-				fir_buffer_right[fir_index] = resampled_input[j+1];
+			fir_buffer[0][fir_index] = input_buffer[j];
+			if (in.channels == 2) {
+				fir_buffer[1][fir_index] = input_buffer[j+1];
 				j++;
 			}
 			j++;
@@ -213,9 +156,9 @@ int fm_mpx_get_samples(float *out) {
 			for(int fi=0; fi<FIR_HALF_SIZE; fi++) {  // fi = Filter Index
 				dfbi--;
 				if(dfbi < 0) dfbi = FIR_SIZE-1;
-				out_left += low_pass_fir[fi] * (fir_buffer_left[ifbi] + fir_buffer_left[dfbi]);
-				if(channels == 2) {
-					out_right += low_pass_fir[fi] * (fir_buffer_right[ifbi] + fir_buffer_right[dfbi]);
+				out_left += low_pass_fir[fi] * (fir_buffer[0][ifbi] + fir_buffer[0][dfbi]);
+				if(in.channels == 2) {
+					out_right += low_pass_fir[fi] * (fir_buffer[1][ifbi] + fir_buffer[1][dfbi]);
 				}
 				ifbi++;
 				if(ifbi == FIR_SIZE) ifbi = 0;
@@ -230,7 +173,7 @@ int fm_mpx_get_samples(float *out) {
 			out_mono   = out_left + out_right;
 			out_stereo = out_left - out_right;
 
-			if (channels == 2) {
+			if (in.channels == 2) {
 				// audio signals need to be limited to 45% to remain within modulation limits
 				mpx_buffer[i] = out_mono * 0.45 +
 					get_carrier(0) * 0.08 + // 8% modulation
@@ -255,27 +198,17 @@ int fm_mpx_get_samples(float *out) {
 		}
 	}
 
-	resampler_data[0].input_frames = audio_len;
-	if ((audio_len = resample(resampler[0], resampler_data[0])) < 0) return -1;
-
+	mpx_resampler_data.input_frames = audio_len;
+	if ((audio_len = resample(mpx_resampler, mpx_resampler_data)) < 0) return -1;
 	memcpy(out, mpx_out, audio_len * sizeof(float));
 
 	return audio_len;
 }
 
 void fm_mpx_close() {
-	if (input == 1) {
-		close_file_input(inf);
-#ifdef ALSA
-	} else if (input == 2) {
-		close_alsa_input(alsa_input);
-#endif
-	}
+	close_input();
 	clear_mpx_carriers();
-	if (audio_input != NULL) free(audio_input);
-	if (resampled_input != NULL) free(resampled_input);
 	if (mpx_buffer != NULL) free(mpx_buffer);
 	if (mpx_out != NULL) free(mpx_out);
-	resampler_exit(resampler[0]);
-	if (resampler[1] != NULL) resampler_exit(resampler[1]);
+	resampler_exit(mpx_resampler);
 }

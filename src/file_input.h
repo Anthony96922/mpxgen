@@ -18,6 +18,6 @@
 
 #include <sndfile.h>
 
-extern SNDFILE *open_file_input(char *filename, int *sample_rate, int *channels, int wait, size_t num_frames);
+extern SNDFILE *open_file_input(char *filename, unsigned int *sample_rate, unsigned int *channels, int wait, size_t num_frames);
 extern int read_file_input(SNDFILE *inf, float *audio);
 extern void close_file_input(SNDFILE *inf);

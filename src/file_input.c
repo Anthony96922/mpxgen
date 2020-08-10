@@ -18,13 +18,13 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "input.h"
+#include "file_input.h"
 
 int channels;
 int audio_wait;
 int buffer_size;
 
-SNDFILE *open_file_input(char *filename, int *input_sample_rate, int *input_channels, int wait, size_t num_frames) {
+SNDFILE *open_file_input(char *filename, unsigned int *input_sample_rate, unsigned int *input_channels, int wait, size_t num_frames) {
 	// Open the input file
         SF_INFO sfinfo;
 	SNDFILE *inf;

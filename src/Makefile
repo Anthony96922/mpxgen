@@ -8,7 +8,7 @@ ALSA = 0
 CC = gcc
 CFLAGS = -Wall -O2 -std=gnu99 -pedantic
 
-obj = mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o mpx_carriers.o resampler.o input.o audio_conversion.o
+obj = mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o mpx_carriers.o resampler.o input.o audio_conversion.o file_input.o
 libs = -lm -lsndfile -lsamplerate -lao
 
 ifeq ($(RDS2), 1)
@@ -42,6 +42,10 @@ resampler.o: resampler.h
 audio_conversion.o: audio_conversion.h
 
 alsa_input.o: alsa_input.h
+
+file_input.o: file_input.h
+
+input.o: input.h fm_mpx.h resampler.h
 
 clean:
 	rm -f *.o
