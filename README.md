@@ -1,6 +1,8 @@
 # mpxgen
 This program generates FM multiplex baseband audio that can be output to a mono FM transmitter. This includes stereo audio as well as realtime RDS data.
 
+##### This is a work in progress! While I try to add new features myself, feel free to contribute and help improve this app!
+
 #### Features
 - Low resource requirements
 - Built-in low-pass filtering
@@ -9,12 +11,9 @@ This program generates FM multiplex baseband audio that can be output to a mono 
 - RT+ support
 - Experimental RDS2 capabilities
 
-It won't replace commercial broadcasting software but it uses less resources and doesn't require a GUI to use.
-
 #### To do
-- Threading
-- ALSA as option for input source
-- Rewrite the RDS encoder to allow running at 192 kHz
+- Threading (<- very important!)
+- Basic limiting (?)
 
 ## Build
 This app depends on the sndfile, ao and samplerate libraries. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libao-dev libsamplerate0-dev` to install them.
@@ -43,7 +42,7 @@ To test audio output, you can use the provided stereo_44100.wav file.
 ```
 If the audio sounds distorted, you may be overmodulating the transmitter. Adjust the output volume (see `--volume` option) until audio sounds clear and no distortion can be heard.
 
-You may use MPXtool to calibrate the pilot tone level to exactly 8% modulation.
+You may use MPXtool to calibrate the pilot tone level so the level is exactly 8%.
 
 There are more options that can be given to mpxgen:
 ```
@@ -77,12 +76,12 @@ There are more options that can be given to mpxgen:
 -p / --pty          Program Type. Valid range: 0 - 31. Example: --pty 9 (US: Top 40).
                     See https://en.wikipedia.org/wiki/Radio_Data_System for more program types.
 
--T / --tp           Traffic program. Default: 0.
+-T / --tp           Traffic Program. Default: 0.
 
 -A / --af           List of alternative frequencies (AF). Multiple AFs can be listed.
                     Example: --af 107.9 --af 99.2 .
 
--P / --ptyn         Program Type Name is a more specific format. Example: --ptyn CHR.
+-P / --ptyn         Program Type Name. Used to indicate a more specific format. Example: --ptyn CHR.
 
 
 -C / --ctl          Named pipe (FIFO) to use as a control channel to change PS, RT
@@ -99,22 +98,21 @@ Basic audio processing with ffmpeg:
 ffmpeg -i <file name or stream URL> \
   -af "
     acrossover=split=200|500|1000|4000[a0][a1][a2][a3][a4],
-    [a0]acompressor=level_in=10:threshold=0.01:release=5000:makeup=10[b0];
-    [a1]acompressor=level_in=10:threshold=0.01:release=5000:makeup=10[b1];
-    [a2]acompressor=level_in=10:threshold=0.01:release=5000:makeup=10[b2];
-    [a3]acompressor=level_in=10:threshold=0.01:release=5000:makeup=10[b3];
-    [a4]acompressor=level_in=10:threshold=0.01:release=5000:makeup=10[b4];
+    [a0]acompressor=level_in=5:threshold=0.050:release=5000:makeup=5[b0];
+    [a1]acompressor=level_in=5:threshold=0.025:release=5000:makeup=5[b1];
+    [a2]acompressor=level_in=5:threshold=0.025:release=5000:makeup=5[b2];
+    [a3]acompressor=level_in=5:threshold=0.025:release=5000:makeup=5[b3];
+    [a4]acompressor=level_in=5:threshold=0.025:release=5000:makeup=5[b4];
     [b0][b1][b2][b3][b4]amix=inputs=5,
     aemphasis=mode=production:type=75fm,
     acrossover=split=200|500|1000|4000[c0][c1][c2][c3][c4],
-    [c0]alimiter=level_in=3:level=disabled:attack=0.1:release=1:level_out=3[d0];
-    [c1]alimiter=level_in=3:level=disabled:attack=0.1:release=1:level_out=3[d1];
-    [c2]alimiter=level_in=3:level=disabled:attack=0.1:release=1:level_out=3[d2];
-    [c3]alimiter=level_in=3:level=disabled:attack=0.1:release=1:level_out=3[d3];
-    [c4]alimiter=level_in=3:level=disabled:attack=0.1:release=1:level_out=3[d4];
+    [c0]alimiter=level=disabled:attack=0.1:release=1[d0];
+    [c1]alimiter=level=disabled:attack=0.1:release=1[d1];
+    [c2]alimiter=level=disabled:attack=0.1:release=1[d2];
+    [c3]alimiter=level=disabled:attack=0.1:release=1[d3];
+    [c4]alimiter=level=disabled:attack=0.1:release=1[d4];
     [d0][d1][d2][d3][d4]amix=inputs=5,
-    asoftclip=type=sin,
-    volume=-6dB,
+    acompressor=threshold=0.25:ratio=6:attack=1000:release=1000,
     alimiter=limit=0.55:level=disabled:attack=0.1:release=1,
     firequalizer=gain='if(lt(f,16000), 0, -inf)'
   " \
@@ -142,6 +140,8 @@ TA OFF
 ```
 Every line must start with either `PS`, `RT`, `TA` or `PTY`, followed by one space character, and the desired value. Any other line format is silently ignored. `TA ON` switches the Traffic Announcement flag to *on*, and any other value switches it to *off*.
 
+Scripts can be written to obtain "now playing" data and feed it into Mpxgen for dynamically updated RDS.
+
 ### RT+
 Mpxgen implements RT+ to allow some radios to display indivdual MP3-like metadata tags like artist and song titles from within RT.
 
@@ -153,7 +153,7 @@ RTPF <running bit>,<toggle bit>
 For more information, see [EBU Technical Review: RadioText Plus](https://tech.ebu.ch/docs/techreview/trev_307-radiotext.pdf)
 
 ### RDS2 (experimental)
-Mpxgen has an untested implementation of RDS2. To enable, look for the `RDS = 0` in the Makefile and change the `0` to a `1`. Then run `make clean && make` to rebuild with RDS2 capabilities. Feel free to improve it and and create pull requests.
+Mpxgen has an untested implementation of RDS2. To enable, look for the `RDS2 = 0` in the Makefile and change the `0` to a `1`. Then run `make clean && make` to rebuild with RDS2 capabilities.
 
 #### Credits
 Based on [PiFmAdv](https://github.com/miegl/PiFmAdv) which is based on [PiFmRds](https://github.com/ChristopheJacquet/PiFmRds)
