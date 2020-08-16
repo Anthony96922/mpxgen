@@ -38,7 +38,6 @@ float fir_buffer[2][FIR_SIZE];
 
 float *input_buffer;
 float *mpx_buffer;
-float *mpx_out;
 
 // SRC
 SRC_STATE *mpx_resampler;
@@ -55,40 +54,41 @@ void set_output_volume(int vol) {
 }
 
 int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
-	int cutoff_freq = 15500;
+	int cutoff_freq;
 
 	mpx_buffer = malloc(DATA_SIZE * sizeof(float));
-	mpx_out = malloc(DATA_SIZE * sizeof(float));
 
-	mpx_resampler_data.src_ratio = (192000 / 228000.0) + (out_ppm / 1000000);
+	mpx_resampler_data.src_ratio = (192000 / 190000.0) + (out_ppm / 1e6);
 	mpx_resampler_data.output_frames = DATA_SIZE;
 	mpx_resampler_data.data_in = mpx_buffer;
-	mpx_resampler_data.data_out = mpx_out;
 
 	if ((mpx_resampler = resampler_init(1)) == NULL) {
 		fprintf(stderr, "Could not create MPX resampler.\n");
 		goto error;
 	}
 
-	create_mpx_carriers(228000);
+	create_mpx_carriers(190000);
 
 	if (filename != NULL) {
 		in = open_input(filename, wait_for_audio);
-		if (!in.sample_rate) return -1;
+		if (!in.sample_rate) goto error;
+	} else {
+		return 0;
 	}
 
 	input = 1;
+	cutoff_freq = 24000;
 
 	input_buffer = malloc(DATA_SIZE * sizeof(float));
 
 	// Here we divide this coefficient by two because it will be counted twice
 	// when applying the filter
-	low_pass_fir[FIR_HALF_SIZE-1] = 2 * cutoff_freq / 228000 /2;
+	low_pass_fir[FIR_HALF_SIZE-1] = 2 * cutoff_freq / 190000 / 2;
 
 	// Only store half of the filter since it is symmetric
 	for(int i=1; i<FIR_HALF_SIZE; i++) {
 		low_pass_fir[FIR_HALF_SIZE-1-i] =
-			sin(2 * M_PI * cutoff_freq * i / 228000) / (M_PI * i) // sinc
+			sin(2 * M_PI * cutoff_freq * i / 190000) / (M_PI * i) // sinc
 			* (.54 - .46 * cos(2 * M_PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
 	}
 
@@ -199,8 +199,8 @@ int fm_mpx_get_samples(float *out) {
 	}
 
 	mpx_resampler_data.input_frames = audio_len;
+	mpx_resampler_data.data_out = out;
 	if ((audio_len = resample(mpx_resampler, mpx_resampler_data)) < 0) return -1;
-	memcpy(out, mpx_out, audio_len * sizeof(float));
 
 	return audio_len;
 }
@@ -209,6 +209,5 @@ void fm_mpx_close() {
 	close_input();
 	clear_mpx_carriers();
 	if (mpx_buffer != NULL) free(mpx_buffer);
-	if (mpx_out != NULL) free(mpx_out);
 	resampler_exit(mpx_resampler);
 }

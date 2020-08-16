@@ -16,7 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdint.h>
 #include "fm_mpx.h"
 #include "resampler.h"
 #include "input.h"
@@ -28,7 +27,6 @@ snd_pcm_t *alsa_input;
 SNDFILE *inf;
 
 float *audio_input;
-float *resampled_input;
 
 int input_type;
 
@@ -37,31 +35,35 @@ SRC_STATE *input_resampler;
 SRC_DATA input_resampler_data;
 
 input_params_t open_input(char *input_name, int wait) {
-	input_params_t input;
+	float upsample_factor;
+	input_params_t input = {0};
 
 #ifdef ALSA
 	// TODO: better detect live capture cards
 	if (strstr(input_name, ":") != NULL) {
 		input.channels = 1;
 		input.sample_rate = 48000;
-		if ((alsa_input = open_alsa_input(input_name, input.sample_rate, input.channels, INPUT_DATA_SIZE)) == NULL)
-			return input;
 		input_type = 2;
+		if ((alsa_input = open_alsa_input(input_name, input.sample_rate, input.channels, INPUT_DATA_SIZE)) == NULL) {
+			close_alsa_input(alsa_input);
+			return input;
+		}
 	} else {
 #endif
-		if ((inf = open_file_input(input_name, &input.sample_rate, &input.channels, wait, INPUT_DATA_SIZE)) == NULL)
-			return input;
 		input_type = 1;
+		if ((inf = open_file_input(input_name, &input.sample_rate, &input.channels, wait, INPUT_DATA_SIZE)) == NULL) {
+			close_file_input(inf);
+			return input;
+		}
 #ifdef ALSA
 	}
 #endif
 
-	float upsample_factor = 228000. / input.sample_rate;
+	upsample_factor = 190000. / input.sample_rate;
 
 	fprintf(stderr, "Input: %d Hz, %d channels, upsampling factor: %.2f\n", input.sample_rate, input.channels, upsample_factor);
 
-	audio_input = malloc(DATA_SIZE * input.channels * sizeof(float));
-	resampled_input = malloc(DATA_SIZE * input.channels * sizeof(float));
+	audio_input = malloc(INPUT_DATA_SIZE * input.channels * sizeof(float));
 
 	input_resampler_data.src_ratio = upsample_factor;
 	// output_frames: max number of frames to generate
@@ -107,5 +109,4 @@ void close_input() {
 	}
 	resampler_exit(input_resampler);
 	free(audio_input);
-	free(resampled_input);
 }
