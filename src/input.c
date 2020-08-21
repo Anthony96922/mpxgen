@@ -41,7 +41,7 @@ input_params_t open_input(char *input_name, int wait) {
 #ifdef ALSA
 	// TODO: better detect live capture cards
 	if (strstr(input_name, ":") != NULL) {
-		input.channels = 1;
+		input.channels = 2;
 		input.sample_rate = 48000;
 		input_type = 2;
 		if ((alsa_input = open_alsa_input(input_name, input.sample_rate, input.channels, INPUT_DATA_SIZE)) == NULL) {
@@ -59,7 +59,7 @@ input_params_t open_input(char *input_name, int wait) {
 	}
 #endif
 
-	upsample_factor = 190000. / input.sample_rate;
+	upsample_factor = 190000.0 / input.sample_rate;
 
 	fprintf(stderr, "Input: %d Hz, %d channels, upsampling factor: %.2f\n", input.sample_rate, input.channels, upsample_factor);
 
