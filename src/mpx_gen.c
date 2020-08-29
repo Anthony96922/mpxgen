@@ -35,7 +35,169 @@ void stop() {
 	stop_mpx = 1;
 }
 
-int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float mpx, float ppm, int wait, int rds, uint16_t pi, char *ps, char *rt, int pty, int tp, int *af, char *ptyn) {
+int main(int argc, char **argv) {
+	int opt;
+	char *audio_file = NULL;
+	char *output_file = NULL;
+	char *control_pipe = NULL;
+	int rds = 1;
+	uint8_t af[MAX_AF+1] = {0};
+	uint8_t af_size = 0;
+	// Use arrays to enforce max length for RDS text items
+	char ps[9] = "Mpxgen";
+	char rt[65] = "Mpxgen: FM Stereo and RDS encoder";
+	char ptyn[9] = {0};
+	uint16_t pi = 0xFFFF;
+	int pty = 0;
+	int tp = 0;
+	float ppm = 0;
+	int mpx = 50;
+	int wait = 1;
+
+	const char	*short_opt = "a:o:m:x:W:R:i:s:r:p:T:A:P:C:h";
+	struct option	long_opt[] =
+	{
+		{"audio",	required_argument, NULL, 'a'},
+		{"output-file",	required_argument, NULL, 'o'},
+
+		{"mpx",		required_argument, NULL, 'm'},
+		{"ppm",		required_argument, NULL, 'x'},
+		{"wait",	required_argument, NULL, 'W'},
+
+		{"rds",		required_argument, NULL, 'R'},
+		{"pi",		required_argument, NULL, 'i'},
+		{"ps",		required_argument, NULL, 's'},
+		{"rt",		required_argument, NULL, 'r'},
+		{"pty",		required_argument, NULL, 'p'},
+		{"tp",		required_argument, NULL, 'T'},
+		{"af",		required_argument, NULL, 'A'},
+		{"ptyn",	required_argument, NULL, 'P'},
+		{"ctl",		required_argument, NULL, 'C'},
+
+		{"help",	no_argument, NULL, 'h'},
+		{ 0,		0,		0,	0 }
+	};
+
+	while((opt = getopt_long(argc, argv, short_opt, long_opt, NULL)) != -1)
+	{
+		switch(opt)
+		{
+			case 'a': //audio
+				audio_file = optarg;
+				break;
+
+			case 'o': //output-file
+				output_file = optarg;
+				break;
+
+			case 'm': //mpx
+				mpx = atoi(optarg);
+				if (mpx < 1 || mpx > 100) {
+					fprintf(stderr, "MPX volume must be between 1 - 100.\n");
+					return 1;
+				}
+				break;
+
+			case 'x': //ppm
+				ppm = atof(optarg);
+				break;
+
+			case 'W': //wait
+				wait = atoi(optarg);
+				break;
+
+			case 'R': //rds
+				rds = atoi(optarg);
+				break;
+
+			case 'i': //pi
+				pi = (uint16_t) strtol(optarg, NULL, 16);
+				break;
+
+			case 's': //ps
+				strncpy(ps, optarg, 8);
+				break;
+
+			case 'r': //rt
+				strncpy(rt, optarg, 64);
+				break;
+
+			case 'p': //pty
+				pty = atoi(optarg);
+				break;
+
+			case 'T': //tp
+				tp = atoi(optarg);
+				break;
+
+			case 'A': //af
+				af_size++;
+				if (af_size > MAX_AF) {
+					fprintf(stderr, "AF list is too large.\n");
+					return 1;
+				}
+				af[af_size] = (int)(10*atof(optarg))-875;
+				if(af[af_size] < 1 || af[af_size] > 204) {
+					fprintf(stderr, "Alternative Frequency has to be set in range of 87.6 MHz - 107.9 MHz\n");
+					return 1;
+				}
+				break;
+
+			case 'P': //ptyn
+				strncpy(ptyn, optarg, 8);
+				break;
+
+			case 'C': //ctl
+				control_pipe = optarg;
+				break;
+
+			case 'h': //help
+			case '?':
+			default:
+				fprintf(stderr,
+					"This is Mpxgen, a lightweight Stereo and RDS encoder.\n"
+					"\n"
+					"Usage: %s [options]\n"
+					"\n"
+					"[Audio]\n"
+					"\n"
+#ifdef ALSA
+					"    -a / --audio        Input file, pipe or ALSA capture\n"
+#else
+					"    -a / --audio        Input file or pipe\n"
+#endif
+					"    -o / --output-file  PCM out\n"
+					"\n"
+					"[MPX controls]\n"
+					"\n"
+					"    -m / --mpx          MPX volume [ default: %d ]\n"
+					"    -x / --ppm          Clock drift correction\n"
+					"    -W / --wait         Wait for new audio [ default: %d ]\n"
+					"\n"
+					"[RDS encoder]\n"
+					"\n"
+					"    -R / --rds          RDS switch [ default: %d ]\n"
+					"    -i / --pi           Program Identification code [ default: %04X ]\n"
+					"    -s / --ps           Program Service name [ default: \"%s\" ]\n"
+					"    -r / --rt           Radio Text [ default: \"%s\" ]\n"
+					"    -p / --pty          Program Type [ default: %d ]\n"
+					"    -T / --tp           Traffic Program [ default: %d ]\n"
+					"    -A / --af           Alternative Frequency (more than one AF may be passed)\n"
+					"    -P / --ptyn         PTY Name\n"
+					"    -C / --ctl          Control pipe\n"
+					"\n",
+				argv[0], mpx, wait, rds, pi, ps, rt, pty, tp);
+				return 1;
+		}
+	}
+
+	if (audio_file == NULL && !rds) {
+		fprintf(stderr, "Nothing to do. Exiting.\n");
+		return 1;
+	}
+
+	af[0] = af_size;
+
 	// Gracefully stop the encoder on SIGINT or SIGTERM
 	signal(SIGINT, stop);
 	signal(SIGTERM, stop);
@@ -128,170 +290,4 @@ int generate_mpx(char *audio_file, char *output_file, char *control_pipe, float 
 	ao_shutdown();
 
 	return 0;
-}
-
-int main(int argc, char **argv) {
-	int opt;
-	char *audio_file = NULL;
-	char *output_file = NULL;
-	char *control_pipe = NULL;
-	int rds = 1;
-	int alternative_freq[MAX_AF+1];
-	int af_size = 0;
-	// Use arrays to enforce max length for RDS text items
-	char ps[9] = "Mpxgen";
-	char rt[65] = "Mpxgen: FM Stereo and RDS encoder";
-	char ptyn[9] = {0};
-	uint16_t pi = 0xFFFF;
-	int pty = 0;
-	int tp = 0;
-	float ppm = 0;
-	int mpx = 50;
-	int wait = 1;
-
-	const char	*short_opt = "a:o:m:x:W:R:i:s:r:p:T:A:P:C:h";
-	struct option	long_opt[] =
-	{
-		{"audio", 	required_argument, NULL, 'a'},
-		{"output-file",	required_argument, NULL, 'o'},
-
-		{"mpx",		required_argument, NULL, 'm'},
-		{"ppm",		required_argument, NULL, 'x'},
-		{"wait",	required_argument, NULL, 'W'},
-
-		{"rds", 	required_argument, NULL, 'R'},
-		{"pi",		required_argument, NULL, 'i'},
-		{"ps",		required_argument, NULL, 's'},
-		{"rt",		required_argument, NULL, 'r'},
-		{"pty",		required_argument, NULL, 'p'},
-		{"tp",		required_argument, NULL, 'T'},
-		{"af",		required_argument, NULL, 'A'},
-		{"ptyn",	required_argument, NULL, 'P'},
-		{"ctl",		required_argument, NULL, 'C'},
-
-		{"help",	no_argument, NULL, 'h'},
-		{ 0,		0,		0,	0 }
-	};
-
-	while((opt = getopt_long(argc, argv, short_opt, long_opt, NULL)) != -1)
-	{
-		switch(opt)
-		{
-			case 'a': //audio
-				audio_file = optarg;
-				break;
-
-			case 'o': //output-file
-				output_file = optarg;
-				break;
-
-			case 'm': //mpx
-				mpx = atoi(optarg);
-				if (mpx < 1 || mpx > 100) {
-					fprintf(stderr, "MPX volume must be between 1 - 100.\n");
-					return 1;
-				}
-				break;
-
-			case 'x': //ppm
-				ppm = atof(optarg);
-				break;
-
-			case 'W': //wait
-				wait = atoi(optarg);
-				break;
-
-			case 'R': //rds
-				rds = atoi(optarg);
-				break;
-
-			case 'i': //pi
-				pi = (uint16_t) strtol(optarg, NULL, 16);
-				break;
-
-			case 's': //ps
-				strncpy(ps, optarg, 8);
-				break;
-
-			case 'r': //rt
-				strncpy(rt, optarg, 64);
-				break;
-
-			case 'p': //pty
-				pty = atoi(optarg);
-				break;
-
-			case 'T': //tp
-				tp = atoi(optarg);
-				break;
-
-			case 'A': //af
-				af_size++;
-				if (af_size > MAX_AF) {
-					fprintf(stderr, "AF list is too large.\n");
-					return 1;
-				}
-				alternative_freq[af_size] = (int)(10*atof(optarg))-875;
-				if(alternative_freq[af_size] < 1 || alternative_freq[af_size] > 204) {
-					fprintf(stderr, "Alternative Frequency has to be set in range of 87.6 MHz - 107.9 MHz\n");
-					return 1;
-				}
-				break;
-
-			case 'P': //ptyn
-				strncpy(ptyn, optarg, 8);
-				break;
-
-			case 'C': //ctl
-				control_pipe = optarg;
-				break;
-
-			case 'h': //help
-			case '?':
-			default:
-				fprintf(stderr,
-					"This is Mpxgen, a lightweight Stereo and RDS encoder.\n"
-					"\n"
-					"Usage: %s [options]\n"
-					"\n"
-					"[Audio]\n"
-					"\n"
-#ifdef ALSA
-					"    -a / --audio        Input file, pipe or ALSA capture\n"
-#else
-					"    -a / --audio        Input file or pipe\n"
-#endif
-					"    -o / --output-file  PCM out\n"
-					"\n"
-					"[MPX controls]\n"
-					"\n"
-					"    -m / --mpx          MPX volume [ default: %d ]\n"
-					"    -x / --ppm          Clock drift correction\n"
-					"    -W / --wait         Wait for new audio [ default: %d ]\n"
-					"\n"
-					"[RDS encoder]\n"
-					"\n"
-					"    -R / --rds          RDS switch [ default: %d ]\n"
-					"    -i / --pi           Program Identification code [ default: %04X ]\n"
-					"    -s / --ps           Program Service name [ default: \"%s\" ]\n"
-					"    -r / --rt           Radio Text [ default: \"%s\" ]\n"
-					"    -p / --pty          Program Type [ default: %d ]\n"
-					"    -T / --tp           Traffic Program [ default: %d ]\n"
-					"    -A / --af           Alternative Frequency (more than one AF may be passed)\n"
-					"    -P / --ptyn         PTY Name\n"
-					"    -C / --ctl          Control pipe\n"
-					"\n",
-				argv[0], mpx, wait, rds, pi, ps, rt, pty, tp);
-				return 1;
-		}
-	}
-
-	if (audio_file == NULL && !rds) {
-		fprintf(stderr, "Nothing to do. Exiting.\n");
-		return 1;
-	}
-
-	alternative_freq[0] = af_size;
-
-	return generate_mpx(audio_file, output_file, control_pipe, mpx, ppm, wait, rds, pi, ps, rt, pty, tp, alternative_freq, ptyn);
 }
