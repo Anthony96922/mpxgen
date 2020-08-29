@@ -46,18 +46,24 @@ input_params_t open_input(char *input_name, int wait) {
 		input_type = 2;
 		if ((alsa_input = open_alsa_input(input_name, input.sample_rate, input.channels, INPUT_DATA_SIZE)) == NULL) {
 			close_alsa_input(alsa_input);
-			return input;
+			goto end;
 		}
 	} else {
 #endif
 		input_type = 1;
 		if ((inf = open_file_input(input_name, &input.sample_rate, &input.channels, wait, INPUT_DATA_SIZE)) == NULL) {
 			close_file_input(inf);
-			return input;
+			goto end;
 		}
 #ifdef ALSA
 	}
 #endif
+
+	if (input.sample_rate < 16000) {
+		fprintf(stderr, "Input sample rate must be at least 16k.\n");
+		input.sample_rate = 0;
+		goto end;
+        }
 
 	upsample_factor = 190000.0 / input.sample_rate;
 
@@ -77,6 +83,7 @@ input_params_t open_input(char *input_name, int wait) {
 		fprintf(stderr, "Could not create input resampler.\n");
 	}
 
+end:
 	return input;
 }
 

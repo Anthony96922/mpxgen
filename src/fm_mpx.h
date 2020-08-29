@@ -15,8 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#define INPUT_DATA_SIZE 1024
-#define DATA_SIZE INPUT_DATA_SIZE * 32
+#define INPUT_DATA_SIZE 2048
+#define DATA_SIZE INPUT_DATA_SIZE * 16
 
 extern int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm);
 extern int fm_mpx_get_samples(float *mpx_buffer);
