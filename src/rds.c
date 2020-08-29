@@ -284,7 +284,7 @@ void get_rds_group(uint16_t *blocks) {
     }
 }
 
-void get_rds_bits(int *out_buffer) {
+void get_rds_bits(uint8_t *out_buffer) {
     uint16_t out_blocks[GROUP_LENGTH] = {0};
     get_rds_group(out_blocks);
 
@@ -308,7 +308,7 @@ void get_rds_bits(int *out_buffer) {
    pre-generated elementary waveform samples.
  */
 float get_rds_sample() {
-    static int bit_buffer[BITS_PER_GROUP];
+    static uint8_t bit_buffer[BITS_PER_GROUP];
     static int bit_pos = BITS_PER_GROUP;
     static float sample_buffer[SAMPLE_BUFFER_SIZE];
 
@@ -357,12 +357,12 @@ float get_rds_sample() {
 
     sample_buffer[out_sample_index++] = 0;
     if(out_sample_index == SAMPLE_BUFFER_SIZE) out_sample_index = 0;
-
     sample_count++;
+
     return sample;
 }
 
-int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, int *af_array, char *ptyn) {
+int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, uint8_t *af_array, char *ptyn) {
 
     // RBDS PTY list
     char ptys[32][16] = {
@@ -467,7 +467,7 @@ void set_rds_rtp_tags(int type_1, int start_1, int len_1,
     rtp_params.len_2 = len_2;
 }
 
-void set_rds_af(int *af_array) {
+void set_rds_af(uint8_t *af_array) {
     af.num_afs = af_array[0];
     for(int f=0; f<af_array[0]; f++) {
         af.afs[f] = af_array[f+1];
