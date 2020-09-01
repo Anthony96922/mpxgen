@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
 	char ps[9] = "Mpxgen";
 	char rt[65] = "Mpxgen: FM Stereo and RDS encoder";
 	char ptyn[9] = {0};
-	uint16_t pi = 0xFFFF;
+	uint16_t pi = 0x1000;
 	int pty = 0;
 	int tp = 0;
 	float ppm = 0;
