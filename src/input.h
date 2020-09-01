@@ -18,7 +18,6 @@
 
 #include <stdlib.h>
 #include "file_input.h"
-
 #ifdef ALSA
 #include "alsa_input.h"
 #endif

@@ -20,14 +20,15 @@
 #include <string.h>
 #include "file_input.h"
 
-int channels;
+int in_channels;
 int audio_wait;
 int buffer_size;
 
-SNDFILE *open_file_input(char *filename, unsigned int *input_sample_rate, unsigned int *input_channels, int wait, size_t num_frames) {
+SNDFILE *inf;
+
+int open_file_input(char *filename, unsigned int *sample_rate, unsigned int *channels, int wait, size_t num_frames) {
 	// Open the input file
         SF_INFO sfinfo;
-	SNDFILE *inf;
 
 	buffer_size = num_frames;
 
@@ -35,28 +36,28 @@ SNDFILE *open_file_input(char *filename, unsigned int *input_sample_rate, unsign
 	if(strcmp(filename, "-") == 0) {
 		if(!(inf = sf_open_fd(fileno(stdin), SFM_READ, &sfinfo, 0))) {
 			fprintf(stderr, "Error: could not open stdin for audio input.\n");
-			return NULL;
+			return -1;
 		} else {
 			fprintf(stderr, "Using stdin for audio input.\n");
 		}
 	} else {
 		if(!(inf = sf_open(filename, SFM_READ, &sfinfo))) {
 			fprintf(stderr, "Error: could not open input file %s.\n", filename);
-			return NULL;
+			return -1;
 		} else {
 			fprintf(stderr, "Using audio file: %s\n", filename);
 		}
 	}
 
-	*input_sample_rate = sfinfo.samplerate;
-        *input_channels = sfinfo.channels;
-	channels = sfinfo.channels;
+	*sample_rate = sfinfo.samplerate;
+	*channels = sfinfo.channels;
+	in_channels = sfinfo.channels;
 	audio_wait = wait;
 
-	return inf;
+	return 0;
 }
 
-int read_file_input(SNDFILE *inf, float *audio) {
+int read_file_input(float *audio) {
 	int audio_len;
 	int frames_to_read = buffer_size;
 	int buffer_offset = 0;
@@ -73,7 +74,7 @@ int read_file_input(SNDFILE *inf, float *audio) {
 		if (audio_len == 0) {
 			if (sf_seek(inf, 0, SEEK_SET) < 0) {
 				if (audio_wait) {
-					memset(audio, 0, buffer_size * channels * sizeof(float));
+					memset(audio, 0, buffer_size * in_channels * sizeof(float));
 					frames_to_read = 0;
 				} else {
 					fprintf(stderr, "Could not rewind in audio file, terminating\n");
@@ -86,6 +87,6 @@ int read_file_input(SNDFILE *inf, float *audio) {
 	return 1;
 }
 
-void close_file_input(SNDFILE *inf) {
+void close_file_input() {
 	if (sf_close(inf)) fprintf(stderr, "Error closing audio file\n");
 }

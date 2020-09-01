@@ -18,6 +18,6 @@
 
 #include <alsa/asoundlib.h>
 
-extern snd_pcm_t *open_alsa_input(char *input_card, unsigned int sample_rate, unsigned int channels, size_t buf_size);
-extern int read_alsa_input(snd_pcm_t *capture_handle, float *buffer);
-extern int close_alsa_input(snd_pcm_t *capture_handle);
+extern int open_alsa_input(char *input_card, unsigned int sample_rate, unsigned int channels, size_t buf_size);
+extern int read_alsa_input(float *buffer);
+extern int close_alsa_input();

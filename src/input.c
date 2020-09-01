@@ -19,12 +19,6 @@
 #include "fm_mpx.h"
 #include "resampler.h"
 #include "input.h"
-#ifdef ALSA
-#include "alsa_input.h"
-snd_pcm_t *alsa_input;
-#endif
-
-SNDFILE *inf;
 
 float *audio_input;
 
@@ -36,25 +30,26 @@ SRC_DATA input_resampler_data;
 
 input_params_t open_input(char *input_name, int wait) {
 	float upsample_factor;
-	input_params_t input = {0};
+	input_params_t input;
 
 #ifdef ALSA
 	// TODO: better detect live capture cards
 	if (strstr(input_name, ":") != NULL) {
 		input.channels = 2;
 		input.sample_rate = 48000;
-		input_type = 2;
-		if ((alsa_input = open_alsa_input(input_name, input.sample_rate, input.channels, INPUT_DATA_SIZE)) == NULL) {
-			close_alsa_input(alsa_input);
+		if (open_alsa_input(input_name, input.sample_rate, input.channels, INPUT_DATA_SIZE) < 0) {
+			fprintf(stderr, "Could not open ALSA source.\n");
+			input.sample_rate = 0;
 			goto end;
 		}
+		input_type = 2;
 	} else {
 #endif
-		input_type = 1;
-		if ((inf = open_file_input(input_name, &input.sample_rate, &input.channels, wait, INPUT_DATA_SIZE)) == NULL) {
-			close_file_input(inf);
+		if (open_file_input(input_name, &input.sample_rate, &input.channels, wait, INPUT_DATA_SIZE) < 0) {
+			input.sample_rate = 0;
 			goto end;
 		}
+		input_type = 1;
 #ifdef ALSA
 	}
 #endif
@@ -90,11 +85,11 @@ end:
 int read_input(float *audio) {
 	switch (input_type) {
 	case 1:
-		if (read_file_input(inf, audio_input) < 0) return -1;
+		if (read_file_input(audio_input) < 0) return -1;
 		break;
 #ifdef ALSA
 	case 2:
-		if (read_alsa_input(alsa_input, audio_input) < 0) return -1;
+		if (read_alsa_input(audio_input) < 0) return -1;
 		break;
 #endif
 	}
@@ -106,14 +101,15 @@ int read_input(float *audio) {
 void close_input() {
 	switch (input_type) {
 	case 1:
-		close_file_input(inf);
+		close_file_input();
 		break;
 #ifdef ALSA
 	case 2:
-		close_alsa_input(alsa_input);
+		close_alsa_input();
 		break;
 #endif
 	}
+
 	resampler_exit(input_resampler);
 	free(audio_input);
 }
