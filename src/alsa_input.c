@@ -17,7 +17,7 @@
  */
 
 #include <stdio.h>
-#include "alsa_input.h"
+#include <alsa/asoundlib.h>
 #include "audio_conversion.h"
 
 short *short_buffer;

@@ -16,6 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -43,8 +44,7 @@ float *mpx_buffer;
 SRC_STATE *mpx_resampler;
 SRC_DATA mpx_resampler_data;
 
-input_params_t in;
-
+int channels;
 int input;
 
 float mpx_vol;
@@ -58,7 +58,7 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 
 	mpx_buffer = malloc(DATA_SIZE * sizeof(float));
 
-	mpx_resampler_data.src_ratio = (192000 / 190000.0) + (out_ppm / 1e6);
+	mpx_resampler_data.src_ratio = (192000 / (double)190000) + (out_ppm / 1e6);
 	mpx_resampler_data.output_frames = DATA_SIZE;
 	mpx_resampler_data.data_in = mpx_buffer;
 
@@ -70,8 +70,7 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 	create_mpx_carriers(190000);
 
 	if (filename != NULL) {
-		in = open_input(filename, wait_for_audio);
-		if (!in.sample_rate) goto error;
+		if (!(channels = open_input(filename, wait_for_audio))) goto error;
 	} else {
 		return 0;
 	}
@@ -133,7 +132,7 @@ int fm_mpx_get_samples(float *out) {
 		for (int i = 0; i < audio_len; i++) {
 			// First store the current sample(s) into the FIR filter's ring buffer
 			fir_buffer[0][fir_index] = input_buffer[j];
-			if (in.channels == 2) {
+			if (channels == 2) {
 				fir_buffer[1][fir_index] = input_buffer[j+1];
 				j++;
 			}
@@ -157,7 +156,7 @@ int fm_mpx_get_samples(float *out) {
 				dfbi--;
 				if(dfbi < 0) dfbi = FIR_SIZE-1;
 				out_left += low_pass_fir[fi] * (fir_buffer[0][ifbi] + fir_buffer[0][dfbi]);
-				if(in.channels == 2) {
+				if(channels == 2) {
 					out_right += low_pass_fir[fi] * (fir_buffer[1][ifbi] + fir_buffer[1][dfbi]);
 				}
 				ifbi++;
@@ -173,11 +172,17 @@ int fm_mpx_get_samples(float *out) {
 			out_mono   = out_left + out_right;
 			out_stereo = out_left - out_right;
 
-			if (in.channels == 2) {
+			if (channels == 2) {
 				// audio signals need to be limited to 45% to remain within modulation limits
+#if 0
+				// Polar stereo encoding system used in Eastern Europe
+				mpx_buffer[i] = out_mono * 0.45 +
+					get_carrier(3) * ((out_stereo * 0.45) + 0.08);
+#else
 				mpx_buffer[i] = out_mono * 0.45 +
 					get_carrier(0) * 0.08 + // 8% modulation
 					get_carrier(1) * out_stereo * 0.45;
+#endif
 			} else {
 				// mono audio is limited to 90%
 				mpx_buffer[i] = out_mono * 0.9;

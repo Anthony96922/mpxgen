@@ -18,7 +18,8 @@
 
 #include <stdio.h>
 #include "resampler.h"
-#include "fm_mpx.h"
+
+#define CONVERTER_TYPE SRC_SINC_FASTEST
 
 SRC_STATE *resampler_init(int channels) {
 	SRC_STATE *src_state;

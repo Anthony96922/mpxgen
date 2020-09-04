@@ -16,11 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "fm_mpx.h"
 #include "resampler.h"
 #include "input.h"
 
 float *audio_input;
+
+unsigned int sample_rate;
+unsigned int channels;
 
 int input_type;
 
@@ -28,43 +34,39 @@ int input_type;
 SRC_STATE *input_resampler;
 SRC_DATA input_resampler_data;
 
-input_params_t open_input(char *input_name, int wait) {
+int open_input(char *input_name, int wait) {
 	float upsample_factor;
-	input_params_t input;
 
 #ifdef ALSA
 	// TODO: better detect live capture cards
 	if (strstr(input_name, ":") != NULL) {
-		input.channels = 2;
-		input.sample_rate = 48000;
-		if (open_alsa_input(input_name, input.sample_rate, input.channels, INPUT_DATA_SIZE) < 0) {
+		channels = 2;
+		sample_rate = 48000;
+		if (open_alsa_input(input_name, sample_rate, channels, INPUT_DATA_SIZE) < 0) {
 			fprintf(stderr, "Could not open ALSA source.\n");
-			input.sample_rate = 0;
-			goto end;
+			return 0;
 		}
 		input_type = 2;
 	} else {
 #endif
-		if (open_file_input(input_name, &input.sample_rate, &input.channels, wait, INPUT_DATA_SIZE) < 0) {
-			input.sample_rate = 0;
-			goto end;
+		if (open_file_input(input_name, &sample_rate, &channels, wait, INPUT_DATA_SIZE) < 0) {
+			return 0;
 		}
 		input_type = 1;
 #ifdef ALSA
 	}
 #endif
 
-	if (input.sample_rate < 16000) {
+	if (sample_rate < 16000) {
 		fprintf(stderr, "Input sample rate must be at least 16k.\n");
-		input.sample_rate = 0;
-		goto end;
+		return -1;
         }
 
-	upsample_factor = 190000.0 / input.sample_rate;
+	upsample_factor = (double)190000 / sample_rate;
 
-	fprintf(stderr, "Input: %d Hz, %d channels, upsampling factor: %.2f\n", input.sample_rate, input.channels, upsample_factor);
+	fprintf(stderr, "Input: %d Hz, %d channels, upsampling factor: %.2f\n", sample_rate, channels, upsample_factor);
 
-	audio_input = malloc(INPUT_DATA_SIZE * input.channels * sizeof(float));
+	audio_input = malloc(INPUT_DATA_SIZE * channels * sizeof(float));
 
 	input_resampler_data.src_ratio = upsample_factor;
 	// output_frames: max number of frames to generate
@@ -74,12 +76,12 @@ input_params_t open_input(char *input_name, int wait) {
 	input_resampler_data.output_frames = DATA_SIZE;
 	input_resampler_data.data_in = audio_input;
 
-	if ((input_resampler = resampler_init(input.channels)) == NULL) {
+	if ((input_resampler = resampler_init(channels)) == NULL) {
 		fprintf(stderr, "Could not create input resampler.\n");
+		return -1;
 	}
 
-end:
-	return input;
+	return channels;
 }
 
 int read_input(float *audio) {

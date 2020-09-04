@@ -18,7 +18,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "file_input.h"
+#include <sndfile.h>
 
 int in_channels;
 int audio_wait;

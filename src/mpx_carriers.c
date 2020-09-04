@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-// Create wave constants
+// Create wave constants for a given frequency and sample rate
 int create_carrier(int sample_rate, float freq, float *carrier) {
 	float sample;
 	int sine_zero_crossings = 0;
@@ -49,13 +49,13 @@ int num_carriers = 6;
 float carrier_frequencies[6] = {19000, 38000, 57000, 66500, 71250, 76000};
 float *carrier[6];
 int phase[6][2];
-int level[6];
+float level[6];
 #else
-int num_carriers = 3;
-float carrier_frequencies[3] = {19000, 38000, 57000};
-float *carrier[3];
-int phase[3][2]; // [carrier][current phase/max phase]
-int level[3];
+int num_carriers = 4;
+float carrier_frequencies[4] = {19000, 38000, 57000, 31250};
+float *carrier[4];
+int phase[4][2]; // [carrier][current phase/max phase]
+float level[4];
 #endif
 
 void create_mpx_carriers(int sample_rate) {

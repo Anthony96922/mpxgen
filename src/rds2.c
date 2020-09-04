@@ -33,9 +33,10 @@ extern uint16_t crc(uint16_t blocks);
 extern unsigned char station_logo[];
 extern unsigned int station_logo_len;
 
-// Function Header
-// from http://www.rds.org.uk/2010/pdf/RDS%202%20-%20what%20it%20is_170127_13.pdf
-// I have not idea what this is for
+/* Function Header
+   (from http://www.rds.org.uk/2010/pdf/RDS%202%20-%20what%20it%20is_170127_13.pdf)
+   I have not idea what this is for
+ */
 uint8_t fh = 34 << 2 | 0;
 
 // See https://www.youtube.com/watch?v=ticcJpCPoa8
@@ -59,7 +60,7 @@ void get_rds2_group(int stream_num, uint16_t *blocks) {
     }
 }
 
-void get_rds2_bits(int stream, int *out_buffer) {
+void get_rds2_bits(int stream, uint8_t *out_buffer) {
     uint16_t out_blocks[GROUP_LENGTH];
 
     get_rds2_group(stream, out_blocks);
@@ -83,8 +84,8 @@ void get_rds2_bits(int stream, int *out_buffer) {
 }
 
 float get_rds2_sample(int stream_num) {
-    static int bit_buffer[3][BITS_PER_GROUP];
-    static int bit_pos[3] = {BITS_PER_GROUP, BITS_PER_GROUP, BITS_PER_GROUP};
+    static uint8_t bit_buffer[3][BITS_PER_GROUP];
+    static uint8_t bit_pos[3] = {BITS_PER_GROUP, BITS_PER_GROUP, BITS_PER_GROUP};
     static float sample_buffer[3][SAMPLE_BUFFER_SIZE];
 
     static int prev_output[3];

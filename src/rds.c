@@ -309,7 +309,7 @@ void get_rds_bits(uint8_t *out_buffer) {
  */
 float get_rds_sample() {
     static uint8_t bit_buffer[BITS_PER_GROUP];
-    static int bit_pos = BITS_PER_GROUP;
+    static uint8_t bit_pos = BITS_PER_GROUP;
     static float sample_buffer[SAMPLE_BUFFER_SIZE];
 
     static int prev_output;

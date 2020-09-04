@@ -16,17 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdlib.h>
 #include "file_input.h"
 #ifdef ALSA
 #include "alsa_input.h"
 #endif
 
-typedef struct input_params_t {
-	unsigned int sample_rate;
-	unsigned int channels;
-} input_params_t;
-
-input_params_t open_input(char *input_name, int wait);
+int open_input(char *input_name, int wait);
 int read_input(float *audio);
 void close_input();

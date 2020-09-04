@@ -17,7 +17,6 @@
  */
 
 #include <unistd.h>
-#include "audio_conversion.h"
 
 // converts floats to 16 bit shorts (stored as two 8 bit ints)
 void float2char(float *inbuf, char *outbuf, size_t inbufsize) {

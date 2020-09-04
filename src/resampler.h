@@ -18,8 +18,6 @@
 
 #include <samplerate.h>
 
-#define CONVERTER_TYPE SRC_SINC_FASTEST
-
 extern SRC_STATE *resampler_init(int channels);
 extern int resample(SRC_STATE *src_state, SRC_DATA src_data);
 extern void resampler_exit(SRC_STATE *src_state);

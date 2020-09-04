@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #define INPUT_DATA_SIZE 2048
 #define DATA_SIZE INPUT_DATA_SIZE * 16
 
