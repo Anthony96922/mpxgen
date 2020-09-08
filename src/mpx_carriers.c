@@ -41,25 +41,18 @@ int create_carrier(int sample_rate, float freq, float *carrier) {
 	return i;
 }
 
-/* RDS 2 carriers
- * 66.5/71.25/76
- */
-#ifdef RDS2
-int num_carriers = 6;
-float carrier_frequencies[6] = {19000, 38000, 57000, 66500, 71250, 76000};
-float *carrier[6];
-int phase[6][2];
-float level[6];
-#else
-int num_carriers = 4;
-float carrier_frequencies[4] = {19000, 38000, 57000, 31250};
-float *carrier[4];
-int phase[4][2]; // [carrier][current phase/max phase]
-float level[4];
-#endif
+#define NUM_CARRIERS 7
+float carrier_frequencies[NUM_CARRIERS] = {
+	19000, 38000, 57000,
+	66500, 71250, 76000, // RDS 2
+	31250 // Polar stereo
+};
+float *carrier[NUM_CARRIERS];
+int phase[NUM_CARRIERS][2]; // [carrier][current phase/max phase]
+float level[NUM_CARRIERS];
 
 void create_mpx_carriers(int sample_rate) {
-	for (int i = 0; i < num_carriers; i++) {
+	for (int i = 0; i < NUM_CARRIERS; i++) {
 		carrier[i] = malloc(sample_rate * sizeof(float));
 		phase[i][1] = create_carrier(sample_rate, carrier_frequencies[i], carrier[i]);
 		level[i] = 1;
@@ -67,7 +60,7 @@ void create_mpx_carriers(int sample_rate) {
 }
 
 void clear_mpx_carriers() {
-	for (int i = 0; i < num_carriers; i++) {
+	for (int i = 0; i < NUM_CARRIERS; i++) {
 		free(carrier[i]);
 	}
 }
@@ -77,7 +70,7 @@ float get_carrier(int carrier_num) {
 }
 
 void update_carrier_phase() {
-	for (int i = 0; i < num_carriers; i++) {
+	for (int i = 0; i < NUM_CARRIERS; i++) {
 		if (++phase[i][0] == phase[i][1]) phase[i][0] = 0;
 	}
 }

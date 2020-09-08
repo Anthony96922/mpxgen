@@ -53,6 +53,12 @@ void set_output_volume(int vol) {
 	mpx_vol = (vol / 100.0);
 }
 
+int polar_stereo;
+
+void set_polar_stereo(int st) {
+	polar_stereo = st;
+}
+
 int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 	int cutoff_freq;
 
@@ -134,9 +140,11 @@ int fm_mpx_get_samples(float *out) {
 			fir_buffer[0][fir_index] = input_buffer[j];
 			if (channels == 2) {
 				fir_buffer[1][fir_index] = input_buffer[j+1];
-				j++;
+				j += 2;
+			} else {
+				fir_buffer[1][fir_index] = input_buffer[j];
+				j += 1;
 			}
-			j++;
 			fir_index++;
 			if(fir_index == FIR_SIZE) fir_index = 0;
 
@@ -155,37 +163,34 @@ int fm_mpx_get_samples(float *out) {
 			for(int fi=0; fi<FIR_HALF_SIZE; fi++) {  // fi = Filter Index
 				dfbi--;
 				if(dfbi < 0) dfbi = FIR_SIZE-1;
-				out_left += low_pass_fir[fi] * (fir_buffer[0][ifbi] + fir_buffer[0][dfbi]);
-				if(channels == 2) {
-					out_right += low_pass_fir[fi] * (fir_buffer[1][ifbi] + fir_buffer[1][dfbi]);
-				}
+				out_left  += low_pass_fir[fi] * (fir_buffer[0][ifbi] + fir_buffer[0][dfbi]);
+				out_right += low_pass_fir[fi] * (fir_buffer[1][ifbi] + fir_buffer[1][dfbi]);
 				ifbi++;
 				if(ifbi == FIR_SIZE) ifbi = 0;
 			}
 			// End of FIR filter
 
 			// 6dB input gain
-			out_left *= 2;
+			out_left  *= 2;
 			out_right *= 2;
 
 			// Create sum and difference signals
 			out_mono   = out_left + out_right;
 			out_stereo = out_left - out_right;
 
+			// audio signals need to be limited to 45% to remain within modulation limits
+			mpx_buffer[i] = out_mono * 0.45;
+
 			if (channels == 2) {
-				// audio signals need to be limited to 45% to remain within modulation limits
-#if 0
-				// Polar stereo encoding system used in Eastern Europe
-				mpx_buffer[i] = out_mono * 0.45 +
-					get_carrier(3) * ((out_stereo * 0.45) + 0.08);
-#else
-				mpx_buffer[i] = out_mono * 0.45 +
-					get_carrier(0) * 0.08 + // 8% modulation
-					get_carrier(1) * out_stereo * 0.45;
-#endif
-			} else {
-				// mono audio is limited to 90%
-				mpx_buffer[i] = out_mono * 0.9;
+				if (polar_stereo) {
+					// Polar stereo encoding system used in Eastern Europe
+					mpx_buffer[i] +=
+						get_carrier(6) * ((out_stereo * 0.45) + 0.08);
+				} else {
+					mpx_buffer[i] +=
+						get_carrier(0) * 0.08 + // 8% modulation
+						get_carrier(1) * out_stereo * 0.45;
+				}
 			}
 
 			// 6% modulation

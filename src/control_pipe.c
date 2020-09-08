@@ -131,6 +131,13 @@ int poll_control_pipe() {
 #endif
             return 1;
         }
+        if(res[0] == 'S' && res[1] == 'T') {
+           int stereo_mode = atoi(arg);
+           if (stereo_mode == 0 || stereo_mode == 1) {
+               set_polar_stereo(stereo_mode);
+               return 1;
+           }
+        }
     }
 
     if(strlen(res) > 4 && res[3] == ' ') {
