@@ -16,8 +16,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+// MPX carrier index
+#define CARRIER_19K 0
+#define CARRIER_38K 1
+#define CARRIER_57K 2
+#define CARRIER_67K 3
+#define CARRIER_71K 4
+#define CARRIER_76K 5
+#define CARRIER_31K 6
+
 extern void create_mpx_carriers(int sample_rate);
 extern float get_carrier(int num);
-extern void set_level(int carrier, int level);
 extern void update_carrier_phase();
 extern void clear_mpx_carriers();

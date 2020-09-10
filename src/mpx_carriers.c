@@ -49,13 +49,11 @@ float carrier_frequencies[NUM_CARRIERS] = {
 };
 float *carrier[NUM_CARRIERS];
 int phase[NUM_CARRIERS][2]; // [carrier][current phase/max phase]
-float level[NUM_CARRIERS];
 
 void create_mpx_carriers(int sample_rate) {
 	for (int i = 0; i < NUM_CARRIERS; i++) {
 		carrier[i] = malloc(sample_rate * sizeof(float));
 		phase[i][1] = create_carrier(sample_rate, carrier_frequencies[i], carrier[i]);
-		level[i] = 1;
 	}
 }
 
@@ -66,16 +64,11 @@ void clear_mpx_carriers() {
 }
 
 float get_carrier(int carrier_num) {
-	return carrier[carrier_num][phase[carrier_num][0]] * level[carrier_num];
+	return carrier[carrier_num][phase[carrier_num][0]];
 }
 
 void update_carrier_phase() {
 	for (int i = 0; i < NUM_CARRIERS; i++) {
 		if (++phase[i][0] == phase[i][1]) phase[i][0] = 0;
 	}
-}
-
-void set_level(int carrier, int new_level) {
-	if (new_level == -1) return;
-	level[carrier] = (new_level / 100.0);
 }

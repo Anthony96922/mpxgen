@@ -59,6 +59,27 @@ void set_polar_stereo(int st) {
 	polar_stereo = st;
 }
 
+// subcarrier volumes
+float volumes[] = {
+	0.08, // pilot tone: 9% modulation
+	0.12, // RDS: 6% modulation
+	0.12, 0.12, 0.12 // RDS 2
+};
+
+void set_carrier_volume(int carrier, int new_volume) {
+	if (new_volume == -1) return;
+
+	switch (carrier) {
+	case 0:
+	case 1:
+	case 2:
+	case 3:
+	case 4:
+		volumes[carrier] = new_volume / 100.0;
+		break;
+	}
+}
+
 int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 	int cutoff_freq;
 
@@ -120,12 +141,12 @@ int fm_mpx_get_samples(float *out) {
 
 		for (int i = 0; i < audio_len; i++) {
 			// 6% modulation
-			mpx_buffer[i] = get_carrier(2) * get_rds_sample() * 0.12;
+			mpx_buffer[i] = get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
 
 #ifdef RDS2
-			mpx_buffer[i] += get_carrier(3) * get_rds2_sample(1) * 0.12;
-			mpx_buffer[i] += get_carrier(4) * get_rds2_sample(2) * 0.12;
-			mpx_buffer[i] += get_carrier(5) * get_rds2_sample(3) * 0.12;
+			mpx_buffer[i] += get_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
+			mpx_buffer[i] += get_carrier(CARRIER_71K) * get_rds2_sample(2) * volumes[3];
+			mpx_buffer[i] += get_carrier(CARRIER_76K) * get_rds2_sample(3) * volumes[4];
 #endif
 
 			update_carrier_phase();
@@ -185,21 +206,20 @@ int fm_mpx_get_samples(float *out) {
 				if (polar_stereo) {
 					// Polar stereo encoding system used in Eastern Europe
 					mpx_buffer[i] +=
-						get_carrier(6) * ((out_stereo * 0.45) + 0.08);
+						get_carrier(CARRIER_31K) * ((out_stereo * 0.45) + volumes[0]);
 				} else {
 					mpx_buffer[i] +=
-						get_carrier(0) * 0.08 + // 8% modulation
-						get_carrier(1) * out_stereo * 0.45;
+						get_carrier(CARRIER_19K) * volumes[0] +
+						get_carrier(CARRIER_38K) * out_stereo * 0.45;
 				}
 			}
 
-			// 6% modulation
-			mpx_buffer[i] += get_carrier(2) * get_rds_sample() * 0.12;
+			mpx_buffer[i] += get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
 
 #ifdef RDS2
-			mpx_buffer[i] += get_carrier(3) * get_rds2_sample(1) * 0.12;
-			mpx_buffer[i] += get_carrier(4) * get_rds2_sample(2) * 0.12;
-			mpx_buffer[i] += get_carrier(5) * get_rds2_sample(3) * 0.12;
+			mpx_buffer[i] += get_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
+			mpx_buffer[i] += get_carrier(CARRIER_71K) * get_rds2_sample(2) * volumes[3];
+			mpx_buffer[i] += get_carrier(CARRIER_76K) * get_rds2_sample(3) * volumes[4];
 #endif
 
 			update_carrier_phase();

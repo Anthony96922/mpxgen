@@ -24,7 +24,6 @@
 #include "rds.h"
 #include "fm_mpx.h"
 #include "control_pipe.h"
-#include "mpx_carriers.h"
 
 //#define CONTROL_PIPE_MESSAGES
 
@@ -183,13 +182,13 @@ int poll_control_pipe() {
             return 1;
         }
         if (res[0] == 'M' && res[1] == 'P' && res[2] == 'X') {
-            int gains[3] = {0};
-            if (sscanf(arg, "%d,%d,%d", &gains[0], &gains[1], &gains[2]) == 3) {
-                for (int i = 0; i < 3; i++) {
+            int gains[5] = {0};
+            if (sscanf(arg, "%d,%d,%d,%d,%d", &gains[0], &gains[1], &gains[2], &gains[3], &gains[4]) == 5) {
+                for (int i = 0; i < 4; i++) {
                     if (gains[i] < -1 || gains[i] > 200) gains[i] = 100;
-                    set_level(i, gains[i]);
+                    set_carrier_volume(i, gains[i]);
                 }
-                set_rds_switch(gains[2] != 0);
+                set_rds_switch(gains[1] != 0);
             }
             return 1;
         }
