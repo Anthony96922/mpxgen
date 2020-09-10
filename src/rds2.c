@@ -95,7 +95,7 @@ float get_rds2_sample(int stream_num) {
     static int inverting[3];
 
     static int in_sample_index[3];
-    static int out_sample_index[3] = {SAMPLE_BUFFER_SIZE-1, SAMPLE_BUFFER_SIZE-1, SAMPLE_BUFFER_SIZE-1};
+    static int out_sample_index[3] = {SAMPLE_BUFFER_SIZE, SAMPLE_BUFFER_SIZE, SAMPLE_BUFFER_SIZE};
 
     stream_num--;
 
@@ -113,18 +113,17 @@ float get_rds2_sample(int stream_num) {
 
         inverting[stream_num] = (cur_output[stream_num] == 1);
 
-        float *src = waveform_biphase;
         int idx = in_sample_index[stream_num];
 
         for(int j=0; j<FILTER_SIZE; j++) {
-            float val = (*src++);
+            float val = waveform_biphase[j];
             if(inverting[stream_num]) val = -val;
             sample_buffer[stream_num][idx++] += val;
             if(idx == SAMPLE_BUFFER_SIZE) idx = 0;
         }
 
         in_sample_index[stream_num] += SAMPLES_PER_BIT;
-        if(in_sample_index[stream_num] == SAMPLE_BUFFER_SIZE) in_sample_index[stream_num] -= SAMPLE_BUFFER_SIZE;
+        if(in_sample_index[stream_num] == SAMPLE_BUFFER_SIZE) in_sample_index[stream_num] = 0;
 
         bit_pos[stream_num]++;
         sample_count[stream_num] = 0;
@@ -133,7 +132,7 @@ float get_rds2_sample(int stream_num) {
     float sample = sample_buffer[stream_num][out_sample_index[stream_num]];
 
     sample_buffer[stream_num][out_sample_index[stream_num]++] = 0;
-    if(out_sample_index[stream_num] == SAMPLE_BUFFER_SIZE) out_sample_index[stream_num] = 0;
+    if(out_sample_index[stream_num] >= SAMPLE_BUFFER_SIZE) out_sample_index[stream_num] = 0;
 
     sample_count[stream_num]++;
     return sample;

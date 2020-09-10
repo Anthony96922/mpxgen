@@ -319,7 +319,7 @@ float get_rds_sample() {
     static int inverting;
 
     static int in_sample_index;
-    static int out_sample_index = SAMPLE_BUFFER_SIZE-1;
+    static int out_sample_index = SAMPLE_BUFFER_SIZE;
 
     if (!rds_controls.on) return 0;
 
@@ -336,18 +336,17 @@ float get_rds_sample() {
 
         inverting = (cur_output == 1);
 
-        float *src = waveform_biphase;
         int idx = in_sample_index;
 
         for(int j=0; j<FILTER_SIZE; j++) {
-            float val = (*src++);
+            float val = waveform_biphase[j];
             if(inverting) val = -val;
             sample_buffer[idx++] += val;
             if(idx == SAMPLE_BUFFER_SIZE) idx = 0;
         }
 
         in_sample_index += SAMPLES_PER_BIT;
-        if(in_sample_index == SAMPLE_BUFFER_SIZE) in_sample_index -= SAMPLE_BUFFER_SIZE;
+        if(in_sample_index == SAMPLE_BUFFER_SIZE) in_sample_index = 0;
 
         bit_pos++;
         sample_count = 0;
@@ -356,7 +355,7 @@ float get_rds_sample() {
     float sample = sample_buffer[out_sample_index];
 
     sample_buffer[out_sample_index++] = 0;
-    if(out_sample_index == SAMPLE_BUFFER_SIZE) out_sample_index = 0;
+    if(out_sample_index >= SAMPLE_BUFFER_SIZE) out_sample_index = 0;
     sample_count++;
 
     return sample;
