@@ -61,9 +61,9 @@ void set_polar_stereo(int st) {
 
 // subcarrier volumes
 float volumes[] = {
-	0.08, // pilot tone: 9% modulation
-	0.12, // RDS: 6% modulation
-	0.12, 0.12, 0.12 // RDS 2
+	0.09, // pilot tone: 9% modulation
+	0.09, // RDS: 4.5% modulation
+	0.09, 0.09, 0.09 // RDS 2
 };
 
 void set_carrier_volume(int carrier, int new_volume) {
