@@ -98,6 +98,8 @@ int read_input(float *audio) {
 
 	input_resampler_data.data_out = audio;
 	return resample(input_resampler, input_resampler_data);
+
+	// TODO input buffering goes here (see mpx_gen.c)
 }
 
 void close_input() {

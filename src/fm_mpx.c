@@ -140,7 +140,6 @@ int fm_mpx_get_samples(float *out) {
 		audio_len = INPUT_DATA_SIZE;
 
 		for (int i = 0; i < audio_len; i++) {
-			// 6% modulation
 			mpx_buffer[i] = get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
 
 #ifdef RDS2

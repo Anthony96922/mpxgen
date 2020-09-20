@@ -264,6 +264,13 @@ int main(int argc, char **argv) {
 		// TODO: run this and ao_play as separate threads
 		if ((samples = fm_mpx_get_samples(mpx_data)) < 0) break;
 
+		/* TODO
+		   Here, we need to add a buffer so ao_play gets a
+		   constant amount of frames to play. Because the number
+		   of frames SRC generates is always changing, this will
+		   occasionally cause brief dropouts which may be audible.
+		 */
+
 		float2char(mpx_data, dev_out, samples);
 
 		if (format.channels == 2) {
