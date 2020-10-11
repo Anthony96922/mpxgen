@@ -51,7 +51,6 @@ struct {
     uint8_t rt_update;
     uint8_t rt_segments;
     uint8_t ptyn_update;
-    uint8_t enable_ptyn;
     uint8_t encode_ctime;
 } rds_controls;
 
@@ -63,6 +62,7 @@ struct {
 
 // RT+
 struct {
+    uint8_t group_num;
     uint8_t running;
     uint8_t toggle;
     uint8_t type_1;
@@ -95,8 +95,6 @@ uint16_t crc(uint16_t block) {
    Returns 1 if the CT group was generated, 0 otherwise
 */
 int get_rds_ct_group(uint16_t *blocks) {
-    if (!rds_controls.encode_ctime) return 0;
-
     static int latest_minutes = -1;
 
     // Check time
@@ -191,8 +189,7 @@ void get_rds_oda_group(uint16_t *blocks) {
 	blocks[1] |= 3 << 12;
 
 	// RT+
-	// Assign the RT+ AID to group 11A
-	blocks[1] |= 11 << 1;
+	blocks[1] |= rtp_params.group_num << 1;
 	blocks[3] = 0x4BD7; // RT+ AID
 }
 
@@ -219,8 +216,8 @@ void get_rds_ptyn_group(uint16_t *blocks) {
  */
 void get_rds_rtp_group(uint16_t *blocks) {
 	// RT+ block format
-	blocks[1] |= 11 << 12 | rtp_params.toggle << 4 | rtp_params.running << 3 |
-		    (rtp_params.type_1 & 0x38) >> 3;
+	blocks[1] |= rtp_params.group_num << 12 | rtp_params.toggle << 4 |
+		     rtp_params.running << 3 | (rtp_params.type_1 & 0x38) >> 3;
 	blocks[2] = (rtp_params.type_1 & 0x7) << 13 | (rtp_params.start_1 & 0x3F) << 7 |
 		    (rtp_params.len_1 & 0x3F) << 1 | (rtp_params.type_2 & 0x20) >> 5;
 	blocks[3] = (rtp_params.type_2 & 0x1F) << 11 | (rtp_params.start_2 & 0x3F) << 5 |
@@ -230,22 +227,20 @@ void get_rds_rtp_group(uint16_t *blocks) {
 /* Lower priority groups are placed in a subsequence
  */
 int get_rds_other_groups(uint16_t *blocks) {
-	static int group3A;
-	static int group10A;
-	static int group11A;
+	static int group[15];
 	int group_coded = 0;
 
 	// Type 3A groups
-	if (group3A++ == 20) {
-		group3A = 0;
+	if (++group[3] == 20) {
+		group[3] = 0;
 		get_rds_oda_group(blocks);
 		group_coded = 1;
 	}
 
 	// Type 10A groups
-	if (!group_coded && group10A++ == 10) {
-		group10A = 0;
-		if (rds_controls.enable_ptyn) {
+	if (!group_coded && ++group[10] == 10) {
+		group[10] = 0;
+		if (rds_params.ptyn[0]) {
 			// Do not generate a 10A group if PTYN is off
 			get_rds_ptyn_group(blocks);
 			group_coded = 1;
@@ -253,8 +248,8 @@ int get_rds_other_groups(uint16_t *blocks) {
 	}
 
 	// Type 11A groups
-	if (!group_coded && group11A++ == 20) {
-		group11A = 0;
+	if (!group_coded && ++group[11] == 20) {
+		group[11] = 0;
 		get_rds_rtp_group(blocks);
 		group_coded = 1;
 	}
@@ -272,7 +267,7 @@ void get_rds_group(uint16_t *blocks) {
     blocks[1] = rds_params.tp << 10 | rds_params.pty << 5;
 
     // Generate block content
-    if(!get_rds_ct_group(blocks)) { // CT (clock time) has priority on other group types
+    if(!(rds_controls.encode_ctime && get_rds_ct_group(blocks))) { // CT (clock time) has priority on other group types
 	if (!get_rds_other_groups(blocks)) { // Other groups
             if (!state++) { // Type 0A groups
                 get_rds_ps_group(blocks);
@@ -407,12 +402,15 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, uint8_t *
     set_rds_pty(pty);
     if (ptyn[0]) {
 	if (rds_controls.on) fprintf(stderr, "PTYN: \"%s\"\n", ptyn);
-	set_rds_ptyn(ptyn, 1);
+	set_rds_ptyn(ptyn);
     }
     set_rds_tp(tp);
     set_rds_ct(1);
     set_rds_ms(1);
     set_rds_di(DI_STEREO);
+
+    // Assign the RT+ AID to group 11A
+    rtp_params.group_num = 11;
 
     return 0;
 }
@@ -477,8 +475,7 @@ void set_rds_pty(int pty) {
     rds_params.pty = pty;
 }
 
-void set_rds_ptyn(char *ptyn, int enable) {
-    rds_controls.enable_ptyn = enable;
+void set_rds_ptyn(char *ptyn) {
     rds_controls.ptyn_update = 1;
     strncpy(rds_params.ptyn, ptyn, 8);
 }

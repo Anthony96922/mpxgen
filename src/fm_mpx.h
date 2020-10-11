@@ -24,4 +24,5 @@ extern int fm_mpx_get_samples(float *mpx_buffer);
 extern void fm_mpx_close();
 extern void set_output_volume(int vol);
 extern void set_polar_stereo(int st);
-extern void set_carrier_volume(int carrier, int new_volume);
+extern void set_carrier_volume(unsigned int carrier, int new_volume);
+extern void set_output_ppm(float new_ppm);

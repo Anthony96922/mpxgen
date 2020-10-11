@@ -55,7 +55,7 @@ extern void set_rds_rtp_tags(int type_1, int start_1, int len_1,
                              int type_2, int start_2, int len_2);
 extern void set_rds_ta(int ta);
 extern void set_rds_pty(int pty);
-extern void set_rds_ptyn(char *ptyn, int enable);
+extern void set_rds_ptyn(char *ptyn);
 extern void set_rds_af(uint8_t *af_array);
 extern void set_rds_tp(int tp);
 extern void set_rds_ms(int ms);

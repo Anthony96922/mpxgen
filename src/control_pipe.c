@@ -199,6 +199,12 @@ int poll_control_pipe() {
             }
             return 1;
         }
+        if (res[0] == 'P' && res[1] == 'P' && res[2] == 'M') {
+            float ppm = atof(arg);
+            if (ppm < -100 && ppm > 100) ppm = 0;
+            set_output_ppm(ppm);
+            return 1;
+        }
     }
     if (strlen(res) > 5 && res[4] == ' ') {
         char *arg = res+5;
@@ -227,12 +233,12 @@ int poll_control_pipe() {
                 fprintf(stderr, "PTYN disabled\n");
 #endif
                 char tmp[8] = {0};
-                set_rds_ptyn(tmp, 0);
+                set_rds_ptyn(tmp);
             } else {
 #ifdef CONTROL_PIPE_MESSAGES
                 fprintf(stderr, "PTYN set to: \"%s\"\n", arg);
 #endif
-                set_rds_ptyn(arg, 1);
+                set_rds_ptyn(arg);
             }
             return 1;
         }

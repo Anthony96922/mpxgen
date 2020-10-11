@@ -41,8 +41,8 @@ float *input_buffer;
 float *mpx_buffer;
 
 // SRC
-SRC_STATE *mpx_resampler;
-SRC_DATA mpx_resampler_data;
+SRC_STATE *resampler;
+SRC_DATA resampler_data;
 
 int channels;
 int input;
@@ -66,18 +66,13 @@ float volumes[] = {
 	0.09, 0.09, 0.09 // RDS 2
 };
 
-void set_carrier_volume(int carrier, int new_volume) {
+void set_carrier_volume(unsigned int carrier, int new_volume) {
 	if (new_volume == -1) return;
+	if (carrier <= 4) volumes[carrier] = new_volume / 100.0;
+}
 
-	switch (carrier) {
-	case 0:
-	case 1:
-	case 2:
-	case 3:
-	case 4:
-		volumes[carrier] = new_volume / 100.0;
-		break;
-	}
+void set_output_ppm(float new_ppm) {
+	resampler_data.src_ratio = (192000 / (double)190000) + (new_ppm / 1e6);
 }
 
 int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
@@ -85,11 +80,12 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 
 	mpx_buffer = malloc(DATA_SIZE * sizeof(float));
 
-	mpx_resampler_data.src_ratio = (192000 / (double)190000) + (out_ppm / 1e6);
-	mpx_resampler_data.output_frames = DATA_SIZE;
-	mpx_resampler_data.data_in = mpx_buffer;
+	set_output_ppm(out_ppm);
 
-	if ((mpx_resampler = resampler_init(1)) == NULL) {
+	resampler_data.output_frames = DATA_SIZE;
+	resampler_data.data_in = mpx_buffer;
+
+	if ((resampler = resampler_init(1)) == NULL) {
 		fprintf(stderr, "Could not create MPX resampler.\n");
 		goto error;
 	}
@@ -227,9 +223,9 @@ int fm_mpx_get_samples(float *out) {
 		}
 	}
 
-	mpx_resampler_data.input_frames = audio_len;
-	mpx_resampler_data.data_out = out;
-	if ((audio_len = resample(mpx_resampler, mpx_resampler_data)) < 0) return -1;
+	resampler_data.input_frames = audio_len;
+	resampler_data.data_out = out;
+	if ((audio_len = resample(resampler, resampler_data)) < 0) return -1;
 
 	return audio_len;
 }
@@ -237,6 +233,6 @@ int fm_mpx_get_samples(float *out) {
 void fm_mpx_close() {
 	close_input();
 	clear_mpx_carriers();
-	if (mpx_buffer != NULL) free(mpx_buffer);
-	resampler_exit(mpx_resampler);
+	free(mpx_buffer);
+	resampler_exit(resampler);
 }
