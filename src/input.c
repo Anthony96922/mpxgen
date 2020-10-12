@@ -25,9 +25,6 @@
 
 float *audio_input;
 
-unsigned int sample_rate;
-unsigned int channels;
-
 int input_type;
 
 // SRC
@@ -35,6 +32,8 @@ SRC_STATE *input_resampler;
 SRC_DATA input_resampler_data;
 
 int open_input(char *input_name, int wait) {
+	unsigned int sample_rate;
+	unsigned int channels;
 	float upsample_factor;
 
 #ifdef ALSA
