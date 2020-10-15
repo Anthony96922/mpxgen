@@ -1,7 +1,7 @@
 # mpxgen
 This program generates FM multiplex baseband audio that can be output to a mono FM transmitter. This includes stereo audio as well as realtime RDS data.
 
-##### This is a work in progress! Feel free to contribute and help improve this app!
+##### This is a work in progress! The audio input handling is not complete and buggy. This app works best as a standalone RDS encoder for now.
 
 #### Features
 - Low resource requirements
@@ -31,12 +31,14 @@ To update, just run `git pull` in the directory and the latest changes will be d
 ## How to use
 Before running, make sure you're in the audio group to access the sound card.
 
+### Standalone RDS encoder
 Simply run:
 ```
 ./mpxgen
 ```
 This will produce only an RDS subcarrier with no audio. If you have an FM transmitter plugged in to the sound card, tune an RDS-enabled radio to your transmitter's frequency. You should see "Mpxgen" appear on the display. Your transmitter must be able to pass the entire MPX spectrum for RDS to work.
 
+### With audio
 To test audio output, you can use the provided stereo_44100.wav file.
 ```
 ./mpxgen --audio stereo_44100.wav
@@ -90,6 +92,10 @@ There are more options that can be given to mpxgen:
 -P / --ptyn         Program Type Name. Used to indicate a more specific format.
                     Example: --ptyn CHR.
 
+-S / --callsign     Provide an FM callsign and Mpxgen will use it to calculate the PI code
+                    for your station. Not case sensitive.  Works only in the USA.
+                    Example: --callsign KPSK .
+
 -C / --ctl          Named pipe (FIFO) to use as a control channel to change PS, RT
                     and others at run-time (see below).
 ```
@@ -103,13 +109,13 @@ Basic audio processing with ffmpeg:
 ```
 ffmpeg -i <file name or stream URL> \
   -af "
-    acompressor=level_in=4:threshold=0.25:ratio=3:attack=2000:release=9000,
+    acompressor=level_in=3:threshold=0.25:ratio=10:attack=2000:release=9000,
     acrossover=split=200|500|1000|4000[a0][a1][a2][a3][a4],
-    [a0]acompressor=level_in=2:threshold=0.0875:release=5000:makeup=5[b0];
-    [a1]acompressor=level_in=2:threshold=0.0625:release=5000:makeup=5[b1];
-    [a2]acompressor=level_in=2:threshold=0.0625:release=5000:makeup=5[b2];
-    [a3]acompressor=level_in=2:threshold=0.0625:release=5000:makeup=5[b3];
-    [a4]acompressor=level_in=2:threshold=0.0625:release=5000:makeup=5[b4];
+    [a0]acompressor=level_in=2:threshold=0.0975:release=5000:makeup=3[b0];
+    [a1]acompressor=level_in=2:threshold=0.0725:release=5000:makeup=3[b1];
+    [a2]acompressor=level_in=2:threshold=0.0725:release=5000:makeup=3[b2];
+    [a3]acompressor=level_in=2:threshold=0.0725:release=5000:makeup=3[b3];
+    [a4]acompressor=level_in=2:threshold=0.0725:release=5000:makeup=3[b4];
     [b0][b1][b2][b3][b4]amix=inputs=5,
     acompressor=threshold=0.25:ratio=3:attack=1000:release=1000,
     aemphasis=mode=production:type=75fm,
@@ -149,7 +155,9 @@ TA OFF
 ```
 Every line must start with a valid command, followed by one space character, and the desired value. Any other line format is silently ignored. `TA ON` switches the Traffic Announcement flag to *on*, and any other value switches it to *off*.
 
-Scripts can be written to obtain and feed "now playing" into Mpxgen for dynamically updated RDS.
+Scripts can be written to obtain and send "now playing" text data to Mpxgen for dynamically updated RDS.
+
+See the [command list](command_list.md) for a complete list of valid commands.
 
 ### RadioText Plus
 Mpxgen implements RT+ to allow some radios to display indivdual MP3-like metadata tags like artist and song titles from within RT.
