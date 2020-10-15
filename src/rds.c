@@ -356,7 +356,47 @@ float get_rds_sample() {
     return sample;
 }
 
-int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, uint8_t *af_array, char *ptyn) {
+/*
+ * PI code calculator
+ *
+ * Calculates the PI code from a station's callsign.
+ *
+ * See
+ * https://www.nrscstandards.org/standards-and-guidelines/documents/standards/nrsc-4-b.pdf
+ * for more information.
+ *
+ */
+uint16_t callsign2pi(char *callsign) {
+	uint16_t pi_code = 0;
+
+	if (callsign[0] == 'K' || callsign[0] == 'k') {
+		pi_code += 4096;
+	} else if (callsign[0] == 'W' || callsign[0] == 'w') {
+		pi_code += 21672;
+	} else {
+		return 0;
+	}
+
+	pi_code +=
+		// Change nibbles to base-26 decimal
+		(callsign[1] - (callsign[1] >= 'a' ? 0x61 : 0x41)) * 676 +
+		(callsign[2] - (callsign[2] >= 'a' ? 0x61 : 0x41)) * 26 +
+		(callsign[3] - (callsign[3] >= 'a' ? 0x61 : 0x41));
+
+	// Call letter exceptions
+	if ((pi_code & 0x0F00) == 0) { // When 3rd char is 0
+		pi_code = 0xA000 + ((pi_code & 0xF000) >> 4) + (pi_code & 0x00FF);
+	}
+
+	if ((pi_code & 0x00FF) == 0) { // When 1st & 2nd chars are 0
+		pi_code >>= 8;
+		pi_code += 0xAF00;
+	}
+
+	return pi_code;
+}
+
+int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, uint8_t *af_array, char *ptyn, char *call_sign) {
 
     // RBDS PTY list
     char ptys[32][16] = {
@@ -374,6 +414,16 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, uint8_t *
     if (pty < 0 || pty > 31) {
 	fprintf(stderr, "PTY must be between 0 - 31.\n");
 	return -1;
+    }
+
+    if (call_sign[3]) {
+	uint16_t new_pi;
+	if ((new_pi = callsign2pi(call_sign))) {
+	    fprintf(stderr, "Calculated PI code from callsign '%s'.\n", call_sign);
+	    pi = new_pi;
+	} else {
+	    fprintf(stderr, "Invalid callsign '%s'.\n", call_sign);
+	}
     }
 
     if (rds_controls.on) {

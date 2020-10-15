@@ -47,6 +47,7 @@ int main(int argc, char **argv) {
 	char ps[9] = "Mpxgen";
 	char rt[65] = "Mpxgen: FM Stereo and RDS encoder";
 	char ptyn[9] = {0};
+	char callsign[5] = {0};
 	uint16_t pi = 0x1000;
 	int pty = 0;
 	int tp = 0;
@@ -54,7 +55,7 @@ int main(int argc, char **argv) {
 	int mpx = 50;
 	int wait = 1;
 
-	const char	*short_opt = "a:o:m:x:W:R:i:s:r:p:T:A:P:C:h";
+	const char	*short_opt = "a:o:m:x:W:R:i:s:r:p:T:A:P:S:C:h";
 	struct option	long_opt[] =
 	{
 		{"audio",	required_argument, NULL, 'a'},
@@ -72,6 +73,7 @@ int main(int argc, char **argv) {
 		{"tp",		required_argument, NULL, 'T'},
 		{"af",		required_argument, NULL, 'A'},
 		{"ptyn",	required_argument, NULL, 'P'},
+		{"callsign",	required_argument, NULL, 'S'},
 		{"ctl",		required_argument, NULL, 'C'},
 
 		{"help",	no_argument, NULL, 'h'},
@@ -147,6 +149,10 @@ int main(int argc, char **argv) {
 				strncpy(ptyn, optarg, 8);
 				break;
 
+			case 'S': //callsign
+				strncpy(callsign, optarg, 4);
+				break;
+
 			case 'C': //ctl
 				control_pipe = optarg;
 				break;
@@ -184,6 +190,7 @@ int main(int argc, char **argv) {
 					"    -T / --tp           Traffic Program [ default: %d ]\n"
 					"    -A / --af           Alternative Frequency (more than one AF may be passed)\n"
 					"    -P / --ptyn         PTY Name\n"
+					"    -S / --callsign     Callsign to calculate the PI code from (overrides -i/--pi)\n"
 					"    -C / --ctl          Control pipe\n"
 					"\n",
 				argv[0], mpx, wait, rds, pi, ps, rt, pty, tp);
@@ -246,7 +253,7 @@ int main(int argc, char **argv) {
 
 	// Initialize the RDS modulator
 	set_rds_switch(rds);
-	if (init_rds_encoder(pi, ps, rt, pty, tp, af, ptyn) < 0) return 1;
+	if (init_rds_encoder(pi, ps, rt, pty, tp, af, ptyn, callsign) < 0) return 1;
 
 	// Initialize the control pipe reader
 	if(control_pipe) {

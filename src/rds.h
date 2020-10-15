@@ -43,7 +43,8 @@
 #define DI_DPTY		8 // 8 - Dynamic PTY
 
 extern int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty,
-                             int tp, uint8_t *af_array, char *ptyn);
+                             int tp, uint8_t *af_array, char *ptyn,
+                             char *call_sign);
 
 extern float get_rds_sample();
 
