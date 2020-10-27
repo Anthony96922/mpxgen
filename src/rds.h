@@ -32,8 +32,8 @@
 #define GROUP_LENGTH 4
 #define BITS_PER_GROUP (GROUP_LENGTH * (BLOCK_SIZE+POLY_DEG))
 #define SAMPLES_PER_BIT 160
-#define FILTER_SIZE 1120
-#define SAMPLE_BUFFER_SIZE (SAMPLES_PER_BIT + FILTER_SIZE)
+#define WAVEFORM_SIZE 1120
+#define SAMPLE_BUFFER_SIZE (SAMPLES_PER_BIT + WAVEFORM_SIZE)
 
 #define MAX_AF 25
 
@@ -46,6 +46,7 @@ extern int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty,
                              int tp, uint8_t *af_array, char *ptyn,
                              char *call_sign);
 
+extern void add_checkwords(uint16_t *blocks, uint8_t *bits);
 extern float get_rds_sample();
 
 extern void set_rds_pi(uint16_t pi_code);
