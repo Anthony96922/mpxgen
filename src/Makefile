@@ -27,13 +27,15 @@ mpxgen: $(obj)
 
 control_pipe.o: control_pipe.h rds.h
 
-fm_mpx.o: rds.h fm_mpx.h mpx_carriers.h
+fm_mpx.o: rds.h fm_mpx.h mpx_carriers.h rds2.h
 
 mpx_gen.o: rds.h fm_mpx.h control_pipe.h
 
 rds.o: rds.h fm_mpx.h
 
 input.o: input.h fm_mpx.h resampler.h
+
+rds2.o: rds2.h
 
 clean:
 	rm -f *.o

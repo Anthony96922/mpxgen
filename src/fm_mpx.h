@@ -16,13 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define INPUT_DATA_SIZE 2048
-#define DATA_SIZE INPUT_DATA_SIZE * 16
+#define IN_NUM_FRAMES 512
+#define OUT_NUM_FRAMES IN_NUM_FRAMES * 16
+
+#define DATA_SIZE OUT_NUM_FRAMES
 
 extern int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm);
 extern int fm_mpx_get_samples(float *mpx_buffer);
 extern void fm_mpx_close();
-extern void set_output_volume(int vol);
-extern void set_polar_stereo(int st);
+extern void set_output_volume(unsigned int vol);
+extern void set_polar_stereo(unsigned int st);
 extern void set_carrier_volume(unsigned int carrier, int new_volume);
 extern void set_output_ppm(float new_ppm);

@@ -20,7 +20,7 @@
 #include <math.h>
 
 // Create wave constants for a given frequency and sample rate
-int create_carrier(int sample_rate, float freq, float *carrier) {
+static int create_carrier(int sample_rate, float freq, float *carrier) {
 	float sample;
 	int sine_zero_crossings = 0;
 	int i;

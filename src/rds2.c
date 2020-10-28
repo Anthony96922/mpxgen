@@ -33,13 +33,13 @@ typedef struct {
 	uint8_t bit_buffer[BITS_PER_GROUP];
 	uint8_t bit_pos;
 	float sample_buffer[SAMPLE_BUFFER_SIZE];
-	int prev_output;
-	int cur_output;
-	int cur_bit;
-	int sample_count;
-	int inverting;
-	int in_sample_index;
-	int out_sample_index;
+	uint8_t prev_output;
+	uint8_t cur_output;
+	uint8_t cur_bit;
+	uint8_t sample_count;
+	uint8_t inverting;
+	uint16_t in_sample_index;
+	uint16_t out_sample_index;
 } rds_signal_context;
 
 rds_signal_context rds2_contexts[3];
@@ -50,13 +50,13 @@ rds_signal_context rds2_contexts[3];
  * (from http://www.rds.org.uk/2010/pdf/RDS%202%20-%20what%20it%20is_170127_13.pdf)
  * I have not idea what this is for
  */
-uint8_t fh = 34 << 2 | 0;
+static uint8_t fh = 34 << 2 | 0;
 
 /*
  * Station logo group (not fully implemented)
  * See https://www.youtube.com/watch?v=ticcJpCPoa8
  */
-void get_logo_group(uint16_t *blocks) {
+static void get_logo_group(uint16_t *blocks) {
 	static int logo_pos;
 
 	blocks[0] = fh << 8 | station_logo[logo_pos];
@@ -69,7 +69,7 @@ void get_logo_group(uint16_t *blocks) {
 /*
  * RDS 2 group sequence
  */
-void get_rds2_group(int stream_num, uint16_t *blocks) {
+static void get_rds2_group(int stream_num, uint16_t *blocks) {
 	switch (stream_num) {
 	case 0:
 	case 1:
@@ -82,7 +82,7 @@ void get_rds2_group(int stream_num, uint16_t *blocks) {
 	//	stream_num, blocks[0], blocks[1], blocks[2], blocks[3]);
 }
 
-void get_rds2_bits(int stream, uint8_t *out_buffer) {
+static void get_rds2_bits(int stream, uint8_t *out_buffer) {
 	uint16_t out_blocks[GROUP_LENGTH] = {0};
 	get_rds2_group(stream, out_blocks);
 	add_checkwords(out_blocks, out_buffer);
@@ -122,12 +122,12 @@ float get_rds2_sample(int stream_num) {
 
 		rds2->sample_count = 0;
 	}
+	rds2->sample_count++;
 
 	float sample = rds2->sample_buffer[rds2->out_sample_index];
 
 	rds2->sample_buffer[rds2->out_sample_index++] = 0;
 	if(rds2->out_sample_index >= SAMPLE_BUFFER_SIZE) rds2->out_sample_index = 0;
-	rds2->sample_count++;
 
 	return sample;
 }

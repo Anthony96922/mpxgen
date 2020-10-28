@@ -24,7 +24,7 @@
 #include "waveforms.h"
 #include "rds.h"
 
-struct {
+static struct {
 	uint16_t pi;
 	uint8_t ta;
 	uint8_t pty;
@@ -45,23 +45,23 @@ struct {
 */
 
 // RDS data controls
-struct {
+static struct {
 	uint8_t on;
 	uint8_t ps_update;
 	uint8_t rt_update;
 	uint8_t rt_segments;
 	uint8_t ptyn_update;
-	uint8_t encode_ctime;
+	uint8_t tx_ctime;
 } rds_controls;
 
 // AF
-struct {
+static struct {
 	uint8_t num_afs;
 	uint8_t afs[MAX_AF];
 } af;
 
 // RT+
-struct {
+static struct {
 	uint8_t group_num;
 	uint8_t running;
 	uint8_t toggle;
@@ -73,11 +73,11 @@ struct {
 	uint8_t len_2;
 } rtp_params;
 
-uint16_t offset_words[] = {0x0FC, 0x198, 0x168, 0x1B4};
+static uint16_t offset_words[] = {0x0FC, 0x198, 0x168, 0x1B4};
 // We don't handle offset word C' here for the sake of simplicity
 
 /* Classical CRC computation */
-uint16_t crc(uint16_t block) {
+static uint16_t crc(uint16_t block) {
 	uint16_t crc = 0;
 
 	for(int j=0; j<BLOCK_SIZE; j++) {
@@ -111,7 +111,7 @@ void add_checkwords(uint16_t *blocks, uint8_t *bits) {
 /* Generates a CT (clock time) group if the minute has just changed
  * Returns 1 if the CT group was generated, 0 otherwise
  */
-int get_rds_ct_group(uint16_t *blocks) {
+static int get_rds_ct_group(uint16_t *blocks) {
 	static int latest_minutes = -1;
 
 	// Check time
@@ -146,9 +146,9 @@ int get_rds_ct_group(uint16_t *blocks) {
 
 /* PS group (0A)
  */
-void get_rds_ps_group(uint16_t *blocks) {
+static void get_rds_ps_group(uint16_t *blocks) {
 	static char ps_text[8];
-	static int ps_state, af_state;
+	static uint8_t ps_state, af_state;
 
 	if (ps_state == 0 && rds_controls.ps_update) {
 		strncpy(ps_text, rds_params.ps, 8);
@@ -182,9 +182,9 @@ void get_rds_ps_group(uint16_t *blocks) {
 
 /* RT group (2A)
  */
-void get_rds_rt_group(uint16_t *blocks) {
+static void get_rds_rt_group(uint16_t *blocks) {
 	static char rt_text[64];
-	static int rt_state;
+	static uint8_t rt_state;
 
 	if (rds_controls.rt_update) {
 		strncpy(rt_text, rds_params.rt, 64);
@@ -202,7 +202,7 @@ void get_rds_rt_group(uint16_t *blocks) {
 
 /* ODA group (3A)
  */
-void get_rds_oda_group(uint16_t *blocks) {
+static void get_rds_oda_group(uint16_t *blocks) {
 	blocks[1] |= 3 << 12;
 
 	// RT+
@@ -212,9 +212,9 @@ void get_rds_oda_group(uint16_t *blocks) {
 
 /* PTYN group (10A)
  */
-void get_rds_ptyn_group(uint16_t *blocks) {
+static void get_rds_ptyn_group(uint16_t *blocks) {
 	static char ptyn_text[8];
-	static int ptyn_state;
+	static uint8_t ptyn_state;
 
 	if (ptyn_state == 0 && rds_controls.ptyn_update) {
 		strncpy(ptyn_text, rds_params.ptyn, 8);
@@ -231,7 +231,7 @@ void get_rds_ptyn_group(uint16_t *blocks) {
 
 /* RT+ group
  */
-void get_rds_rtp_group(uint16_t *blocks) {
+static void get_rds_rtp_group(uint16_t *blocks) {
 	// RT+ block format
 	blocks[1] |= rtp_params.group_num << 12 | rtp_params.toggle << 4 |
 		     rtp_params.running << 3 | (rtp_params.type_1 & 0x38) >> 3;
@@ -243,9 +243,9 @@ void get_rds_rtp_group(uint16_t *blocks) {
 
 /* Lower priority groups are placed in a subsequence
  */
-int get_rds_other_groups(uint16_t *blocks) {
-	static int group[15];
-	int group_coded = 0;
+static int get_rds_other_groups(uint16_t *blocks) {
+	static uint8_t group[15];
+	uint8_t group_coded = 0;
 
 	// Type 3A groups
 	if (++group[3] == 20) {
@@ -277,8 +277,8 @@ int get_rds_other_groups(uint16_t *blocks) {
 /* Creates an RDS group.
  * This generates sequences of the form 0A, 2A, 0A, 2A, 0A, 2A, etc.
  */
-void get_rds_group(uint16_t *blocks) {
-	static int state;
+static void get_rds_group(uint16_t *blocks) {
+	static uint8_t state;
 
 	// Basic block data
 	blocks[0] = rds_params.pi;
@@ -286,7 +286,7 @@ void get_rds_group(uint16_t *blocks) {
 
 	// Generate block content
 	// CT (clock time) has priority on other group types
-	if(!(rds_controls.encode_ctime && get_rds_ct_group(blocks))) {
+	if(!(rds_controls.tx_ctime && get_rds_ct_group(blocks))) {
 		if (!get_rds_other_groups(blocks)) { // Other groups
 			if (!state++) { // Type 0A groups
 				get_rds_ps_group(blocks);
@@ -298,7 +298,7 @@ void get_rds_group(uint16_t *blocks) {
 	}
 }
 
-void get_rds_bits(uint8_t *out_buffer) {
+static void get_rds_bits(uint8_t *out_buffer) {
 	uint16_t out_blocks[GROUP_LENGTH] = {0};
 	get_rds_group(out_blocks);
 	add_checkwords(out_blocks, out_buffer);
@@ -312,14 +312,14 @@ float get_rds_sample() {
 	static uint8_t bit_pos;
 	static float sample_buffer[SAMPLE_BUFFER_SIZE];
 
-	static int prev_output;
-	static int cur_output;
-	static int cur_bit;
-	static int sample_count;
-	static int inverting;
+	static uint8_t prev_output;
+	static uint8_t cur_output;
+	static uint8_t cur_bit;
+	static uint8_t sample_count;
+	static uint8_t inverting;
 
-	static int in_sample_index;
-	static int out_sample_index;
+	static uint16_t in_sample_index;
+	static uint16_t out_sample_index;
 
 	if (!rds_controls.on) return 0;
 
@@ -349,12 +349,12 @@ float get_rds_sample() {
 
 		sample_count = 0;
 	}
+	sample_count++;
 
 	float sample = sample_buffer[out_sample_index];
 
 	sample_buffer[out_sample_index++] = 0;
 	if(out_sample_index >= SAMPLE_BUFFER_SIZE) out_sample_index = 0;
-	sample_count++;
 
 	return sample;
 }
@@ -369,7 +369,7 @@ float get_rds_sample() {
  * for more information.
  *
  */
-uint16_t callsign2pi(char *callsign) {
+static uint16_t callsign2pi(char *callsign) {
 	uint16_t pi_code = 0;
 
 	if (callsign[0] == 'K' || callsign[0] == 'k') {
@@ -398,7 +398,7 @@ uint16_t callsign2pi(char *callsign) {
 	return pi_code;
 }
 
-int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, uint8_t *af_array, char *ptyn, char *call_sign) {
+int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, uint8_t *af_array, char *ptyn, char *call_sign) {
 
 	// RBDS PTY list
 	char ptys[32][16] = {
@@ -413,7 +413,7 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, uint8_t *
 	};
 
 
-	if (pty < 0 || pty > 31) {
+	if (pty > 31) {
 		fprintf(stderr, "PTY must be between 0 - 31.\n");
 		return -1;
 	}
@@ -440,7 +440,7 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty, int tp, uint8_t *
 		set_rds_af(af_array);
 		if (rds_controls.on) {
 			fprintf(stderr, "AF: %d,", af_array[0]);
-			for(int f = 1; f < af_array[0]+1; f++) {
+			for(int f = 1; f <= af_array[0]; f++) {
 				fprintf(stderr, " %.1f", (af_array[f]+875)/10.0);
 			}
 			fprintf(stderr, "\n");
@@ -472,11 +472,11 @@ void set_rds_pi(uint16_t pi_code) {
 }
 
 void set_rds_rt(char *rt) {
-	int rt_len = strlen(rt);
+	uint8_t rt_len = strlen(rt);
 
 	rds_controls.rt_update = 1;
 	rds_params.ab ^= 1;
-	strncpy(rds_params.rt, rt, 64);
+	strcpy(rds_params.rt, rt);
 
 	if (rt_len < 64) {
 		// Terminate RT with '\r' (carriage return) if RT is < 64 characters long
@@ -495,19 +495,19 @@ void set_rds_rt(char *rt) {
 
 void set_rds_ps(char *ps) {
 	rds_controls.ps_update = 1;
-	strncpy(rds_params.ps, ps, 8);
+	strcpy(rds_params.ps, ps);
 	for(int i=0; i<8; i++) {
 		if(rds_params.ps[i] == 0) rds_params.ps[i] = 32;
 	}
 }
 
-void set_rds_rtp_flags(int running, int toggle) {
+void set_rds_rtp_flags(uint8_t running, uint8_t toggle) {
 	rtp_params.running = running;
 	rtp_params.toggle = toggle;
 }
 
-void set_rds_rtp_tags(int type_1, int start_1, int len_1,
-		      int type_2, int start_2, int len_2) {
+void set_rds_rtp_tags(uint8_t type_1, uint8_t start_1, uint8_t len_1,
+		      uint8_t type_2, uint8_t start_2, uint8_t len_2) {
 	rtp_params.type_1 = type_1;
 	rtp_params.start_1 = start_1;
 	rtp_params.len_1 = len_1;
@@ -518,44 +518,47 @@ void set_rds_rtp_tags(int type_1, int start_1, int len_1,
 
 void set_rds_af(uint8_t *af_array) {
 	af.num_afs = af_array[0];
-	for(int f=0; f<af_array[0]; f++) {
-		af.afs[f] = af_array[f+1];
+	for(int f=1; f<=af_array[0]; f++) {
+		af.afs[f] = af_array[f];
 	}
 }
 
-void set_rds_pty(int pty) {
+void set_rds_pty(uint8_t pty) {
 	rds_params.pty = pty;
 }
 
 void set_rds_ptyn(char *ptyn) {
 	rds_controls.ptyn_update = 1;
-	strncpy(rds_params.ptyn, ptyn, 8);
+	strcpy(rds_params.ptyn, ptyn);
+	for(int i=0; i<8; i++) {
+		if(rds_params.ptyn[i] == 0) rds_params.ptyn[i] = 32;
+	}
 }
 
-void set_rds_ta(int ta) {
+void set_rds_ta(uint8_t ta) {
 	rds_params.ta = ta;
 }
 
-void set_rds_tp(int tp) {
+void set_rds_tp(uint8_t tp) {
 	rds_params.tp = tp;
 }
 
-void set_rds_ms(int ms) {
+void set_rds_ms(uint8_t ms) {
 	rds_params.ms = ms;
 }
 
-void set_rds_ab(int ab) {
+void set_rds_ab(uint8_t ab) {
 	rds_params.ab = ab;
 }
 
-void set_rds_di(int di) {
+void set_rds_di(uint8_t di) {
 	rds_params.di = di;
 }
 
-void set_rds_ct(int ct) {
-	rds_controls.encode_ctime = ct;
+void set_rds_ct(uint8_t ct) {
+	rds_controls.tx_ctime = ct;
 }
 
-void set_rds_switch(int on) {
+void set_rds_switch(uint8_t on) {
 	rds_controls.on = on;
 }

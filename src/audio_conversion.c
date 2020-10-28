@@ -59,3 +59,12 @@ void stereoize(char *inbuf, char *outbuf, size_t inbufsize) {
 		k += 4;
 	}
 }
+
+void stereoizef(float *inbuf, float *outbuf, size_t inbufsize) {
+	int j = 0;
+
+	for (int i = 0; i < inbufsize; i++) {
+		outbuf[j+0] = outbuf[j+1] = inbuf[i];
+		j += 2;
+	}
+}

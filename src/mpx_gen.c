@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
 	char *audio_file = NULL;
 	char *output_file = NULL;
 	char *control_pipe = NULL;
-	int rds = 1;
+	uint8_t rds = 1;
 	uint8_t af[MAX_AF+1] = {0};
 	uint8_t af_size = 0;
 	// Use arrays to enforce max length for RDS text items
@@ -49,11 +49,11 @@ int main(int argc, char **argv) {
 	char ptyn[9] = {0};
 	char callsign[5] = {0};
 	uint16_t pi = 0x1000;
-	int pty = 0;
-	int tp = 0;
+	uint8_t pty = 0;
+	uint8_t tp = 0;
 	float ppm = 0;
-	int mpx = 50;
-	int wait = 1;
+	uint8_t mpx = 50;
+	uint8_t wait = 1;
 
 	const char	*short_opt = "a:o:m:x:W:R:i:s:r:p:T:A:P:S:C:h";
 	struct option	long_opt[] =
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'm': //mpx
-				mpx = atoi(optarg);
+				mpx = strtoul(optarg, NULL, 10);
 				if (mpx < 1 || mpx > 100) {
 					fprintf(stderr, "MPX volume must be between 1 - 100.\n");
 					return 1;
@@ -101,19 +101,19 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'x': //ppm
-				ppm = atof(optarg);
+				ppm = strtof(optarg, NULL);
 				break;
 
 			case 'W': //wait
-				wait = atoi(optarg);
+				wait = strtoul(optarg, NULL, 10);
 				break;
 
 			case 'R': //rds
-				rds = atoi(optarg);
+				rds = strtoul(optarg, NULL, 10);
 				break;
 
 			case 'i': //pi
-				pi = (uint16_t) strtol(optarg, NULL, 16);
+				pi = strtoul(optarg, NULL, 16);
 				break;
 
 			case 's': //ps
@@ -125,11 +125,11 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'p': //pty
-				pty = atoi(optarg);
+				pty = strtoul(optarg, NULL, 10);
 				break;
 
 			case 'T': //tp
-				tp = atoi(optarg);
+				tp = strtoul(optarg, NULL, 10);
 				break;
 
 			case 'A': //af
@@ -138,11 +138,12 @@ int main(int argc, char **argv) {
 					fprintf(stderr, "AF list is too large.\n");
 					return 1;
 				}
-				af[af_size] = (int)(10*atof(optarg))-875;
-				if(af[af_size] < 1 || af[af_size] > 204) {
+				uint16_t freq = (uint16_t)(10*strtof(optarg, NULL));
+				if (freq < 876 || freq > 1079) {
 					fprintf(stderr, "Alternative Frequency has to be set in range of 87.6 MHz - 107.9 MHz\n");
 					return 1;
 				}
+				af[af_size] = freq-875;
 				break;
 
 			case 'P': //ptyn
@@ -214,7 +215,7 @@ int main(int argc, char **argv) {
 	char dev_out[DATA_SIZE];
 	char stereo_out[DATA_SIZE];
 
-	int samples;
+	int frames;
 
 	// AO
 	ao_device *device;
@@ -232,28 +233,31 @@ int main(int argc, char **argv) {
 			ao_driver = ao_driver_id("raw");
 			if (isatty(fileno(stdout))) {
 				fprintf(stderr, "Not writing audio data to a terminal. Exiting.\n");
-				return 1;
+				ao_shutdown();
+				return -1;
 			}
 		}
 		if ((device = ao_open_file(ao_driver, output_file, 1, &format, NULL)) == NULL) {
 			fprintf(stderr, "Error: cannot open output file.\n");
-			return 1;
+			ao_shutdown();
+			return -1;
 		}
 	} else {
 		format.channels = 2;
 		if ((device = ao_open_live(ao_default_driver_id(), &format, NULL)) == NULL) {
 			fprintf(stderr, "Error: cannot open sound device.\n");
-			return 1;
+			ao_shutdown();
+			return -1;
 		}
 	}
 
 	// Initialize the baseband generator
-	if(fm_mpx_open(audio_file, wait, ppm) < 0) return 1;
+	if(fm_mpx_open(audio_file, wait, ppm) < 0) goto exit;
 	set_output_volume(mpx);
 
 	// Initialize the RDS modulator
 	set_rds_switch(rds);
-	if (init_rds_encoder(pi, ps, rt, pty, tp, af, ptyn, callsign) < 0) return 1;
+	if (init_rds_encoder(pi, ps, rt, pty, tp, af, ptyn, callsign) < 0) goto exit;
 
 	// Initialize the control pipe reader
 	if(control_pipe) {
@@ -269,7 +273,7 @@ int main(int argc, char **argv) {
 		if(control_pipe) poll_control_pipe();
 
 		// TODO: run this and ao_play as separate threads
-		if ((samples = fm_mpx_get_samples(mpx_data)) < 0) break;
+		if ((frames = fm_mpx_get_samples(mpx_data)) < 0) break;
 
 		/* TODO
 		   Here, we need to add a buffer so ao_play gets a
@@ -278,15 +282,15 @@ int main(int argc, char **argv) {
 		   occasionally cause brief dropouts which may be audible.
 		 */
 
-		float2char(mpx_data, dev_out, samples);
+		float2char(mpx_data, dev_out, frames);
 
 		if (format.channels == 2) {
-			stereoize(dev_out, stereo_out, samples);
-			memcpy(dev_out, stereo_out, samples * 2 * sizeof(short));
+			stereoize(dev_out, stereo_out, frames);
+			memcpy(dev_out, stereo_out, frames * 2 * sizeof(short));
 		}
 
 		// num_bytes = audio frames * channels * bytes per sample
-		if (!ao_play(device, dev_out, samples * format.channels * sizeof(short))) {
+		if (!ao_play(device, dev_out, frames * format.channels * sizeof(short))) {
 			fprintf(stderr, "Error: could not play audio.\n");
 			break;
 		}
@@ -297,6 +301,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
+exit:
 	close_control_pipe();
 	fm_mpx_close();
 

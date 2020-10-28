@@ -8,7 +8,7 @@ if [ -z "$1" ]; then
 fi
 
 if [ -f "$1" ]; then
-  cp "$1" /tmp/station_logo
-  xxd -i /tmp/station_logo | sed s/_tmp_// > rds2_image_data.c
-  rm /tmp/station_logo
+  ln -s "$1" station_logo
+  xxd -i station_logo > rds2_image_data.c
+  rm station_logo
 fi

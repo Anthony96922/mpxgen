@@ -42,9 +42,9 @@
 #define DI_COMPRESSED	4 // 4 - Compressed
 #define DI_DPTY		8 // 8 - Dynamic PTY
 
-extern int init_rds_encoder(uint16_t pi, char *ps, char *rt, int pty,
-                             int tp, uint8_t *af_array, char *ptyn,
-                             char *call_sign);
+extern int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty,
+			    uint8_t tp, uint8_t *af_array, char *ptyn,
+			    char *call_sign);
 
 extern void add_checkwords(uint16_t *blocks, uint8_t *bits);
 extern float get_rds_sample();
@@ -52,18 +52,18 @@ extern float get_rds_sample();
 extern void set_rds_pi(uint16_t pi_code);
 extern void set_rds_rt(char *rt);
 extern void set_rds_ps(char *ps);
-extern void set_rds_rtp_flags(int running, int toggle);
-extern void set_rds_rtp_tags(int type_1, int start_1, int len_1,
-                             int type_2, int start_2, int len_2);
-extern void set_rds_ta(int ta);
-extern void set_rds_pty(int pty);
+extern void set_rds_rtp_flags(uint8_t running, uint8_t toggle);
+extern void set_rds_rtp_tags(uint8_t type_1, uint8_t start_1, uint8_t len_1,
+			     uint8_t type_2, uint8_t start_2, uint8_t len_2);
+extern void set_rds_ta(uint8_t ta);
+extern void set_rds_pty(uint8_t pty);
 extern void set_rds_ptyn(char *ptyn);
 extern void set_rds_af(uint8_t *af_array);
-extern void set_rds_tp(int tp);
-extern void set_rds_ms(int ms);
-extern void set_rds_ab(int ab);
-extern void set_rds_ct(int ct);
-extern void set_rds_di(int di);
-extern void set_rds_switch(int on);
+extern void set_rds_tp(uint8_t tp);
+extern void set_rds_ms(uint8_t ms);
+extern void set_rds_ab(uint8_t ab);
+extern void set_rds_ct(uint8_t ct);
+extern void set_rds_di(uint8_t di);
+extern void set_rds_switch(uint8_t on);
 
 #endif /* RDS_H */

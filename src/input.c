@@ -33,22 +33,20 @@ SRC_DATA input_resampler_data;
 
 int open_input(char *input_name, int wait) {
 	unsigned int sample_rate;
-	unsigned int channels;
 	float upsample_factor;
 
 #ifdef ALSA
 	// TODO: better detect live capture cards
 	if (strstr(input_name, ":") != NULL) {
-		channels = 2;
 		sample_rate = 48000;
-		if (open_alsa_input(input_name, sample_rate, channels, INPUT_DATA_SIZE) < 0) {
+		if (open_alsa_input(input_name, sample_rate, IN_NUM_FRAMES) < 0) {
 			fprintf(stderr, "Could not open ALSA source.\n");
 			return 0;
 		}
 		input_type = 2;
 	} else {
 #endif
-		if (open_file_input(input_name, &sample_rate, &channels, wait, INPUT_DATA_SIZE) < 0) {
+		if (open_file_input(input_name, &sample_rate, wait, IN_NUM_FRAMES) < 0) {
 			return 0;
 		}
 		input_type = 1;
@@ -63,24 +61,24 @@ int open_input(char *input_name, int wait) {
 
 	upsample_factor = (double)190000 / sample_rate;
 
-	fprintf(stderr, "Input: %d Hz, %d channels, upsampling factor: %.2f\n", sample_rate, channels, upsample_factor);
+	fprintf(stderr, "Input: %d Hz, upsampling factor: %.2f\n", sample_rate, upsample_factor);
 
-	audio_input = malloc(INPUT_DATA_SIZE * channels * sizeof(float));
+	audio_input = malloc(IN_NUM_FRAMES * 2 * sizeof(float));
 
 	input_resampler_data.src_ratio = upsample_factor;
 	// output_frames: max number of frames to generate
 	// Because we're upsampling the input, the number of output frames
 	// needs to be at least the number of input_frames times the ratio.
-	input_resampler_data.input_frames = INPUT_DATA_SIZE;
-	input_resampler_data.output_frames = DATA_SIZE;
+	input_resampler_data.input_frames = IN_NUM_FRAMES;
+	input_resampler_data.output_frames = OUT_NUM_FRAMES;
 	input_resampler_data.data_in = audio_input;
 
-	if ((input_resampler = resampler_init(channels)) == NULL) {
+	if ((input_resampler = resampler_init(2)) == NULL) {
 		fprintf(stderr, "Could not create input resampler.\n");
 		return -1;
 	}
 
-	return channels;
+	return 1;
 }
 
 int read_input(float *audio) {

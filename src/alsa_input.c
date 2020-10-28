@@ -20,14 +20,17 @@
 #include <alsa/asoundlib.h>
 #include "audio_conversion.h"
 
-short *short_buffer;
-size_t buffer_size;
+static short *short_buffer;
+static size_t buffer_size;
 
 snd_pcm_t *pcm;
 
-int open_alsa_input(char *input, unsigned int sample_rate, unsigned int channels, size_t buf_size) {
+int open_alsa_input(char *input, unsigned int sample_rate, size_t num_frames) {
 	int err;
 	snd_pcm_hw_params_t *hw_params;
+
+	buffer_size = num_frames;
+	short_buffer = malloc(buffer_size * 2 * sizeof(short));
 
 	if ((err = snd_pcm_hw_params_malloc(&hw_params)) < 0) {
 		fprintf(stderr, "Error: cannot allocate hardware parameter structure (%s)\n", snd_strerror(err));
@@ -59,7 +62,7 @@ int open_alsa_input(char *input, unsigned int sample_rate, unsigned int channels
 		return -1;
 	}
 
-	if ((err = snd_pcm_hw_params_set_channels(pcm, hw_params, channels)) < 0) {
+	if ((err = snd_pcm_hw_params_set_channels(pcm, hw_params, 2)) < 0) {
 		fprintf(stderr, "Error: cannot set channel count (%s)\n", snd_strerror(err));
 		return -1;
 	}
@@ -75,9 +78,6 @@ int open_alsa_input(char *input, unsigned int sample_rate, unsigned int channels
 		fprintf(stderr, "Error: cannot prepare audio interface for use (%s)\n", snd_strerror(err));
 		return -1;
 	}
-
-	buffer_size = buf_size;
-	short_buffer = malloc(buffer_size * channels * sizeof(short));
 
 	fprintf(stderr, "Using ADC input %s.\n", input);
 

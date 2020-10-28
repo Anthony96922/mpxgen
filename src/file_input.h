@@ -16,6 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern int open_file_input(char *filename, unsigned int *sample_rate, unsigned int *channels, int wait, size_t num_frames);
+extern int open_file_input(char *filename, unsigned int *sample_rate, int wait, size_t num_frames);
 extern int read_file_input(float *audio);
 extern void close_file_input();

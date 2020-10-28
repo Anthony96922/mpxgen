@@ -44,19 +44,19 @@ float *mpx_buffer;
 SRC_STATE *resampler;
 SRC_DATA resampler_data;
 
-int channels;
 int input;
 
 float mpx_vol;
 
-void set_output_volume(int vol) {
+void set_output_volume(unsigned int vol) {
+	if (vol > 100) vol = 100;
 	mpx_vol = (vol / 100.0);
 }
 
 int polar_stereo;
 
-void set_polar_stereo(int st) {
-	polar_stereo = st;
+void set_polar_stereo(unsigned int st) {
+	if (st == 0 || st == 1) polar_stereo = st;
 }
 
 // subcarrier volumes
@@ -68,10 +68,17 @@ float volumes[] = {
 
 void set_carrier_volume(unsigned int carrier, int new_volume) {
 	if (new_volume == -1) return;
-	if (carrier <= 4) volumes[carrier] = new_volume / 100.0;
+	if (carrier <= 4) {
+		if (new_volume >= 0 || new_volume <= 15) {
+			volumes[carrier] = new_volume / 100.0;
+		} else {
+			volumes[carrier] = 0.09;
+		}
+	}
 }
 
 void set_output_ppm(float new_ppm) {
+	if (new_ppm < -100 && new_ppm > 100) new_ppm = 0;
 	resampler_data.src_ratio = (192000 / (double)190000) + (new_ppm / 1e6);
 }
 
@@ -93,7 +100,7 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 	create_mpx_carriers(190000);
 
 	if (filename != NULL) {
-		if (!(channels = open_input(filename, wait_for_audio))) goto error;
+		if (!open_input(filename, wait_for_audio)) goto error;
 	} else {
 		return 0;
 	}
@@ -101,7 +108,7 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 	input = 1;
 	cutoff_freq = 24000;
 
-	input_buffer = malloc(DATA_SIZE * sizeof(float));
+	input_buffer = malloc(OUT_NUM_FRAMES * sizeof(float));
 
 	// Here we divide this coefficient by two because it will be counted twice
 	// when applying the filter
@@ -133,7 +140,7 @@ int fm_mpx_get_samples(float *out) {
 	float out_mono, out_stereo;
 
 	if (!input) {
-		audio_len = INPUT_DATA_SIZE;
+		audio_len = IN_NUM_FRAMES;
 
 		for (int i = 0; i < audio_len; i++) {
 			mpx_buffer[i] = get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
@@ -153,14 +160,9 @@ int fm_mpx_get_samples(float *out) {
 
 		for (int i = 0; i < audio_len; i++) {
 			// First store the current sample(s) into the FIR filter's ring buffer
-			fir_buffer[0][fir_index] = input_buffer[j];
-			if (channels == 2) {
-				fir_buffer[1][fir_index] = input_buffer[j+1];
-				j += 2;
-			} else {
-				fir_buffer[1][fir_index] = input_buffer[j];
-				j += 1;
-			}
+			fir_buffer[0][fir_index] = input_buffer[j+0];
+			fir_buffer[1][fir_index] = input_buffer[j+1];
+			j += 2;
 			fir_index++;
 			if(fir_index == FIR_SIZE) fir_index = 0;
 
@@ -197,16 +199,14 @@ int fm_mpx_get_samples(float *out) {
 			// audio signals need to be limited to 45% to remain within modulation limits
 			mpx_buffer[i] = out_mono * 0.45;
 
-			if (channels == 2) {
-				if (polar_stereo) {
-					// Polar stereo encoding system used in Eastern Europe
-					mpx_buffer[i] +=
-						get_carrier(CARRIER_31K) * ((out_stereo * 0.45) + volumes[0]);
-				} else {
-					mpx_buffer[i] +=
-						get_carrier(CARRIER_19K) * volumes[0] +
-						get_carrier(CARRIER_38K) * out_stereo * 0.45;
-				}
+			if (polar_stereo) {
+				// Polar stereo encoding system used in Eastern Europe
+				mpx_buffer[i] +=
+					get_carrier(CARRIER_31K) * ((out_stereo * 0.45) + volumes[0]);
+			} else {
+				mpx_buffer[i] +=
+					get_carrier(CARRIER_19K) * volumes[0] +
+					get_carrier(CARRIER_38K) * out_stereo * 0.45;
 			}
 
 			mpx_buffer[i] += get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
