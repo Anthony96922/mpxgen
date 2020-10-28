@@ -23,7 +23,7 @@
 
 SRC_STATE *resampler_init(int channels) {
 	SRC_STATE *src_state;
-        int src_error;
+	int src_error;
 
 	if ((src_state = src_new(CONVERTER_TYPE, channels, &src_error)) == NULL) {
 		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_error));
