@@ -188,6 +188,7 @@ static void get_rds_rt_group(uint16_t *blocks) {
 
 	if (rds_controls.rt_update) {
 		strncpy(rt_text, rds_params.rt, 64);
+		rds_params.ab ^= 1;
 		rds_controls.rt_update = 0;
 		rt_state = 0; // rewind when new RT arrives
 	}
@@ -473,32 +474,33 @@ void set_rds_pi(uint16_t pi_code) {
 
 void set_rds_rt(char *rt) {
 	uint8_t rt_len = strlen(rt);
-
 	rds_controls.rt_update = 1;
-	rds_params.ab ^= 1;
-	strcpy(rds_params.rt, rt);
+	memset(rds_params.rt, 0, 64);
+	memcpy(rds_params.rt, rt, rt_len);
 
 	if (rt_len < 64) {
-		// Terminate RT with '\r' (carriage return) if RT is < 64 characters long
-		rds_params.rt[rt_len] = '\r';
+		/* Terminate RT with '\r' (carriage return) if RT
+		 * is < 64 characters long
+		 */
+		rds_params.rt[rt_len++] = '\r';
 
-		for (int i = 1; i <= 16; i++) {
-			if (i * 4 >= rt_len + 1) { // Add 1 because we're also counting the "\r"
-				rds_controls.rt_segments = i;
-				break; // We have reached the end of the text string
+		for (int i = 0; i < 64; i += 4) {
+			if (i >= rt_len) {
+				rds_controls.rt_segments = i / 4;
+				break;
 			}
+			// We have reached the end of the text string
 		}
 	} else {
-		rds_controls.rt_segments = 16; // default to 16 if RT is 64 characters long
+		// Default to 16 if RT is 64 characters long
+		rds_controls.rt_segments = 16;
 	}
 }
 
 void set_rds_ps(char *ps) {
 	rds_controls.ps_update = 1;
-	strcpy(rds_params.ps, ps);
-	for(int i=0; i<8; i++) {
-		if(rds_params.ps[i] == 0) rds_params.ps[i] = 32;
-	}
+	memset(rds_params.ps, ' ', 8);
+	memcpy(rds_params.ps, ps, strlen(ps));
 }
 
 void set_rds_rtp_flags(uint8_t running, uint8_t toggle) {
@@ -529,10 +531,8 @@ void set_rds_pty(uint8_t pty) {
 
 void set_rds_ptyn(char *ptyn) {
 	rds_controls.ptyn_update = 1;
-	strcpy(rds_params.ptyn, ptyn);
-	for(int i=0; i<8; i++) {
-		if(rds_params.ptyn[i] == 0) rds_params.ptyn[i] = 32;
-	}
+	memset(rds_params.ptyn, ' ', 8);
+	memcpy(rds_params.ptyn, ptyn, strlen(ptyn));
 }
 
 void set_rds_ta(uint8_t ta) {
