@@ -484,7 +484,7 @@ void set_rds_rt(char *rt) {
 		 */
 		rds_params.rt[rt_len++] = '\r';
 
-		for (int i = 0; i < 64; i += 4) {
+		for (int i = 0; i <= 64; i += 4) {
 			if (i >= rt_len) {
 				rds_controls.rt_segments = i / 4;
 				break;
