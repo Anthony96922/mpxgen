@@ -50,6 +50,7 @@ static struct {
 	uint8_t ps_update;
 	uint8_t rt_update;
 	uint8_t rt_segments;
+	uint8_t rt_bursting;
 	uint8_t ptyn_update;
 	uint8_t tx_ctime;
 } rds_controls;
@@ -186,6 +187,8 @@ static void get_rds_rt_group(uint16_t *blocks) {
 	static char rt_text[64];
 	static uint8_t rt_state;
 
+	if (rds_controls.rt_bursting) rds_controls.rt_bursting--;
+
 	if (rds_controls.rt_update) {
 		strncpy(rt_text, rds_params.rt, 64);
 		rds_params.ab ^= 1;
@@ -289,10 +292,13 @@ static void get_rds_group(uint16_t *blocks) {
 	// CT (clock time) has priority on other group types
 	if(!(rds_controls.tx_ctime && get_rds_ct_group(blocks))) {
 		if (!get_rds_other_groups(blocks)) { // Other groups
-			if (!state++) { // Type 0A groups
+			// These are always transmitted
+			if (!state) { // Type 0A groups
 				get_rds_ps_group(blocks);
+				state++;
 			} else { // Type 2A groups
 				get_rds_rt_group(blocks);
+				if (!rds_controls.rt_bursting) state++;
 			}
 			if(state == 2) state = 0;
 		}
