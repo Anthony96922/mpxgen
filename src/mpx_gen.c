@@ -256,7 +256,7 @@ int main(int argc, char **argv) {
 	set_output_volume(mpx);
 
 	// Initialize the RDS modulator
-	set_rds_switch(rds);
+	if (!rds) set_carrier_volume(1, 0);
 	if (init_rds_encoder(pi, ps, rt, pty, tp, af, ptyn, callsign) < 0) goto exit;
 
 	// Initialize the control pipe reader
