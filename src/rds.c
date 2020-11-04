@@ -494,6 +494,8 @@ void set_rds_rt(char *rt) {
 		// Default to 16 if RT is 64 characters long
 		rds_controls.rt_segments = 16;
 	}
+
+	rds_controls.rt_bursting = rds_controls.rt_segments;
 }
 
 void set_rds_ps(char *ps) {
