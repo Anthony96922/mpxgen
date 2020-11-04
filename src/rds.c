@@ -46,7 +46,6 @@ static struct {
 
 // RDS data controls
 static struct {
-	uint8_t on;
 	uint8_t ps_update;
 	uint8_t rt_update;
 	uint8_t rt_segments;
@@ -328,8 +327,6 @@ float get_rds_sample() {
 	static uint16_t in_sample_index;
 	static uint16_t out_sample_index;
 
-	if (!rds_controls.on) return 0;
-
 	if(sample_count == SAMPLES_PER_BIT) {
 		if(bit_pos == BITS_PER_GROUP) {
 			get_rds_bits(bit_buffer);
@@ -435,23 +432,19 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, u
 		}
 	}
 
-	if (rds_controls.on) {
-		fprintf(stderr, "RDS Options:\n");
-		fprintf(stderr, "PI: %04X, PS: \"%s\", PTY: %d (%s), TP: %d\n",
-			pi, ps, pty, ptys[pty], tp);
-		fprintf(stderr, "RT: \"%s\"\n", rt);
-	}
+	fprintf(stderr, "RDS Options:\n");
+	fprintf(stderr, "PI: %04X, PS: \"%s\", PTY: %d (%s), TP: %d\n",
+		pi, ps, pty, ptys[pty], tp);
+	fprintf(stderr, "RT: \"%s\"\n", rt);
 
 	// AF
 	if(af_array[0]) {
 		set_rds_af(af_array);
-		if (rds_controls.on) {
-			fprintf(stderr, "AF: %d,", af_array[0]);
-			for(int f = 1; f <= af_array[0]; f++) {
-				fprintf(stderr, " %.1f", (af_array[f]+875)/10.0);
-			}
-			fprintf(stderr, "\n");
+		fprintf(stderr, "AF: %d,", af_array[0]);
+		for(int f = 1; f <= af_array[0]; f++) {
+			fprintf(stderr, " %.1f", (af_array[f]+875)/10.0);
 		}
+		fprintf(stderr, "\n");
 	}
 
 	set_rds_pi(pi);
@@ -460,7 +453,7 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, u
 	set_rds_rt(rt);
 	set_rds_pty(pty);
 	if (ptyn[0]) {
-		if (rds_controls.on) fprintf(stderr, "PTYN: \"%s\"\n", ptyn);
+		fprintf(stderr, "PTYN: \"%s\"\n", ptyn);
 		set_rds_ptyn(ptyn);
 	}
 	set_rds_tp(tp);
@@ -563,8 +556,4 @@ void set_rds_di(uint8_t di) {
 
 void set_rds_ct(uint8_t ct) {
 	rds_controls.tx_ctime = ct;
-}
-
-void set_rds_switch(uint8_t on) {
-	rds_controls.on = on;
 }

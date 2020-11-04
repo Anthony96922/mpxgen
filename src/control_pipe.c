@@ -182,7 +182,6 @@ int poll_control_pipe() {
 				for (int i = 0; i < 5; i++) {
 					set_carrier_volume(i, gains[i]);
 				}
-				set_rds_switch(gains[1] != 0);
 			}
 			return 1;
 		}

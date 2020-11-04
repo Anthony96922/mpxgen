@@ -64,6 +64,5 @@ extern void set_rds_ms(uint8_t ms);
 extern void set_rds_ab(uint8_t ab);
 extern void set_rds_ct(uint8_t ct);
 extern void set_rds_di(uint8_t di);
-extern void set_rds_switch(uint8_t on);
 
 #endif /* RDS_H */
