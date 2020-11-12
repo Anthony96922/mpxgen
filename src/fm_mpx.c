@@ -69,7 +69,7 @@ float volumes[] = {
 void set_carrier_volume(unsigned int carrier, int new_volume) {
 	if (new_volume == -1) return;
 	if (carrier <= 4) {
-		if (new_volume >= 0 || new_volume <= 15) {
+		if (new_volume >= 0 && new_volume <= 15) {
 			volumes[carrier] = new_volume / 100.0;
 		} else {
 			volumes[carrier] = 0.09;
@@ -102,6 +102,8 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 	if (filename != NULL) {
 		if (!open_input(filename, wait_for_audio)) goto error;
 	} else {
+		// Pilot tone is off by default when in standalone mode
+		volumes[0] = 0;
 		return 0;
 	}
 
@@ -143,7 +145,10 @@ int fm_mpx_get_samples(float *out) {
 		audio_len = IN_NUM_FRAMES;
 
 		for (int i = 0; i < audio_len; i++) {
-			mpx_buffer[i] = get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
+			// Pilot tone for calibration
+			mpx_buffer[i] = get_carrier(CARRIER_19K) * volumes[0];
+
+			mpx_buffer[i] += get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
 
 #ifdef RDS2
 			mpx_buffer[i] += get_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
