@@ -9,12 +9,14 @@ This program generates FM multiplex baseband audio that can be output to a mono 
 - Support for basic RDS data fields: PS, RT, PTY and AF
 - RDS items can be updated through control pipe
 - RT+ support
-- Experimental RDS2 capabilities
 
 #### To do
 - Threading
 - Input and output buffering
 - Basic limiting (?)
+- RDS2 capabilities
+
+Mpxgen's RDS encoder in action: https://www.youtube.com/watch?v=ORAMpYhDcVY
 
 ## Build
 This app depends on the sndfile, ao and samplerate libraries. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libao-dev libsamplerate0-dev` to install them.
@@ -111,11 +113,11 @@ ffmpeg -i <file name or stream URL> \
   -af "
     acompressor=level_in=3:threshold=0.25:ratio=10:attack=2000:release=9000,
     acrossover=split=200|500|1000|4000[a0][a1][a2][a3][a4],
-    [a0]acompressor=level_in=2:threshold=0.0975:release=5000:makeup=3[b0];
-    [a1]acompressor=level_in=2:threshold=0.0725:release=5000:makeup=3[b1];
-    [a2]acompressor=level_in=2:threshold=0.0725:release=5000:makeup=3[b2];
-    [a3]acompressor=level_in=2:threshold=0.0725:release=5000:makeup=3[b3];
-    [a4]acompressor=level_in=2:threshold=0.0725:release=5000:makeup=3[b4];
+    [a0]acompressor=level_in=2:threshold=0.1:release=5000:makeup=3[b0];
+    [a1]acompressor=level_in=2:threshold=0.1:release=5000:makeup=3[b1];
+    [a2]acompressor=level_in=2:threshold=0.1:release=5000:makeup=3[b2];
+    [a3]acompressor=level_in=2:threshold=0.1:release=5000:makeup=3[b3];
+    [a4]acompressor=level_in=2:threshold=0.1:release=5000:makeup=3[b4];
     [b0][b1][b2][b3][b4]amix=inputs=5,
     acompressor=threshold=0.25:ratio=3:attack=1000:release=1000,
     aemphasis=mode=production:type=75fm,
@@ -126,7 +128,7 @@ ffmpeg -i <file name or stream URL> \
     [c3]alimiter=level=disabled:attack=10:release=10[d3];
     [c4]alimiter=level=disabled:attack=10:release=10[d4];
     [d0][d1][d2][d3][d4]amix=inputs=5,
-    aresample=192k,
+    aresample=96k,
     alimiter=limit=0.5:level=disabled:attack=10:release=10,
     aresample=48k,
     firequalizer=gain='if(lt(f,16000), 0, -inf)'
@@ -137,40 +139,12 @@ ffmpeg -i <file name or stream URL> \
 ### Changing PS, RT, TA and PTY at run-time
 You can control PS, RT, TA (Traffic Announcement flag) and PTY (Program Type) at run-time using a named pipe (FIFO). For this run mpxgen with the `--ctl` argument.
 
-Example:
-```
-mkfifo rds_ctl
-./mpxgen --ctl rds_ctl
-```
-Then you can send “commands” to change PS, RT, TA and PTY:
-```
-cat > rds_ctl
-PS MyText
-RT A text to be sent as radiotext
-PTY 10
-TA ON
-PS OtherTxt
-TA OFF
-...
-```
-Every line must start with a valid command, followed by one space character, and the desired value. Any other line format is silently ignored. `TA ON` switches the Traffic Announcement flag to *on*, and any other value switches it to *off*.
-
 Scripts can be written to obtain and send "now playing" text data to Mpxgen for dynamically updated RDS.
 
 See the [command list](command_list.md) for a complete list of valid commands.
 
-### RadioText Plus
-Mpxgen implements RT+ to allow some radios to display indivdual MP3-like metadata tags like artist and song titles from within RT.
-
-The syntax for RT+ is comma-separated values specifying content type, start offset and length. RT+ flags use a similar syntax.
-```
-RTP <content type 1>,<start 1>,<length 1>,<content type 2>,<start 2>,<length 2>
-RTPF <running bit>,<toggle bit>
-```
-For more information, see [EBU Technical Review: RadioText Plus](https://tech.ebu.ch/docs/techreview/trev_307-radiotext.pdf)
-
-### RDS2 (experimental)
-Mpxgen has an untested implementation of RDS2. To enable, look for the `RDS2 = 0` in the Makefile and change the `0` to a `1`. Then run `make clean && make` to rebuild with RDS2 capabilities.
+### RDS2 (WIP)
+Mpxgen has an WIP implementation of RDS2. Support for RDS2 features will be implemented once the spec has been released.
 
 #### Credits
 Based on [PiFmAdv](https://github.com/miegl/PiFmAdv) which is based on [PiFmRds](https://github.com/ChristopheJacquet/PiFmRds)
