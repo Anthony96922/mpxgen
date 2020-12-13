@@ -532,8 +532,12 @@ void set_rds_pty(uint8_t pty) {
 
 void set_rds_ptyn(char *ptyn) {
 	rds_controls.ptyn_update = 1;
-	memset(rds_params.ptyn, ' ', 8);
-	memcpy(rds_params.ptyn, ptyn, strlen(ptyn));
+	if (ptyn[0]) {
+		memset(rds_params.ptyn, ' ', 8);
+		memcpy(rds_params.ptyn, ptyn, strlen(ptyn));
+	} else {
+		memset(rds_params.ptyn, 0, 8);
+	}
 }
 
 void set_rds_ta(uint8_t ta) {
