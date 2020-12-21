@@ -59,7 +59,7 @@ int open_input(char *input_name, int wait) {
 		return -1;
         }
 
-	upsample_factor = (double)190000 / sample_rate;
+	upsample_factor = (double)MPX_SAMPLE_RATE / sample_rate;
 
 	fprintf(stderr, "Input: %d Hz, upsampling factor: %.2f\n", sample_rate, upsample_factor);
 

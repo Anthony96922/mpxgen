@@ -18,9 +18,10 @@
 
 #include <stdlib.h>
 #include <math.h>
+#include "fm_mpx.h"
 
-// Create wave constants for a given frequency and sample rate
-static int create_carrier(int sample_rate, float freq, float *carrier) {
+// Create wave constants for a given frequency
+static int create_carrier(float freq, float *carrier) {
 	float sample;
 	int sine_zero_crossings = 0;
 	int i;
@@ -28,8 +29,8 @@ static int create_carrier(int sample_rate, float freq, float *carrier) {
 	// First value of a sine wave is always 0
 	*carrier++ = 0;
 
-	for (i = 1; i < sample_rate; i++) {
-		sample = sin(2 * M_PI * freq * i / sample_rate);
+	for (i = 1; i < MPX_SAMPLE_RATE; i++) {
+		sample = sin(2 * M_PI * freq * i / MPX_SAMPLE_RATE);
 		if (sample > -0.1e-6 && sample < 0.1e-6) {
 			if (++sine_zero_crossings == 2) break;
 			*carrier++ = 0;
@@ -50,10 +51,10 @@ float carrier_frequencies[NUM_CARRIERS] = {
 float *carrier[NUM_CARRIERS];
 int phase[NUM_CARRIERS][2]; // [carrier][current phase/max phase]
 
-void create_mpx_carriers(int sample_rate) {
+void create_mpx_carriers() {
 	for (int i = 0; i < NUM_CARRIERS; i++) {
-		carrier[i] = malloc(sample_rate * sizeof(float));
-		phase[i][1] = create_carrier(sample_rate, carrier_frequencies[i], carrier[i]);
+		carrier[i] = malloc(MPX_SAMPLE_RATE * sizeof(float));
+		phase[i][1] = create_carrier(carrier_frequencies[i], carrier[i]);
 	}
 }
 

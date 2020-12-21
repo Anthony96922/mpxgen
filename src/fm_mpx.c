@@ -79,7 +79,7 @@ void set_carrier_volume(unsigned int carrier, int new_volume) {
 
 void set_output_ppm(float new_ppm) {
 	if (new_ppm < -100 && new_ppm > 100) new_ppm = 0;
-	resampler_data.src_ratio = (192000 / (double)190000) + (new_ppm / 1e6);
+	resampler_data.src_ratio = (192000 / (double)MPX_SAMPLE_RATE) + (new_ppm / 1e6);
 }
 
 int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
@@ -97,7 +97,7 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 		goto error;
 	}
 
-	create_mpx_carriers(190000);
+	create_mpx_carriers();
 
 	if (filename != NULL) {
 		if (!open_input(filename, wait_for_audio)) goto error;
@@ -114,12 +114,12 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 
 	// Here we divide this coefficient by two because it will be counted twice
 	// when applying the filter
-	low_pass_fir[FIR_HALF_SIZE-1] = 2 * cutoff_freq / 190000 / 2;
+	low_pass_fir[FIR_HALF_SIZE-1] = 2 * cutoff_freq / MPX_SAMPLE_RATE / 2;
 
 	// Only store half of the filter since it is symmetric
 	for(int i=1; i<FIR_HALF_SIZE; i++) {
 		low_pass_fir[FIR_HALF_SIZE-1-i] =
-			sin(2 * M_PI * cutoff_freq * i / 190000) / (M_PI * i) // sinc
+			sin(2 * M_PI * cutoff_freq * i / MPX_SAMPLE_RATE) / (M_PI * i) // sinc
 			* (.54 - .46 * cos(2 * M_PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
 	}
 
