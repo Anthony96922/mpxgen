@@ -1,5 +1,5 @@
 # mpxgen
-This program generates FM multiplex baseband audio that can be output to a mono FM transmitter. This includes stereo audio as well as realtime RDS data.
+This program generates FM multiplex baseband audio that can be sent to a mono FM transmitter. This includes stereo audio as well as realtime RDS data.
 
 ##### This is a work in progress! The audio input handling is not complete and buggy. This app works best as a standalone RDS encoder for now.
 
@@ -34,20 +34,24 @@ To update, just run `git pull` in the directory and the latest changes will be d
 Before running, make sure you're in the audio group to access the sound card.
 
 ### Standalone RDS encoder
+This mode is for those who already have a stereo encoder and want to add RDS to their station.
+
 Simply run:
 ```
 ./mpxgen
 ```
-This will produce only an RDS subcarrier with no audio. If you have an FM transmitter plugged in to the sound card, tune an RDS-enabled radio to your transmitter's frequency. You should see "Mpxgen" appear on the display. Your transmitter must be able to pass the entire MPX spectrum for RDS to work.
+This will produce only an RDS subcarrier with no audio. If you have an FM transmitter plugged in to the sound card, tune an RDS-enabled radio to your transmitter's frequency. You should see "Mpxgen" appear on the display. Your transmitter must be able to pass the entire MPX spectrum for RDS to work. Use `--ctl` to change RDS settings at run-time.
+
+The resulting RDS signal may then be added to the MPX signal using an active mixer. Make sure you're not overdeviating. If using Stereo Tool for audio processing and stereo encoding, enable and use the "Use SCA Input as external RDS input" option instead.
 
 ### With audio
 To test audio output, you can use the provided stereo_44100.wav file.
 ```
 ./mpxgen --audio stereo_44100.wav
 ```
-If the audio sounds distorted, you may be overmodulating the transmitter. Adjust the output volume (see `--volume` option) until audio sounds clear and no distortion can be heard.
+If the audio sounds distorted, you may be overmodulating the transmitter. Adjust the output volume (see `--mpx` option) until audio sounds clear and no distortion can be heard.
 
-You may use MPXtool to calibrate the output volume so the pilot tone is exactly 9%.
+You may use MpxTool to calibrate the output volume so the pilot tone is exactly 9%.
 
 There are more options that can be given to mpxgen:
 ```
@@ -95,7 +99,7 @@ There are more options that can be given to mpxgen:
                     Example: --ptyn CHR.
 
 -S / --callsign     Provide an FM callsign and Mpxgen will use it to calculate the PI code
-                    for your station. Not case sensitive.  Works only in the USA.
+                    for your station. Not case sensitive. Works only in the USA.
                     Example: --callsign KPSK .
 
 -C / --ctl          Named pipe (FIFO) to use as a control channel to change PS, RT
@@ -103,38 +107,9 @@ There are more options that can be given to mpxgen:
 ```
 
 ### Piping audio into mpxgen
-If you use the argument `--audio -`, mpxgen reads audio data on standard input. This allows you to pipe the output of a program into mpxgen.
+If you use the argument `--audio -`, Mpxgen reads audio data on standard input. This allows you to pipe the output of a program into Mpxgen.
 
 The input gain is 6dB so audio needs to be reduced by -6dB to avoid clipping.
-
-Basic audio processing with ffmpeg:
-```
-ffmpeg -i <file name or stream URL> \
-  -af "
-    acompressor=level_in=3:threshold=0.25:ratio=10:attack=2000:release=9000,
-    acrossover=split=200|500|1000|4000[a0][a1][a2][a3][a4],
-    [a0]acompressor=level_in=2:threshold=0.1:release=5000:makeup=3[b0];
-    [a1]acompressor=level_in=2:threshold=0.1:release=5000:makeup=3[b1];
-    [a2]acompressor=level_in=2:threshold=0.1:release=5000:makeup=3[b2];
-    [a3]acompressor=level_in=2:threshold=0.1:release=5000:makeup=3[b3];
-    [a4]acompressor=level_in=2:threshold=0.1:release=5000:makeup=3[b4];
-    [b0][b1][b2][b3][b4]amix=inputs=5,
-    acompressor=threshold=0.25:ratio=3:attack=1000:release=1000,
-    aemphasis=mode=production:type=75fm,
-    acrossover=split=200|500|1000|4000[c0][c1][c2][c3][c4],
-    [c0]alimiter=level=disabled:attack=10:release=10[d0];
-    [c1]alimiter=level=disabled:attack=10:release=10[d1];
-    [c2]alimiter=level=disabled:attack=10:release=10[d2];
-    [c3]alimiter=level=disabled:attack=10:release=10[d3];
-    [c4]alimiter=level=disabled:attack=10:release=10[d4];
-    [d0][d1][d2][d3][d4]amix=inputs=5,
-    aresample=96k,
-    alimiter=limit=0.5:level=disabled:attack=10:release=10,
-    aresample=48k,
-    firequalizer=gain='if(lt(f,16000), 0, -inf)'
-  " \
-  -ac 2 -f wav - | ./mpxgen --audio -
-```
 
 ### Changing PS, RT, TA and PTY at run-time
 You can control PS, RT, TA (Traffic Announcement flag) and PTY (Program Type) at run-time using a named pipe (FIFO). For this run mpxgen with the `--ctl` argument.
@@ -144,7 +119,7 @@ Scripts can be written to obtain and send "now playing" text data to Mpxgen for 
 See the [command list](command_list.md) for a complete list of valid commands.
 
 ### RDS2 (WIP)
-Mpxgen has an WIP implementation of RDS2. Support for RDS2 features will be implemented once the spec has been released.
+Mpxgen has a WIP implementation of RDS2. Support for RDS2 features will be implemented once the spec has been released.
 
 #### Credits
 Based on [PiFmAdv](https://github.com/miegl/PiFmAdv) which is based on [PiFmRds](https://github.com/ChristopheJacquet/PiFmRds)
