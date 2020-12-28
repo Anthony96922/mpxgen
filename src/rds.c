@@ -511,12 +511,12 @@ void set_rds_rtp_flags(uint8_t running, uint8_t toggle) {
 
 void set_rds_rtp_tags(uint8_t type_1, uint8_t start_1, uint8_t len_1,
 		      uint8_t type_2, uint8_t start_2, uint8_t len_2) {
-	rtp_params.type_1 = type_1;
-	rtp_params.start_1 = start_1;
-	rtp_params.len_1 = len_1;
-	rtp_params.type_2 = type_2;
-	rtp_params.start_2 = start_2;
-	rtp_params.len_2 = len_2;
+	rtp_params.type_1 = (type_1 < 63) ? type_1 : 0;
+	rtp_params.start_1 = (start_1 < 64) ? start_1 : 0;
+	rtp_params.len_1 = (len_1 < 63) ? len_1 : 0;
+	rtp_params.type_2 = (type_2 < 63) ? type_2 : 0;
+	rtp_params.start_2 = (start_2 < 64) ? start_2 : 0;
+	rtp_params.len_2 = (len_2 < 32) ? len_2 : 0;
 }
 
 void set_rds_af(uint8_t *af_array) {

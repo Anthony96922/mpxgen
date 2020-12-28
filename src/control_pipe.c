@@ -157,12 +157,6 @@ int poll_control_pipe() {
 		if (res[0] == 'R' && res[1] == 'T' && res[2] == 'P') {
 			unsigned int type_1, start_1, len_1, type_2, start_2, len_2;
 			if (sscanf(arg, "%u,%u,%u,%u,%u,%u", &type_1, &start_1, &len_1, &type_2, &start_2, &len_2) == 6) {
-				if (type_1 > 63) type_1 = 0;
-				if (type_2 > 63) type_2 = 0;
-				if (start_1 > 64) start_1 = 0;
-				if (start_2 > 64) start_2 = 0;
-				if (len_1 > 64) len_1 = 0;
-				if (len_2 > 32) len_2 = 0;
 #ifdef CONTROL_PIPE_MESSAGES
 				fprintf(stderr, "RT+ tag 1: type: %u, start: %u, length: %u\n", type_1, start_1, len_1);
 				fprintf(stderr, "RT+ tag 2: type: %u, start: %u, length: %u\n", type_2, start_2, len_2);
