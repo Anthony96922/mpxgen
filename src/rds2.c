@@ -45,21 +45,24 @@ typedef struct {
 rds_signal_context rds2_contexts[3];
 
 /*
- * Function Header
- *
- * (from http://www.rds.org.uk/2010/pdf/RDS%202%20-%20what%20it%20is_170127_13.pdf)
- * I have not idea what this is for
+ * Stuff for group type C
  */
-static uint8_t fh = 34 << 2 | 0;
 
 /*
  * Station logo group (not fully implemented)
  * See https://www.youtube.com/watch?v=ticcJpCPoa8
  */
 static void get_logo_group(uint16_t *blocks) {
-	static int logo_pos;
+	/*
+	 * Function Header
+	 *
+	 * (from http://www.rds.org.uk/2010/pdf/RDS%202%20-%20what%20it%20is_170127_13.pdf)
+	 * Could this be for indicating the tunneled group?
+	 */
+	static uint8_t fh = 8 << 4 | 1 << 3 /* group 8B? */ | 0;
+	static uint16_t logo_pos;
 
-	blocks[0] = fh << 8 | station_logo[logo_pos];
+	blocks[0] |= fh << 8 | station_logo[logo_pos];
 	blocks[1] = station_logo[logo_pos+1] << 8 | station_logo[logo_pos+2];
 	blocks[2] = station_logo[logo_pos+3] << 8 | station_logo[logo_pos+4];
 	blocks[3] = station_logo[logo_pos+5] << 8 | station_logo[logo_pos+6];
