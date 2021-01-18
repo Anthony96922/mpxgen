@@ -35,6 +35,18 @@ void stop() {
 	stop_mpx = 1;
 }
 
+pthread_t control_pipe_thread;
+
+static void *control_pipe_worker(void *arg) {
+	while (!stop_mpx) {
+		poll_control_pipe();
+		usleep(10000);
+	}
+
+	close_control_pipe();
+	pthread_exit(NULL);
+}
+
 int main(int argc, char **argv) {
 	int opt;
 	char *audio_file = NULL;
@@ -54,6 +66,8 @@ int main(int argc, char **argv) {
 	float ppm = 0;
 	uint8_t mpx = 50;
 	uint8_t wait = 1;
+
+	pthread_attr_t attr;
 
 	const char	*short_opt = "a:o:m:x:W:R:i:s:r:p:T:A:P:S:C:h";
 	struct option	long_opt[] =
@@ -206,6 +220,9 @@ int main(int argc, char **argv) {
 
 	af[0] = af_size;
 
+	pthread_attr_init(&attr);
+
+
 	// Gracefully stop the encoder on SIGINT or SIGTERM
 	signal(SIGINT, stop);
 	signal(SIGTERM, stop);
@@ -263,15 +280,20 @@ int main(int argc, char **argv) {
 	if(control_pipe) {
 		if(open_control_pipe(control_pipe) == 0) {
 			fprintf(stderr, "Reading control commands on %s.\n", control_pipe);
+			// Create control pipe polling worker
+			if (pthread_create(&control_pipe_thread, &attr, control_pipe_worker, NULL) < 0) {
+				fprintf(stderr, "Could not create control pipe thread.\n");
+				goto exit;
+			}
 		} else {
 			fprintf(stderr, "Failed to open control pipe: %s.\n", control_pipe);
 			control_pipe = NULL;
 		}
 	}
 
-	for (;;) {
-		if(control_pipe) poll_control_pipe();
+	pthread_attr_destroy(&attr);
 
+	for (;;) {
 		// TODO: run this and ao_play as separate threads
 		if ((frames = fm_mpx_get_samples(mpx_data)) < 0) break;
 
@@ -302,7 +324,6 @@ int main(int argc, char **argv) {
 	}
 
 exit:
-	close_control_pipe();
 	fm_mpx_close();
 
 	ao_close(device);
