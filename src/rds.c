@@ -404,16 +404,36 @@ static uint16_t callsign2pi(char *callsign) {
 
 int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, uint8_t *af_array, char *ptyn, char *call_sign) {
 
-	// RBDS PTY list
-	char ptys[32][16] = {
-		"None", "News", "Information", "Sports",
-		"Talk", "Rock", "Classic rock", "Adult hits",
-		"Soft rock" , "Top 40", "Country", "Oldies",
-		"Soft music", "Nostalgia", "Jazz", "Classical",
-		"R&B", "Soft R&B", "Language", "Religious music",
-		"Religious talk", "Personality", "Public", "College",
-		"Spanish talk", "Spanish music", "Hip-Hop", "Unassigned",
-		"Unassigned", "Weather", "Emergency test", "Emergency"
+	// The RDS pty region. This determines which PTY list to use
+	enum rds_pty_regions {
+		REGION_FCC, // NRSC RBDS
+		REGION_ROW  // Rest of the world
+	} pty_region = REGION_FCC;
+
+	// RDS PTY list
+	char ptys[2][32][30] = {
+		// RBDS
+		{
+			"None", "News", "Information", "Sports",
+			"Talk", "Rock", "Classic rock", "Adult hits",
+			"Soft rock" , "Top 40", "Country", "Oldies",
+			"Soft music", "Nostalgia", "Jazz", "Classical",
+			"R&B", "Soft R&B", "Language", "Religious music",
+			"Religious talk", "Personality", "Public", "College",
+			"Spanish talk", "Spanish music", "Hip-Hop", "Unassigned",
+			"Unassigned", "Weather", "Emergency test", "Emergency"
+		},
+		{
+			"None", "News", "Current affairs", "Information",
+			"Sport", "Education", "Drama", "Culture", "Science",
+			"Varied", "Pop music", "Rock music", "Easy listening",
+			"Light classical", "Serious classical", "Other music",
+			"Weather", "Finance", "Children's programmes",
+			"Social affairs", "Religion", "Phone-in", "Travel",
+			"Leisure", "Jazz music", "Country music",
+			"National music", "Oldies music", "Folk music",
+			"Documentary", "Alarm test", "Alarm"
+		}
 	};
 
 
@@ -434,7 +454,7 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, u
 
 	fprintf(stderr, "RDS Options:\n");
 	fprintf(stderr, "PI: %04X, PS: \"%s\", PTY: %d (%s), TP: %d\n",
-		pi, ps, pty, ptys[pty], tp);
+		pi, ps, pty, ptys[pty_region][pty], tp);
 	fprintf(stderr, "RT: \"%s\"\n", rt);
 
 	// AF
