@@ -20,16 +20,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fm_mpx.h"
-#include "resampler.h"
 #include "input.h"
 
-float *audio_input;
-
 int input_type;
-
-// SRC
-SRC_STATE *input_resampler;
-SRC_DATA input_resampler_data;
 
 int open_input(char *input_name, int wait) {
 	unsigned int sample_rate;
@@ -63,38 +56,22 @@ int open_input(char *input_name, int wait) {
 
 	fprintf(stderr, "Input: %d Hz, upsampling factor: %.2f\n", sample_rate, upsample_factor);
 
-	audio_input = malloc(IN_NUM_FRAMES * 2 * sizeof(float));
-
-	input_resampler_data.src_ratio = upsample_factor;
-	// output_frames: max number of frames to generate
-	// Because we're upsampling the input, the number of output frames
-	// needs to be at least the number of input_frames times the ratio.
-	input_resampler_data.input_frames = IN_NUM_FRAMES;
-	input_resampler_data.output_frames = OUT_NUM_FRAMES;
-	input_resampler_data.data_in = audio_input;
-
-	if ((input_resampler = resampler_init(2)) == NULL) {
-		fprintf(stderr, "Could not create input resampler.\n");
-		return -1;
-	}
-
 	return 1;
 }
 
-int read_input(float *audio) {
+int get_input(float *audio) {
 	switch (input_type) {
 	case 1:
-		if (read_file_input(audio_input) < 0) return -1;
+		if (read_file_input(audio) < 0) return -1;
 		break;
 #ifdef ALSA
 	case 2:
-		if (read_alsa_input(audio_input) < 0) return -1;
+		if (read_alsa_input(audio) < 0) return -1;
 		break;
 #endif
 	}
 
-	input_resampler_data.data_out = audio;
-	return resample(input_resampler, input_resampler_data);
+	return 0;
 
 	// TODO input buffering goes here (see mpx_gen.c)
 }
@@ -110,7 +87,4 @@ void close_input() {
 		break;
 #endif
 	}
-
-	resampler_exit(input_resampler);
-	free(audio_input);
 }

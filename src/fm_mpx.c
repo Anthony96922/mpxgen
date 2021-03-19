@@ -27,8 +27,6 @@
 #endif
 #include "fm_mpx.h"
 #include "mpx_carriers.h"
-#include "resampler.h"
-#include "input.h"
 
 #define FIR_HALF_SIZE	30
 #define FIR_SIZE	(2*FIR_HALF_SIZE-1)
@@ -37,14 +35,6 @@
 float low_pass_fir[FIR_HALF_SIZE];
 float fir_buffer[2][FIR_SIZE];
 
-float *input_buffer;
-float *mpx_buffer;
-
-// SRC
-SRC_STATE *resampler;
-SRC_DATA resampler_data;
-
-int input;
 
 float mpx_vol;
 
@@ -77,40 +67,10 @@ void set_carrier_volume(unsigned int carrier, int new_volume) {
 	}
 }
 
-void set_output_ppm(float new_ppm) {
-	if (new_ppm < -100 && new_ppm > 100) new_ppm = 0;
-	resampler_data.src_ratio = (192000 / (double)MPX_SAMPLE_RATE) + (new_ppm / 1e6);
-}
-
-int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
-	int cutoff_freq;
-
-	mpx_buffer = malloc(DATA_SIZE * sizeof(float));
-
-	set_output_ppm(out_ppm);
-
-	resampler_data.output_frames = DATA_SIZE;
-	resampler_data.data_in = mpx_buffer;
-
-	if ((resampler = resampler_init(1)) == NULL) {
-		fprintf(stderr, "Could not create MPX resampler.\n");
-		goto error;
-	}
+void fm_mpx_open() {
+	int cutoff_freq = 24000;
 
 	create_mpx_carriers();
-
-	if (filename != NULL) {
-		if (!open_input(filename, wait_for_audio)) goto error;
-	} else {
-		// Pilot tone is off by default when in standalone mode
-		volumes[0] = 0;
-		return 0;
-	}
-
-	input = 1;
-	cutoff_freq = 24000;
-
-	input_buffer = malloc(OUT_NUM_FRAMES * sizeof(float));
 
 	// Here we divide this coefficient by two because it will be counted twice
 	// when applying the filter
@@ -124,120 +84,109 @@ int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm) {
 	}
 
 	fprintf(stderr, "Created low-pass FIR filter for audio channels, with cutoff at %d Hz\n", cutoff_freq);
-
-	return 0;
-
-error:
-	fm_mpx_close();
-	return -1;
 }
 
-int fm_mpx_get_samples(float *out) {
+void fm_mpx_get_samples(float *out, float *in_audio) {
 	int j = 0;
-	int audio_len;
 	static int fir_index;
 
 	int ifbi, dfbi;
 	float out_left, out_right;
 	float out_mono, out_stereo;
 
-	if (!input) {
-		audio_len = IN_NUM_FRAMES;
+	for (int i = 0; i < IN_NUM_FRAMES; i++) {
+		// First store the current sample(s) into the FIR filter's ring buffer
+		fir_buffer[0][fir_index] = in_audio[j+0];
+		fir_buffer[1][fir_index] = in_audio[j+1];
+		fir_index++;
+		if(fir_index == FIR_SIZE) fir_index = 0;
 
-		for (int i = 0; i < audio_len; i++) {
-			// Pilot tone for calibration
-			mpx_buffer[i] = get_carrier(CARRIER_19K) * volumes[0];
+		// L/R signals
+		out_left  = 0;
+		out_right = 0;
 
-			mpx_buffer[i] += get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
+		// Now apply the FIR low-pass filter
+
+		/* As the FIR filter is symmetric, we do not multiply all
+		   the coefficients independently, but two-by-two, thus reducing
+		   the total number of multiplications by a factor of two
+		 */
+		ifbi = fir_index;  // ifbi = increasing FIR Buffer Index
+		dfbi = fir_index;  // dfbi = decreasing FIR Buffer Index
+		for(int fi=0; fi<FIR_HALF_SIZE; fi++) {  // fi = Filter Index
+			dfbi--;
+			if(dfbi < 0) dfbi = FIR_SIZE-1;
+			out_left  += low_pass_fir[fi] * (fir_buffer[0][ifbi] + fir_buffer[0][dfbi]);
+			out_right += low_pass_fir[fi] * (fir_buffer[1][ifbi] + fir_buffer[1][dfbi]);
+			ifbi++;
+			if(ifbi == FIR_SIZE) ifbi = 0;
+		}
+		// End of FIR filter
+
+		// 6dB input gain
+		out_left  *= 2;
+		out_right *= 2;
+
+		// Create sum and difference signals
+		out_mono   = out_left + out_right;
+		out_stereo = out_left - out_right;
+
+		// audio signals need to be limited to 45% to remain within modulation limits
+		out[j] = out_mono * 0.45;
+
+		if (polar_stereo) {
+			// Polar stereo encoding system used in Eastern Europe
+			out[j] +=
+				get_carrier(CARRIER_31K) * ((out_stereo * 0.45) + volumes[0]);
+		} else {
+			out[j] +=
+				get_carrier(CARRIER_19K) * volumes[0] +
+				get_carrier(CARRIER_38K) * out_stereo * 0.45;
+		}
+
+		out[j] += get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
 
 #ifdef RDS2
-			mpx_buffer[i] += get_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
-			mpx_buffer[i] += get_carrier(CARRIER_71K) * get_rds2_sample(2) * volumes[3];
-			mpx_buffer[i] += get_carrier(CARRIER_76K) * get_rds2_sample(3) * volumes[4];
+		out[j] += get_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
+		out[j] += get_carrier(CARRIER_71K) * get_rds2_sample(2) * volumes[3];
+		out[j] += get_carrier(CARRIER_76K) * get_rds2_sample(3) * volumes[4];
 #endif
 
-			update_carrier_phase();
+		update_carrier_phase();
 
-			mpx_buffer[i] *= mpx_vol;
-		}
-	} else {
-		if ((audio_len = read_input(input_buffer)) < 0) return -1;
+		out[j] *= mpx_vol;
 
-		for (int i = 0; i < audio_len; i++) {
-			// First store the current sample(s) into the FIR filter's ring buffer
-			fir_buffer[0][fir_index] = input_buffer[j+0];
-			fir_buffer[1][fir_index] = input_buffer[j+1];
-			j += 2;
-			fir_index++;
-			if(fir_index == FIR_SIZE) fir_index = 0;
+		out[j+1] = out[j];
 
-			// L/R signals
-			out_left  = 0;
-			out_right = 0;
-
-			// Now apply the FIR low-pass filter
-
-			/* As the FIR filter is symmetric, we do not multiply all
-			   the coefficients independently, but two-by-two, thus reducing
-			   the total number of multiplications by a factor of two
-			 */
-			ifbi = fir_index;  // ifbi = increasing FIR Buffer Index
-			dfbi = fir_index;  // dfbi = decreasing FIR Buffer Index
-			for(int fi=0; fi<FIR_HALF_SIZE; fi++) {  // fi = Filter Index
-				dfbi--;
-				if(dfbi < 0) dfbi = FIR_SIZE-1;
-				out_left  += low_pass_fir[fi] * (fir_buffer[0][ifbi] + fir_buffer[0][dfbi]);
-				out_right += low_pass_fir[fi] * (fir_buffer[1][ifbi] + fir_buffer[1][dfbi]);
-				ifbi++;
-				if(ifbi == FIR_SIZE) ifbi = 0;
-			}
-			// End of FIR filter
-
-			// 6dB input gain
-			out_left  *= 2;
-			out_right *= 2;
-
-			// Create sum and difference signals
-			out_mono   = out_left + out_right;
-			out_stereo = out_left - out_right;
-
-			// audio signals need to be limited to 45% to remain within modulation limits
-			mpx_buffer[i] = out_mono * 0.45;
-
-			if (polar_stereo) {
-				// Polar stereo encoding system used in Eastern Europe
-				mpx_buffer[i] +=
-					get_carrier(CARRIER_31K) * ((out_stereo * 0.45) + volumes[0]);
-			} else {
-				mpx_buffer[i] +=
-					get_carrier(CARRIER_19K) * volumes[0] +
-					get_carrier(CARRIER_38K) * out_stereo * 0.45;
-			}
-
-			mpx_buffer[i] += get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
-
-#ifdef RDS2
-			mpx_buffer[i] += get_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
-			mpx_buffer[i] += get_carrier(CARRIER_71K) * get_rds2_sample(2) * volumes[3];
-			mpx_buffer[i] += get_carrier(CARRIER_76K) * get_rds2_sample(3) * volumes[4];
-#endif
-
-			update_carrier_phase();
-
-			mpx_buffer[i] *= mpx_vol;
-		}
+		j += 2;
 	}
+}
 
-	resampler_data.input_frames = audio_len;
-	resampler_data.data_out = out;
-	if ((audio_len = resample(resampler, resampler_data)) < 0) return -1;
+void fm_rds_get_samples(float *out) {
+	int j = 0;
 
-	return audio_len;
+	for (int i = 0; i < IN_NUM_FRAMES; i++) {
+		// Pilot tone for calibration
+		out[j] = get_carrier(CARRIER_19K) * volumes[0];
+
+		out[j] += get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
+
+#ifdef RDS2
+		out[j] += get_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
+		out[j] += get_carrier(CARRIER_71K) * get_rds2_sample(2) * volumes[3];
+		out[j] += get_carrier(CARRIER_76K) * get_rds2_sample(3) * volumes[4];
+#endif
+
+		update_carrier_phase();
+
+		out[j] *= mpx_vol;
+
+		out[j+1] = out[j];
+
+		j += 2;
+	}
 }
 
 void fm_mpx_close() {
-	close_input();
 	clear_mpx_carriers();
-	free(mpx_buffer);
-	resampler_exit(resampler);
 }

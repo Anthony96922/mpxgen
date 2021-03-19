@@ -24,8 +24,9 @@
 // The sample rate at which the MPX generation runs at
 #define MPX_SAMPLE_RATE 190000
 
-extern int fm_mpx_open(char *filename, int wait_for_audio, float out_ppm);
-extern int fm_mpx_get_samples(float *mpx_buffer);
+extern void fm_mpx_open();
+extern void fm_mpx_get_samples(float *out, float *in_audio);
+extern void fm_rds_get_samples(float *out);
 extern void fm_mpx_close();
 extern void set_output_volume(unsigned int vol);
 extern void set_polar_stereo(unsigned int st);

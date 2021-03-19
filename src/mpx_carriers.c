@@ -21,22 +21,25 @@
 #include "fm_mpx.h"
 
 // Create wave constants for a given frequency
-static int create_carrier(float freq, float *carrier) {
-	float sample;
+static int create_carrier(float freq, float *carrier, float *cos_carrier) {
+	float sample, cos_sample;
 	int sine_zero_crossings = 0;
 	int i;
 
 	// First value of a sine wave is always 0
 	*carrier++ = 0;
+	*cos_carrier++ = 1;
 
 	for (i = 1; i < MPX_SAMPLE_RATE; i++) {
 		sample = sin(2 * M_PI * freq * i / MPX_SAMPLE_RATE);
+		cos_sample = cos(2 * M_PI * freq * i / MPX_SAMPLE_RATE);
 		if (sample > -0.1e-6 && sample < 0.1e-6) {
 			if (++sine_zero_crossings == 2) break;
 			*carrier++ = 0;
 		} else {
 			*carrier++ = sample;
 		}
+		*cos_carrier++ = cos_sample;
 	}
 
 	return i;
@@ -49,23 +52,30 @@ float carrier_frequencies[NUM_CARRIERS] = {
 	31250 // Polar stereo
 };
 float *carrier[NUM_CARRIERS];
+float *cos_carrier[NUM_CARRIERS];
 int phase[NUM_CARRIERS][2]; // [carrier][current phase/max phase]
 
 void create_mpx_carriers() {
 	for (int i = 0; i < NUM_CARRIERS; i++) {
 		carrier[i] = malloc(MPX_SAMPLE_RATE * sizeof(float));
-		phase[i][1] = create_carrier(carrier_frequencies[i], carrier[i]);
+		cos_carrier[i] = malloc(MPX_SAMPLE_RATE * sizeof(float));
+		phase[i][1] = create_carrier(carrier_frequencies[i], carrier[i], cos_carrier[i]);
 	}
 }
 
 void clear_mpx_carriers() {
 	for (int i = 0; i < NUM_CARRIERS; i++) {
 		free(carrier[i]);
+		free(cos_carrier[i]);
 	}
 }
 
 float get_carrier(int carrier_num) {
 	return carrier[carrier_num][phase[carrier_num][0]];
+}
+
+float get_cos_carrier(int carrier_num) {
+	return cos_carrier[carrier_num][phase[carrier_num][0]];
 }
 
 void update_carrier_phase() {

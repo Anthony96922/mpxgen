@@ -28,6 +28,7 @@
 #include "fm_mpx.h"
 #include "control_pipe.h"
 #include "audio_conversion.h"
+#include "resampler.h"
 
 int stop_mpx;
 
@@ -47,9 +48,18 @@ static void *control_pipe_worker(void *arg) {
 	pthread_exit(NULL);
 }
 
+
+static inline void get_fixed_buffer(float *out, float *in, float *temp_buffer, size_t in_size, size_t wanted_size) {
+
+}
+
+void set_output_ppm(float new_ppm) {
+	// no-op
+}
+
 int main(int argc, char **argv) {
 	int opt;
-	char *audio_file = NULL;
+	char audio_file[51] = {0};
 	char *output_file = NULL;
 	char *control_pipe = NULL;
 	uint8_t rds = 1;
@@ -66,6 +76,26 @@ int main(int argc, char **argv) {
 	float ppm = 0;
 	uint8_t mpx = 50;
 	uint8_t wait = 1;
+
+	// SRC
+	SRC_STATE *src_state[2] = {0};
+	SRC_DATA src_data[2];
+
+	// buffers
+	float *mpx_data;
+        char *dev_out;
+        char *stereo_out;
+
+	float *temp_buffer_in_0;
+	float *temp_buffer_in_1;
+	float *temp_buffer_in_2;
+	float *temp_buffer_in_3;
+	float *temp_buffer_in_4;
+	float *temp_buffer_out_0;
+	float *temp_buffer_out_1;
+	float *temp_buffer_out_2;
+	float *temp_buffer_out_3;
+	float *temp_buffer_out_4;
 
 	pthread_attr_t attr;
 
@@ -99,7 +129,7 @@ int main(int argc, char **argv) {
 		switch(opt)
 		{
 			case 'a': //audio
-				audio_file = optarg;
+				strncpy(audio_file, optarg, 50);
 				break;
 
 			case 'o': //output-file
@@ -222,21 +252,34 @@ int main(int argc, char **argv) {
 
 	pthread_attr_init(&attr);
 
+	// temp buffers
+	temp_buffer_in_0 = malloc(65536 * sizeof(float));
+	temp_buffer_in_1 = malloc(65536 * sizeof(float));
+	temp_buffer_in_2 = malloc(65536 * sizeof(float));
+	temp_buffer_in_3 = malloc(65536 * sizeof(float));
+	temp_buffer_in_4 = malloc(65536 * sizeof(float));
+	temp_buffer_out_0 = malloc(65536 * sizeof(float));
+	temp_buffer_out_1 = malloc(65536 * sizeof(float));
+	temp_buffer_out_2 = malloc(65536 * sizeof(float));
+	temp_buffer_out_3 = malloc(65536 * sizeof(float));
+	temp_buffer_out_4 = malloc(65536 * sizeof(float));
 
 	// Gracefully stop the encoder on SIGINT or SIGTERM
 	signal(SIGINT, stop);
 	signal(SIGTERM, stop);
 
 	// Data structures for baseband data
-	float mpx_data[DATA_SIZE];
-	char dev_out[DATA_SIZE];
-	char stereo_out[DATA_SIZE];
+	mpx_data = malloc(DATA_SIZE * sizeof(float));
+	dev_out = malloc(DATA_SIZE);
+	stereo_out = malloc(DATA_SIZE);
 
-	int frames;
+	size_t frames;
 
 	// AO
 	ao_device *device;
 	ao_sample_format format;
+	memset(&format, 0, sizeof(format));
+	format.channels = 2;
 	format.bits = 16;
 	format.rate = 192000;
 	format.byte_format = AO_FMT_LITTLE;
@@ -244,7 +287,6 @@ int main(int argc, char **argv) {
 	ao_initialize();
 
 	if (output_file != NULL) {
-		format.channels = 1;
 		int ao_driver = ao_driver_id("wav");
 		if (strcmp(output_file, "-") == 0) {
 			ao_driver = ao_driver_id("raw");
@@ -260,7 +302,6 @@ int main(int argc, char **argv) {
 			return -1;
 		}
 	} else {
-		format.channels = 2;
 		if ((device = ao_open_live(ao_default_driver_id(), &format, NULL)) == NULL) {
 			fprintf(stderr, "Error: cannot open sound device.\n");
 			ao_shutdown();
@@ -268,8 +309,33 @@ int main(int argc, char **argv) {
 		}
 	}
 
+
+	// SRC in (input -> MPX)
+	src_data[0].output_frames = 32768;
+	src_data[0].src_ratio = ((double)MPX_SAMPLE_RATE / 192000);
+	src_data[0].data_in = temp_buffer_in_0;
+	src_data[0].data_out = temp_buffer_in_1;
+	src_data[0].end_of_input = 0;
+
+	if ((src_state[0] = resampler_init(2)) == NULL) {
+		fprintf(stderr, "Could not create input resampler.\n");
+		goto exit;
+	}
+
+	// SRC out (MPX -> output)
+	src_data[1].output_frames = 32768;
+	src_data[1].src_ratio = (192000 / (double)MPX_SAMPLE_RATE) + (ppm / 1e6);
+	src_data[1].data_in = temp_buffer_out_0;
+	src_data[1].data_out = temp_buffer_out_1;
+	src_data[1].end_of_input = 0;
+
+	if ((src_state[1] = resampler_init(2)) == NULL) {
+		fprintf(stderr, "Could not create output resampler.\n");
+		goto exit;
+	}
+
 	// Initialize the baseband generator
-	if(fm_mpx_open(audio_file, wait, ppm) < 0) goto exit;
+	fm_mpx_open();
 	set_output_volume(mpx);
 
 	// Initialize the RDS modulator
@@ -294,25 +360,22 @@ int main(int argc, char **argv) {
 	pthread_attr_destroy(&attr);
 
 	for (;;) {
-		// TODO: run this and ao_play as separate threads
-		if ((frames = fm_mpx_get_samples(mpx_data)) < 0) break;
+		// TODO: run this, SRC and ao_play as separate threads
+		if (audio_file[0]) {
+			fprintf(stderr, "Input does not work for now.\n");
+			break;
+			//fm_mpx_get_samples(temp_buffer_out_0);
+		} else {
+			fm_rds_get_samples(temp_buffer_out_0);
+			src_data[1].input_frames = IN_NUM_FRAMES;
 
-		/* TODO
-		   Here, we need to add a buffer so ao_play gets a
-		   constant amount of frames to play. Because the number
-		   of frames SRC generates is always changing, this will
-		   occasionally cause brief dropouts which may be audible.
-		 */
-
-		float2char(mpx_data, dev_out, frames);
-
-		if (format.channels == 2) {
-			stereoize(dev_out, stereo_out, frames);
-			memcpy(dev_out, stereo_out, frames * 2 * sizeof(short));
+			if (resample(src_state[1], src_data[1], &frames) < 0) break;
 		}
 
-		// num_bytes = audio frames * channels * bytes per sample
-		if (!ao_play(device, dev_out, frames * format.channels * sizeof(short))) {
+		float2char(temp_buffer_out_1, dev_out, frames);
+
+		// num_bytes = audio frames * bytes per sample
+		if (!ao_play(device, dev_out, frames * sizeof(short))) {
 			fprintf(stderr, "Error: could not play audio.\n");
 			break;
 		}
@@ -328,6 +391,24 @@ exit:
 
 	ao_close(device);
 	ao_shutdown();
+
+	resampler_exit(src_state[0]);
+	resampler_exit(src_state[1]);
+
+	free(mpx_data);
+	free(dev_out);
+	free(stereo_out);
+
+	free(temp_buffer_in_0);
+	free(temp_buffer_in_1);
+	free(temp_buffer_in_2);
+	free(temp_buffer_in_3);
+	free(temp_buffer_in_4);
+	free(temp_buffer_out_0);
+	free(temp_buffer_out_1);
+	free(temp_buffer_out_2);
+	free(temp_buffer_out_3);
+	free(temp_buffer_out_4);
 
 	return 0;
 }

@@ -27,5 +27,6 @@
 
 extern void create_mpx_carriers();
 extern float get_carrier(int num);
+extern float get_cos_carrier(int num);
 extern void update_carrier_phase();
 extern void clear_mpx_carriers();

@@ -18,6 +18,7 @@
 
 #include <samplerate.h>
 
+//extern int resampler_init(SRC_STATE *src_state, int channels);
 extern SRC_STATE *resampler_init(int channels);
-extern int resample(SRC_STATE *src_state, SRC_DATA src_data);
+extern int resample(SRC_STATE *src_state, SRC_DATA src_data, size_t *frames_generated);
 extern void resampler_exit(SRC_STATE *src_state);
