@@ -16,9 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <math.h>
 
 #include "rds.h"
@@ -32,9 +30,8 @@
 #define FIR_SIZE	(2*FIR_HALF_SIZE-1)
 
 // coefficients of the low-pass FIR filter
-float low_pass_fir[FIR_HALF_SIZE];
-float fir_buffer[2][FIR_SIZE];
-
+float *low_pass_fir;
+float *fir_buffer[2];
 
 float mpx_vol;
 
@@ -68,22 +65,22 @@ void set_carrier_volume(unsigned int carrier, int new_volume) {
 }
 
 void fm_mpx_open() {
-	int cutoff_freq = 24000;
-
 	create_mpx_carriers();
+
+	low_pass_fir = malloc(FIR_HALF_SIZE * sizeof(float));
+	fir_buffer[0] = malloc(FIR_SIZE * sizeof(float));
+	fir_buffer[1] = malloc(FIR_SIZE * sizeof(float));
 
 	// Here we divide this coefficient by two because it will be counted twice
 	// when applying the filter
-	low_pass_fir[FIR_HALF_SIZE-1] = 2 * cutoff_freq / MPX_SAMPLE_RATE / 2;
+	low_pass_fir[FIR_HALF_SIZE-1] = 2 * 24000 / MPX_SAMPLE_RATE / 2;
 
 	// Only store half of the filter since it is symmetric
 	for(int i=1; i<FIR_HALF_SIZE; i++) {
 		low_pass_fir[FIR_HALF_SIZE-1-i] =
-			sin(2 * M_PI * cutoff_freq * i / MPX_SAMPLE_RATE) / (M_PI * i) // sinc
+			sin(2 * M_PI * 24000 * i / MPX_SAMPLE_RATE) / (M_PI * i) // sinc
 			* (.54 - .46 * cos(2 * M_PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
 	}
-
-	fprintf(stderr, "Created low-pass FIR filter for audio channels, with cutoff at %d Hz\n", cutoff_freq);
 }
 
 void fm_mpx_get_samples(float *out, float *in_audio) {
@@ -94,7 +91,7 @@ void fm_mpx_get_samples(float *out, float *in_audio) {
 	float out_left, out_right;
 	float out_mono, out_stereo;
 
-	for (int i = 0; i < IN_NUM_FRAMES; i++) {
+	for (int i = 0; i < NUM_AUDIO_FRAMES_OUT; i++) {
 		// First store the current sample(s) into the FIR filter's ring buffer
 		fir_buffer[0][fir_index] = in_audio[j+0];
 		fir_buffer[1][fir_index] = in_audio[j+1];
@@ -165,11 +162,11 @@ void fm_mpx_get_samples(float *out, float *in_audio) {
 void fm_rds_get_samples(float *out) {
 	int j = 0;
 
-	for (int i = 0; i < IN_NUM_FRAMES; i++) {
+	for (int i = 0; i < NUM_RDS_FRAMES_IN; i++) {
 		// Pilot tone for calibration
-		out[j] = get_carrier(CARRIER_19K) * volumes[0];
+		//out[j] = get_carrier(CARRIER_19K) * volumes[0];
 
-		out[j] += get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
+		out[j] = get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
 
 #ifdef RDS2
 		out[j] += get_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
@@ -189,4 +186,7 @@ void fm_rds_get_samples(float *out) {
 
 void fm_mpx_close() {
 	clear_mpx_carriers();
+	free(low_pass_fir);
+	free(fir_buffer[0]);
+	free(fir_buffer[1]);
 }

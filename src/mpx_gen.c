@@ -29,6 +29,7 @@
 #include "control_pipe.h"
 #include "audio_conversion.h"
 #include "resampler.h"
+#include "input.h"
 
 int stop_mpx;
 
@@ -77,25 +78,20 @@ int main(int argc, char **argv) {
 	uint8_t mpx = 50;
 	uint8_t wait = 1;
 
+	size_t frames;
+
 	// SRC
-	SRC_STATE *src_state[2] = {0};
+	SRC_STATE *src_state[2];
 	SRC_DATA src_data[2];
 
 	// buffers
 	float *mpx_data;
-        char *dev_out;
-        char *stereo_out;
+	char *dev_out;
 
-	float *temp_buffer_in_0;
-	float *temp_buffer_in_1;
-	float *temp_buffer_in_2;
-	float *temp_buffer_in_3;
-	float *temp_buffer_in_4;
-	float *temp_buffer_out_0;
-	float *temp_buffer_out_1;
-	float *temp_buffer_out_2;
-	float *temp_buffer_out_3;
-	float *temp_buffer_out_4;
+	float *audio_in_buffer = NULL;
+	float *resampled_audio_in_buffer = NULL;
+	float *mpx_buffer;
+	float *resampled_mpx_buffer;
 
 	pthread_attr_t attr;
 
@@ -243,7 +239,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	if (audio_file == NULL && !rds) {
+	if (!audio_file[0] && !rds) {
 		fprintf(stderr, "Nothing to do. Exiting.\n");
 		return 1;
 	}
@@ -252,33 +248,22 @@ int main(int argc, char **argv) {
 
 	pthread_attr_init(&attr);
 
-	// temp buffers
-	temp_buffer_in_0 = malloc(65536 * sizeof(float));
-	temp_buffer_in_1 = malloc(65536 * sizeof(float));
-	temp_buffer_in_2 = malloc(65536 * sizeof(float));
-	temp_buffer_in_3 = malloc(65536 * sizeof(float));
-	temp_buffer_in_4 = malloc(65536 * sizeof(float));
-	temp_buffer_out_0 = malloc(65536 * sizeof(float));
-	temp_buffer_out_1 = malloc(65536 * sizeof(float));
-	temp_buffer_out_2 = malloc(65536 * sizeof(float));
-	temp_buffer_out_3 = malloc(65536 * sizeof(float));
-	temp_buffer_out_4 = malloc(65536 * sizeof(float));
+	// buffers
+	mpx_buffer = malloc(NUM_MPX_FRAMES_IN * sizeof(float));
+	resampled_mpx_buffer = malloc(NUM_MPX_FRAMES_OUT * sizeof(float));
 
 	// Gracefully stop the encoder on SIGINT or SIGTERM
 	signal(SIGINT, stop);
 	signal(SIGTERM, stop);
 
 	// Data structures for baseband data
-	mpx_data = malloc(DATA_SIZE * sizeof(float));
-	dev_out = malloc(DATA_SIZE);
-	stereo_out = malloc(DATA_SIZE);
-
-	size_t frames;
+	mpx_data = malloc(NUM_MPX_FRAMES_OUT * sizeof(float));
+	dev_out = malloc(NUM_MPX_FRAMES_OUT * sizeof(short));
 
 	// AO
 	ao_device *device;
 	ao_sample_format format;
-	memset(&format, 0, sizeof(format));
+	memset(&format, 0, sizeof(ao_sample_format));
 	format.channels = 2;
 	format.bits = 16;
 	format.rate = 192000;
@@ -309,27 +294,38 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	if (audio_file[0]) {
+		audio_in_buffer = malloc(NUM_AUDIO_FRAMES_IN * sizeof(float));
+		resampled_audio_in_buffer = malloc(NUM_AUDIO_FRAMES_OUT * sizeof(float));
 
-	// SRC in (input -> MPX)
-	src_data[0].output_frames = 32768;
-	src_data[0].src_ratio = ((double)MPX_SAMPLE_RATE / 192000);
-	src_data[0].data_in = temp_buffer_in_0;
-	src_data[0].data_out = temp_buffer_in_1;
-	src_data[0].end_of_input = 0;
+		unsigned int sample_rate = 0;
+		if (open_input(audio_file, wait, &sample_rate) < 0) goto exit;
 
-	if ((src_state[0] = resampler_init(2)) == NULL) {
-		fprintf(stderr, "Could not create input resampler.\n");
-		goto exit;
+		float audio_upsample_ratio = (sample_rate / (double)192000);
+
+		// SRC in (input -> MPX)
+		src_data[0].output_frames = NUM_AUDIO_FRAMES_OUT;
+		src_data[0].src_ratio = audio_upsample_ratio;
+		src_data[0].data_in = audio_in_buffer;
+		src_data[0].data_out = resampled_audio_in_buffer;
+		src_data[0].end_of_input = 0;
+
+		if (resampler_init(&src_state[0], 2) < 0) {
+			fprintf(stderr, "Could not create input resampler.\n");
+			goto exit;
+		}
+	} else {
+		src_data[1].input_frames = NUM_RDS_FRAMES_IN;
 	}
 
 	// SRC out (MPX -> output)
-	src_data[1].output_frames = 32768;
+	src_data[1].output_frames = NUM_MPX_FRAMES_OUT;
 	src_data[1].src_ratio = (192000 / (double)MPX_SAMPLE_RATE) + (ppm / 1e6);
-	src_data[1].data_in = temp_buffer_out_0;
-	src_data[1].data_out = temp_buffer_out_1;
+	src_data[1].data_in = mpx_buffer;
+	src_data[1].data_out = resampled_mpx_buffer;
 	src_data[1].end_of_input = 0;
 
-	if ((src_state[1] = resampler_init(2)) == NULL) {
+	if (resampler_init(&src_state[1], 2) < 0) {
 		fprintf(stderr, "Could not create output resampler.\n");
 		goto exit;
 	}
@@ -364,18 +360,17 @@ int main(int argc, char **argv) {
 		if (audio_file[0]) {
 			fprintf(stderr, "Input does not work for now.\n");
 			break;
-			//fm_mpx_get_samples(temp_buffer_out_0);
+			//fm_mpx_get_samples(mpx_buffer);
 		} else {
-			fm_rds_get_samples(temp_buffer_out_0);
-			src_data[1].input_frames = IN_NUM_FRAMES;
+			fm_rds_get_samples(mpx_buffer);
 
 			if (resample(src_state[1], src_data[1], &frames) < 0) break;
 		}
 
-		float2char(temp_buffer_out_1, dev_out, frames);
+		float2char(resampled_mpx_buffer, dev_out, frames * 2);
 
-		// num_bytes = audio frames * bytes per sample
-		if (!ao_play(device, dev_out, frames * sizeof(short))) {
+		// num_bytes = audio frames * channels * bytes per sample
+		if (!ao_play(device, dev_out, frames * 2 * sizeof(short))) {
 			fprintf(stderr, "Error: could not play audio.\n");
 			break;
 		}
@@ -388,27 +383,23 @@ int main(int argc, char **argv) {
 
 exit:
 	fm_mpx_close();
+	if (audio_file[0]) close_input();
 
 	ao_close(device);
 	ao_shutdown();
 
-	resampler_exit(src_state[0]);
+	if (audio_file[0]) resampler_exit(src_state[0]);
 	resampler_exit(src_state[1]);
 
 	free(mpx_data);
 	free(dev_out);
-	free(stereo_out);
 
-	free(temp_buffer_in_0);
-	free(temp_buffer_in_1);
-	free(temp_buffer_in_2);
-	free(temp_buffer_in_3);
-	free(temp_buffer_in_4);
-	free(temp_buffer_out_0);
-	free(temp_buffer_out_1);
-	free(temp_buffer_out_2);
-	free(temp_buffer_out_3);
-	free(temp_buffer_out_4);
+	if (audio_file[0]) {
+		free(audio_in_buffer);
+		free(resampled_audio_in_buffer);
+	}
+	free(mpx_buffer);
+	free(resampled_mpx_buffer);
 
 	return 0;
 }

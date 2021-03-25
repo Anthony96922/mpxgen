@@ -33,7 +33,9 @@ mpx_gen.o: rds.h fm_mpx.h control_pipe.h
 
 rds.o: rds.h fm_mpx.h
 
-input.o: input.h fm_mpx.h resampler.h
+input.o: input.h fm_mpx.h
+
+resampler.o: resampler.h
 
 rds2.o: rds2.h
 

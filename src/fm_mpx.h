@@ -16,10 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define IN_NUM_FRAMES 512
-#define OUT_NUM_FRAMES IN_NUM_FRAMES * 16
+// RDS
+#define NUM_RDS_FRAMES_IN 4096
+#define NUM_RDS_FRAMES_OUT NUM_RDS_FRAMES_IN * 2
 
-#define DATA_SIZE OUT_NUM_FRAMES
+// Audio in
+#define NUM_AUDIO_FRAMES_IN 4096
+#define NUM_AUDIO_FRAMES_OUT NUM_AUDIO_FRAMES_IN * 8
+
+// MPX
+#define NUM_MPX_FRAMES_IN 16384
+#define NUM_MPX_FRAMES_OUT NUM_MPX_FRAMES_IN * 2
 
 // The sample rate at which the MPX generation runs at
 #define MPX_SAMPLE_RATE 190000

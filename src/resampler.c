@@ -19,34 +19,17 @@
 #include <stdio.h>
 #include "resampler.h"
 
-#define CONVERTER_TYPE SRC_SINC_BEST_QUALITY
-
-// why won't this work?
-#if 0
-int resampler_init(SRC_STATE *src_state, int channels) {
+int resampler_init(SRC_STATE **src_state, int channels) {
 	int src_error;
 
-	src_state = src_new(CONVERTER_TYPE, channels, &src_error);
+	*src_state = src_new(CONVERTER_TYPE, channels, &src_error);
 
-	if (src_state == NULL) {
+	if (*src_state == NULL) {
 		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_error));
 		return -1;
 	}
 
 	return 0;
-}
-#endif
-
-SRC_STATE *resampler_init(int channels) {
-	SRC_STATE *src_state;
-	int src_error;
-
-	if ((src_state = src_new(CONVERTER_TYPE, channels, &src_error)) == NULL) {
-		fprintf(stderr, "Error: src_new failed: %s\n", src_strerror(src_error));
-		return NULL;
-	}
-
-	return src_state;
 }
 
 int resample(SRC_STATE *src_state, SRC_DATA src_data, size_t *frames_generated) {

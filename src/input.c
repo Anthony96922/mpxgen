@@ -24,22 +24,19 @@
 
 int input_type;
 
-int open_input(char *input_name, int wait) {
-	unsigned int sample_rate;
-	float upsample_factor;
-
+int open_input(char *input_name, int wait, unsigned int *sample_rate) {
 #ifdef ALSA
 	// TODO: better detect live capture cards
 	if (strstr(input_name, ":") != NULL) {
-		sample_rate = 48000;
-		if (open_alsa_input(input_name, sample_rate, IN_NUM_FRAMES) < 0) {
+		*sample_rate = 48000;
+		if (open_alsa_input(input_name, *sample_rate, NUM_AUDIO_FRAMES_IN) < 0) {
 			fprintf(stderr, "Could not open ALSA source.\n");
 			return 0;
 		}
 		input_type = 2;
 	} else {
 #endif
-		if (open_file_input(input_name, &sample_rate, wait, IN_NUM_FRAMES) < 0) {
+		if (open_file_input(input_name, sample_rate, wait, NUM_AUDIO_FRAMES_IN) < 0) {
 			return 0;
 		}
 		input_type = 1;
@@ -47,14 +44,10 @@ int open_input(char *input_name, int wait) {
 	}
 #endif
 
-	if (sample_rate < 16000) {
+	if (*sample_rate < 16000) {
 		fprintf(stderr, "Input sample rate must be at least 16k.\n");
 		return -1;
         }
-
-	upsample_factor = (double)MPX_SAMPLE_RATE / sample_rate;
-
-	fprintf(stderr, "Input: %d Hz, upsampling factor: %.2f\n", sample_rate, upsample_factor);
 
 	return 1;
 }
@@ -72,8 +65,6 @@ int get_input(float *audio) {
 	}
 
 	return 0;
-
-	// TODO input buffering goes here (see mpx_gen.c)
 }
 
 void close_input() {
