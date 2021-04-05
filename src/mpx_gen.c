@@ -61,8 +61,8 @@ void set_output_ppm(float new_ppm) {
 int main(int argc, char **argv) {
 	int opt;
 	char audio_file[51] = {0};
-	char *output_file = NULL;
-	char *control_pipe = NULL;
+	char output_file[51] = {0};
+	char control_pipe[51] = {0};
 	uint8_t rds = 1;
 	uint8_t af[MAX_AF+1] = {0};
 	uint8_t af_size = 0;
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'o': //output-file
-				output_file = optarg;
+				strncpy(output_file, optarg, 50);
 				break;
 
 			case 'm': //mpx
@@ -195,7 +195,7 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'C': //ctl
-				control_pipe = optarg;
+				strncpy(control_pipe, optarg, 50);
 				break;
 
 			case 'h': //help
@@ -271,9 +271,9 @@ int main(int argc, char **argv) {
 
 	ao_initialize();
 
-	if (output_file != NULL) {
+	if (output_file[0]) {
 		int ao_driver = ao_driver_id("wav");
-		if (strcmp(output_file, "-") == 0) {
+		if (output_file[0] == '-') {
 			ao_driver = ao_driver_id("raw");
 			if (isatty(fileno(stdout))) {
 				fprintf(stderr, "Not writing audio data to a terminal. Exiting.\n");
@@ -339,7 +339,7 @@ int main(int argc, char **argv) {
 	if (init_rds_encoder(pi, ps, rt, pty, tp, af, ptyn, callsign) < 0) goto exit;
 
 	// Initialize the control pipe reader
-	if(control_pipe) {
+	if(control_pipe[0]) {
 		if(open_control_pipe(control_pipe) == 0) {
 			fprintf(stderr, "Reading control commands on %s.\n", control_pipe);
 			// Create control pipe polling worker
@@ -349,7 +349,6 @@ int main(int argc, char **argv) {
 			}
 		} else {
 			fprintf(stderr, "Failed to open control pipe: %s.\n", control_pipe);
-			control_pipe = NULL;
 		}
 	}
 
