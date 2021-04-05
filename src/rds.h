@@ -37,13 +37,18 @@
 
 #define MAX_AF 25
 
+typedef struct {
+	uint8_t num_afs;
+	uint8_t af[MAX_AF];
+} rds_af_t;
+
 #define DI_STEREO	1 // 1 - Stereo
 #define DI_AH		2 // 2 - Artificial Head
 #define DI_COMPRESSED	4 // 4 - Compressed
 #define DI_DPTY		8 // 8 - Dynamic PTY
 
 extern int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty,
-			    uint8_t tp, uint8_t *af_array, char *ptyn,
+			    uint8_t tp, rds_af_t init_afs, char *ptyn,
 			    char *call_sign);
 
 extern void add_checkwords(uint16_t *blocks, uint8_t *bits);
@@ -58,7 +63,7 @@ extern void set_rds_rtp_tags(uint8_t type_1, uint8_t start_1, uint8_t len_1,
 extern void set_rds_ta(uint8_t ta);
 extern void set_rds_pty(uint8_t pty);
 extern void set_rds_ptyn(char *ptyn);
-extern void set_rds_af(uint8_t *af_array);
+extern void set_rds_af(rds_af_t new_af_list);
 extern void set_rds_tp(uint8_t tp);
 extern void set_rds_ms(uint8_t ms);
 extern void set_rds_ab(uint8_t ab);

@@ -55,10 +55,7 @@ static struct {
 } rds_controls;
 
 // AF
-static struct {
-	uint8_t num_afs;
-	uint8_t afs[MAX_AF];
-} af;
+rds_af_t af_list;
 
 // RT+
 static struct {
@@ -161,15 +158,15 @@ static void get_rds_ps_group(uint16_t *blocks) {
 	blocks[1] |= ((rds_params.di >> (3 - ps_state)) & 1) << 2;
 
 	// AF
-	if (af.num_afs) {
+	if (af_list.num_afs) {
 		if (af_state == 0) {
-			blocks[2] = (af.num_afs + 224) << 8 | af.afs[0];
+			blocks[2] = (af_list.num_afs + 224) << 8 | af_list.af[0];
 		} else {
-			blocks[2] = af.afs[af_state] << 8 |
-					(af.afs[af_state+1] ? af.afs[af_state+1] : 0xCD);
+			blocks[2] = af_list.af[af_state] << 8 |
+					(af_list.af[af_state+1] ? af_list.af[af_state+1] : 0xCD);
 		}
 		af_state += 2;
-		if (af_state > af.num_afs) af_state = 0;
+		if (af_state > af_list.num_afs) af_state = 0;
 	} else {
 		blocks[2] = 0xE0CD; // no AF
 	}
@@ -402,7 +399,7 @@ static uint16_t callsign2pi(char *callsign) {
 	return pi_code;
 }
 
-int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, uint8_t *af_array, char *ptyn, char *call_sign) {
+int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, rds_af_t init_af, char *ptyn, char *call_sign) {
 
 	// The RDS pty region. This determines which PTY list to use
 	enum rds_pty_regions {
@@ -458,11 +455,11 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, u
 	fprintf(stderr, "RT: \"%s\"\n", rt);
 
 	// AF
-	if(af_array[0]) {
-		set_rds_af(af_array);
-		fprintf(stderr, "AF: %d,", af_array[0]);
-		for(int f = 1; f <= af_array[0]; f++) {
-			fprintf(stderr, " %.1f", (af_array[f]+875)/10.0);
+	if(init_af.num_afs) {
+		set_rds_af(init_af);
+		fprintf(stderr, "AF: %d,", init_af.num_afs);
+		for(int f = 0; f < init_af.num_afs; f++) {
+			fprintf(stderr, " %.1f", (init_af.af[f]+875)/10.0);
 		}
 		fprintf(stderr, "\n");
 	}
@@ -539,10 +536,10 @@ void set_rds_rtp_tags(uint8_t type_1, uint8_t start_1, uint8_t len_1,
 	rtp_params.len_2 = (len_2 < 32) ? len_2 : 0;
 }
 
-void set_rds_af(uint8_t *af_array) {
-	af.num_afs = af_array[0];
-	for(int f=1; f<=af_array[0]; f++) {
-		af.afs[f] = af_array[f];
+void set_rds_af(rds_af_t new_af_list) {
+	af_list.num_afs = new_af_list.num_afs;
+	for(int f = 0; f < new_af_list.num_afs; f++) {
+		af_list.af[f] = new_af_list.af[f];
 	}
 }
 

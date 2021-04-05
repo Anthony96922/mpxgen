@@ -64,8 +64,7 @@ int main(int argc, char **argv) {
 	char output_file[51] = {0};
 	char control_pipe[51] = {0};
 	uint8_t rds = 1;
-	uint8_t af[MAX_AF+1] = {0};
-	uint8_t af_size = 0;
+	rds_af_t af;
 	// Use arrays to enforce max length for RDS text items
 	char ps[9] = "Mpxgen";
 	char rt[65] = "Mpxgen: FM Stereo and RDS encoder";
@@ -173,17 +172,18 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'A': //af
-				af_size++;
-				if (af_size > MAX_AF) {
+				if (af.num_afs > MAX_AF) {
 					fprintf(stderr, "AF list is too large.\n");
 					return 1;
+				} else {
+					uint16_t freq = (uint16_t)(10*strtof(optarg, NULL));
+					if (freq < 876 || freq > 1079) {
+						fprintf(stderr, "Alternative Frequency has to be set in range of 87.6 MHz - 107.9 MHz\n");
+						return 1;
+					}
+					af.af[af.num_afs] = freq-875;
 				}
-				uint16_t freq = (uint16_t)(10*strtof(optarg, NULL));
-				if (freq < 876 || freq > 1079) {
-					fprintf(stderr, "Alternative Frequency has to be set in range of 87.6 MHz - 107.9 MHz\n");
-					return 1;
-				}
-				af[af_size] = freq-875;
+				af.num_afs++;
 				break;
 
 			case 'P': //ptyn
@@ -243,8 +243,6 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "Nothing to do. Exiting.\n");
 		return 1;
 	}
-
-	af[0] = af_size;
 
 	pthread_attr_init(&attr);
 
