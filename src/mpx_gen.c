@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
 	char output_file[51] = {0};
 	char control_pipe[51] = {0};
 	uint8_t rds = 1;
-	rds_af_t af;
+	rds_af_t af = {0};
 	// Use arrays to enforce max length for RDS text items
 	char ps[9] = "Mpxgen";
 	char rt[65] = "Mpxgen: FM Stereo and RDS encoder";
