@@ -20,12 +20,15 @@
 
 /*
  * Hilbert transform FIR filter
+ *
  * https://www-users.cs.york.ac.uk/~fisher/mkfilter/
+ * http://dp.nonoo.hu/projects/ham-dsp-tutorial/09-ssb-hartley/
  */
-#define FILTERSIZE 512
+#define FILTER_SIZE 512
+#define FILTER_HALF_SIZE (FILTER_SIZE/2)
 #define HILBERT_GAIN 1.570483967
 
-float hilbert_fir[FILTERSIZE] = {
+float hilbert_fir[FILTER_SIZE] = {
 	+0.0000000000, +0.0003138613, +0.0000000000, +0.0003174376,
 	+0.0000000000, +0.0003221740, +0.0000000000, +0.0003280972,
 	+0.0000000000, +0.0003352340, +0.0000000000, +0.0003436114,
@@ -156,40 +159,39 @@ float hilbert_fir[FILTERSIZE] = {
 	-0.0000000000, -0.0003174376, -0.0000000000, -0.0003138613
 };
 
-float *ht_buffer;
-float *delay_buffer;
+static float *ht_buffer;
+static float *delay_buffer;
 
 void init_hilbert_transformer() {
-	ht_buffer = malloc(FILTERSIZE * sizeof(float));
-	delay_buffer = malloc((FILTERSIZE/2) * sizeof(float));
+	ht_buffer = malloc(FILTER_SIZE * sizeof(float));
+	delay_buffer = malloc(FILTER_HALF_SIZE * sizeof(float));
 }
 
 float get_hilbert(float in) {
 	float filter_out;
-	static int ht_buffer_index;
-	int filter_index;
+	static int ht_buffer_idx;
+	int filter_idx;
 
-	ht_buffer[ht_buffer_index++] = in / HILBERT_GAIN;
-	if (ht_buffer_index == FILTERSIZE) ht_buffer_index = 0;
+	ht_buffer[ht_buffer_idx++] = in / HILBERT_GAIN;
+	if (ht_buffer_idx == FILTER_SIZE) ht_buffer_idx = 0;
 
+	filter_idx = ht_buffer_idx;
 	filter_out = 0;
-	filter_index = ht_buffer_index;
-
-	for (int i = 0; i < FILTERSIZE; i++) {
-		filter_out += ht_buffer[filter_index++] * hilbert_fir[i];
-		if (filter_index == FILTERSIZE) filter_index = 0;
+	for (int i = 0; i < FILTER_SIZE; i++) {
+		filter_out += ht_buffer[filter_idx++] * hilbert_fir[i];
+		if (filter_idx == FILTER_SIZE) filter_idx = 0;
 	}
 
 	return filter_out;
 }
 
 float get_hilbert_delay(float in) {
-	static int delay_index;
+	static int delay_idx;
 
-	delay_buffer[delay_index++] = in;
-	if (delay_index == (FILTERSIZE/2)) delay_index = 0;
+	delay_buffer[delay_idx++] = in;
+	if (delay_idx == FILTER_HALF_SIZE) delay_idx = 0;
 
-	return delay_buffer[delay_index];
+	return delay_buffer[delay_idx];
 }
 
 void exit_hilbert_transformer() {
