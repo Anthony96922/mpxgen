@@ -25,6 +25,7 @@
 #endif
 #include "fm_mpx.h"
 #include "mpx_carriers.h"
+#include "ssb.h"
 
 #define FIR_HALF_SIZE	30
 #define FIR_SIZE	(2*FIR_HALF_SIZE-1)
@@ -66,6 +67,7 @@ void set_carrier_volume(unsigned int carrier, int new_volume) {
 
 void fm_mpx_open() {
 	create_mpx_carriers();
+	init_hilbert_transformer();
 
 	low_pass_fir = malloc(FIR_HALF_SIZE * sizeof(float));
 	fir_buffer[0] = malloc(FIR_SIZE * sizeof(float));
@@ -81,6 +83,21 @@ void fm_mpx_open() {
 			sin(2 * M_PI * 24000 * i / MPX_SAMPLE_RATE) / (M_PI * i) // sinc
 			* (.54 - .46 * cos(2 * M_PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
 	}
+}
+
+static inline float get_single_sideband(float in, int carrier, int sideband) {
+	float ht, delayed;
+	float inphase, quadrature;
+
+	ht = get_hilbert(in);
+	delayed = get_hilbert_delay(in);
+
+	quadrature = ht * get_carrier(carrier);
+	inphase = delayed * get_cos_carrier(carrier);
+
+	return sideband ?
+		inphase - quadrature : /* usb */
+		inphase + quadrature; /* lsb */
 }
 
 void fm_mpx_get_samples(float *out, float *in_audio) {
@@ -185,6 +202,7 @@ void fm_rds_get_samples(float *out) {
 }
 
 void fm_mpx_close() {
+	exit_hilbert_transformer();
 	clear_mpx_carriers();
 	free(low_pass_fir);
 	free(fir_buffer[0]);
