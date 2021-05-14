@@ -83,6 +83,10 @@ int main(int argc, char **argv) {
 	SRC_STATE *src_state[2];
 	SRC_DATA src_data[2];
 
+	// AO
+	ao_device *device;
+	ao_sample_format format = {0};
+
 	// buffers
 	float *mpx_data;
 	char *dev_out;
@@ -258,10 +262,6 @@ int main(int argc, char **argv) {
 	mpx_data = malloc(NUM_MPX_FRAMES_OUT * sizeof(float));
 	dev_out = malloc(NUM_MPX_FRAMES_OUT * sizeof(short));
 
-	// AO
-	ao_device *device;
-	ao_sample_format format;
-	memset(&format, 0, sizeof(ao_sample_format));
 	format.channels = 2;
 	format.bits = 16;
 	format.rate = 192000;
