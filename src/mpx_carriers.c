@@ -45,15 +45,14 @@ static int create_carrier(float freq, float *carrier, float *cos_carrier) {
 	return i;
 }
 
-#define NUM_CARRIERS 7
-float carrier_frequencies[NUM_CARRIERS] = {
+#define NUM_CARRIERS 6
+static float carrier_frequencies[NUM_CARRIERS] = {
 	19000, 38000, 57000,
-	66500, 71250, 76000, // RDS 2
-	31250 // Polar stereo
+	66500, 71250, 76000 // RDS 2
 };
-float *carrier[NUM_CARRIERS];
-float *cos_carrier[NUM_CARRIERS];
-int phase[NUM_CARRIERS][2]; // [carrier][current phase/max phase]
+static float *carrier[NUM_CARRIERS];
+static float *cos_carrier[NUM_CARRIERS];
+static int phase[NUM_CARRIERS][2]; // [carrier][current phase/max phase]
 
 void create_mpx_carriers() {
 	for (int i = 0; i < NUM_CARRIERS; i++) {

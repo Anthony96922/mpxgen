@@ -41,12 +41,6 @@ void set_output_volume(unsigned int vol) {
 	mpx_vol = (vol / 100.0);
 }
 
-static int polar_stereo;
-
-void set_polar_stereo(unsigned int st) {
-	if (st == 0 || st == 1) polar_stereo = st;
-}
-
 // subcarrier volumes
 static float volumes[] = {
 	0.09, // pilot tone: 9% modulation
@@ -184,15 +178,9 @@ void fm_mpx_get_samples(float *out, float *in_audio) {
 		out[j] += get_cos_carrier(CARRIER_76K) * get_rds2_sample(3) * volumes[4];
 #endif
 
-		if (polar_stereo) {
-			// Polar stereo encoding system used in Eastern Europe
-			out[j] +=
-				get_cos_carrier(CARRIER_31K) * ((out_stereo * 0.45) + volumes[0]);
-		} else {
-			out[j] +=
-				get_cos_carrier(CARRIER_19K) * volumes[0] +
-				get_cos_carrier(CARRIER_38K) * out_stereo * 0.45;
-		}
+		out[j] +=
+			get_cos_carrier(CARRIER_19K) * volumes[0] +
+			get_cos_carrier(CARRIER_38K) * out_stereo * 0.45;
 
 		update_carrier_phase();
 

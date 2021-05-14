@@ -23,7 +23,6 @@
 #define CARRIER_67K 3
 #define CARRIER_71K 4
 #define CARRIER_76K 5
-#define CARRIER_31K 6
 
 extern void create_mpx_carriers();
 extern float get_carrier(int num);
