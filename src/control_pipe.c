@@ -90,7 +90,7 @@ int poll_control_pipe() {
 			return 1;
 		}
 		if(res[0] == 'T' && res[1] == 'A') {
-			int ta = ( strcmp(arg, "ON") == 0 );
+			int ta = (arg[0] == 'O' && arg[1] == 'N');
 			set_rds_ta(ta);
 #ifdef CONTROL_PIPE_MESSAGES
 			fprintf(stderr, "Set TA to %s\n", ta ? "ON" : "OFF");
@@ -98,7 +98,7 @@ int poll_control_pipe() {
 			return 1;
 		}
 		if(res[0] == 'T' && res[1] == 'P') {
-			int tp = ( strcmp(arg, "ON") == 0 );
+			int tp = (arg[0] == 'O' && arg[1] == 'N');
 			set_rds_tp(tp);
 #ifdef CONTROL_PIPE_MESSAGES
 			fprintf(stderr, "Set TP to %s\n", tp ? "ON" : "OFF");
@@ -106,7 +106,7 @@ int poll_control_pipe() {
 			return 1;
 		}
 		if(res[0] == 'M' && res[1] == 'S') {
-			int ms = ( strcmp(arg, "ON") == 0 );
+			int ms = (arg[0] == 'O' && arg[1] == 'N');
 			set_rds_ms(ms);
 #ifdef CONTROL_PIPE_MESSAGES
 			fprintf(stderr, "Set MS to %s\n", ms ? "ON" : "OFF");
@@ -127,10 +127,6 @@ int poll_control_pipe() {
 #ifdef CONTROL_PIPE_MESSAGES
 			fprintf(stderr, "DI value set to %d\n", di);
 #endif
-			return 1;
-		}
-		if(res[0] == 'S' && res[1] == 'T') {
-			set_polar_stereo(strtoul(arg, NULL, 10));
 			return 1;
 		}
 	}
@@ -210,7 +206,7 @@ int poll_control_pipe() {
 		}
 		if (res[0] == 'P' && res[1] == 'T' && res[2] == 'Y' && res[3] == 'N') {
 			arg[8] = 0;
-			if (strcmp(arg, "OFF") == 0) {
+			if (arg[0] == 'O' && arg[1] == 'F' && arg[2] == 'F') {
 #ifdef CONTROL_PIPE_MESSAGES
 				fprintf(stderr, "PTYN disabled\n");
 #endif
