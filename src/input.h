@@ -17,10 +17,8 @@
  */
 
 #include "file_input.h"
-#ifdef ALSA
 #include "alsa_input.h"
-#endif
 
-int open_input(char *input_name, int wait, unsigned int *upsample_factor);
-int read_input(float *audio);
+int open_input(char *input_name, int wait, unsigned int *sample_rate);
+int read_input(short *audio);
 void close_input();

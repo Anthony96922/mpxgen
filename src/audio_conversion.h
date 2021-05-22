@@ -17,7 +17,9 @@
  */
 
 extern void float2char(float *inbuf, char *outbuf, size_t inbufsize);
+extern void float2short(float *inbuf, short *outbuf, size_t inbufsize);
 extern void char2float(char *inbuf, float *outbuf, size_t inbufsize);
 extern void short2float(short *inbuf, float *outbuf, size_t inbufsize);
 extern void stereoize(char *inbuf, char *outbuf, size_t inbufsize);
+extern void stereoizes16(short *inbuf, short *outbuf, size_t inbufsize);
 extern void stereoizef(float *inbuf, float *outbuf, size_t inbufsize);

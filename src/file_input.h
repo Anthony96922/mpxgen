@@ -17,5 +17,5 @@
  */
 
 extern int open_file_input(char *filename, unsigned int *sample_rate, int wait, size_t num_frames);
-extern int read_file_input(float *audio);
+extern int read_file_input(short *audio);
 extern void close_file_input();

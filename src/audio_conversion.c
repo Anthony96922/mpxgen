@@ -31,6 +31,13 @@ void float2char(float *inbuf, char *outbuf, size_t inbufsize) {
 	}
 }
 
+// float to short
+void float2short(float *inbuf, short *outbuf, size_t inbufsize) {
+	for (int i = 0; i < inbufsize; i++) {
+		outbuf[i] = inbuf[i] * 32767;
+	}
+}
+
 // converts 16 bit shorts (stored as two 8 bit ints) to floats
 void char2float(char *inbuf, float *outbuf, size_t inbufsize) {
 	int j = 0;
@@ -57,6 +64,16 @@ void stereoize(char *inbuf, char *outbuf, size_t inbufsize) {
 		outbuf[k+1] = outbuf[k+3] = inbuf[j+1];
 		j += 2;
 		k += 4;
+	}
+}
+
+// puts the same stuff into both channels
+void stereoizes16(short *inbuf, short *outbuf, size_t inbufsize) {
+	int j = 0;
+
+	for (int i = 0; i < inbufsize; i++) {
+		outbuf[j+0] = outbuf[j+1] = inbuf[i];
+		j += 2;
 	}
 }
 

@@ -59,7 +59,7 @@ void set_carrier_volume(unsigned int carrier, int new_volume) {
 	}
 }
 
-void fm_mpx_open() {
+void fm_mpx_init() {
 	create_mpx_carriers();
 	init_hilbert_transformer();
 
@@ -127,7 +127,7 @@ static inline float get_asymmetric_dsb(float in, int carrier, float asymmetry) {
 		(inphase - quadrature) * usb_power;  /* usb */
 }
 
-void fm_mpx_get_samples(float *out, float *in_audio) {
+void fm_mpx_get_samples(float *in_audio, float *out) {
 	int j = 0;
 	static int fir_index;
 
@@ -195,9 +195,9 @@ void fm_rds_get_samples(float *out) {
 
 	for (int i = 0; i < NUM_RDS_FRAMES_IN; i++) {
 		// Pilot tone for calibration
-		//out[j] = get_cos_carrier(CARRIER_19K) * volumes[0];
+		out[j] = get_cos_carrier(CARRIER_19K) * volumes[0];
 
-		out[j] = get_cos_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
+		out[j] += get_cos_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
 #ifdef RDS2
 		out[j] += get_cos_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
 		out[j] += get_cos_carrier(CARRIER_71K) * get_rds2_sample(2) * volumes[3];
@@ -212,7 +212,7 @@ void fm_rds_get_samples(float *out) {
 	}
 }
 
-void fm_mpx_close() {
+void fm_mpx_exit() {
 	exit_hilbert_transformer();
 	clear_mpx_carriers();
 	free(low_pass_fir);

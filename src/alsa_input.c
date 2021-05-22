@@ -20,17 +20,14 @@
 #include <alsa/asoundlib.h>
 #include "audio_conversion.h"
 
-static short *short_buffer;
 static size_t buffer_size;
-
-snd_pcm_t *pcm;
+static snd_pcm_t *pcm;
 
 int open_alsa_input(char *input, unsigned int sample_rate, size_t num_frames) {
 	int err;
 	snd_pcm_hw_params_t *hw_params;
 
 	buffer_size = num_frames;
-	short_buffer = malloc(buffer_size * 2 * sizeof(short));
 
 	if ((err = snd_pcm_hw_params_malloc(&hw_params)) < 0) {
 		fprintf(stderr, "Error: cannot allocate hardware parameter structure (%s)\n", snd_strerror(err));
@@ -43,7 +40,7 @@ int open_alsa_input(char *input, unsigned int sample_rate, size_t num_frames) {
 	}
 
 	if ((err = snd_pcm_hw_params_any(pcm, hw_params)) < 0) {
-		fprintf(stderr, "Error: cannot initialize hardware parameter structure (%s)\n", snd_strerror(err));
+		fprintf(stderr, "Error: no configurations available (%s)\n", snd_strerror(err));
 		return -1;
 	}
 
@@ -79,18 +76,14 @@ int open_alsa_input(char *input, unsigned int sample_rate, size_t num_frames) {
 		return -1;
 	}
 
-	fprintf(stderr, "Using ADC input %s.\n", input);
-
 	return 0;
 }
 
-int read_alsa_input(float *buffer) {
+int read_alsa_input(short *buffer) {
 	int frames_read;
 
-	if ((frames_read = snd_pcm_readi(pcm, short_buffer, buffer_size)) < 0) {
+	if ((frames_read = snd_pcm_readi(pcm, buffer, buffer_size)) < 0) {
 		fprintf(stderr, "Error: read from audio interface failed (%s)\n", snd_strerror(frames_read));
-	} else {
-		short2float(short_buffer, buffer, buffer_size);
 	}
 
 	return frames_read;
@@ -102,8 +95,6 @@ int close_alsa_input() {
 	if ((err = snd_pcm_close(pcm)) < 0) {
 		fprintf(stderr, "Error: could not close source (%s)\n", snd_strerror(err));
 	}
-
-	free(short_buffer);
 
 	return err;
 }

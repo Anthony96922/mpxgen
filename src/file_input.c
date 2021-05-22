@@ -25,9 +25,8 @@
 static int channels;
 static int audio_wait;
 
-SNDFILE *inf;
+static SNDFILE *inf;
 
-static float *input_buffer;
 static size_t buffer_size;
 
 int open_file_input(char *filename, unsigned int *sample_rate, int wait, size_t num_frames) {
@@ -35,10 +34,9 @@ int open_file_input(char *filename, unsigned int *sample_rate, int wait, size_t 
         SF_INFO sfinfo;
 
 	buffer_size = num_frames;
-	input_buffer = malloc(buffer_size * 2 * sizeof(float));
 
 	// stdin or file on the filesystem?
-	if(strcmp(filename, "-") == 0) {
+	if(filename[0] == '-' && filename[1] == 0) {
 		if(!(inf = sf_open_fd(fileno(stdin), SFM_READ, &sfinfo, 0))) {
 			fprintf(stderr, "Error: could not open stdin for audio input.\n");
 			return -1;
@@ -61,13 +59,14 @@ int open_file_input(char *filename, unsigned int *sample_rate, int wait, size_t 
 	return 0;
 }
 
-int read_file_input(float *audio) {
+int read_file_input(short *audio) {
 	int audio_len;
 	int frames_to_read = buffer_size;
 	int buffer_offset = 0;
+	static short tmpbuf[65536];
 
 	while (frames_to_read) {
-		if ((audio_len = sf_readf_float(inf, input_buffer + (buffer_offset * channels), frames_to_read)) < 0) {
+		if ((audio_len = sf_readf_short(inf, tmpbuf + (buffer_offset * channels), frames_to_read)) < 0) {
 			fprintf(stderr, "Error reading audio\n");
 			return -1;
 		}
@@ -79,7 +78,7 @@ int read_file_input(float *audio) {
 			// Check if we have more audio
 			if (sf_seek(inf, 0, SEEK_SET) < 0) {
 				if (audio_wait) {
-					memset(audio, 0, buffer_size * 2 * sizeof(float));
+					memset(audio, 0, buffer_size * 2 * sizeof(short));
 					frames_to_read = 0;
 				} else {
 					fprintf(stderr, "Could not rewind in audio file, terminating\n");
@@ -89,16 +88,14 @@ int read_file_input(float *audio) {
 		}
 	}
 
-	if (channels == 1) {
-		stereoizef(input_buffer, audio, buffer_size);
-	} else {
-		memcpy(audio, input_buffer, buffer_size * 2 * sizeof(float));
-	}
+	if (channels == 1)
+		stereoizes16(tmpbuf, audio, buffer_size);
+	else
+		memcpy(audio, tmpbuf, buffer_size * 2 * sizeof(short));
 
 	return 1;
 }
 
 void close_file_input() {
 	if (sf_close(inf)) fprintf(stderr, "Error closing audio file\n");
-	free(input_buffer);
 }
