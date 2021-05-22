@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
 	char output_file[51] = {0};
 	char control_pipe[51] = {0};
 	uint8_t rds = 1;
-	rds_af_t af;
+	rds_af_t af = {0};
 	// Use arrays to enforce max length for RDS text items
 	char ps[9] = "Mpxgen";
 	char rt[65] = "Mpxgen: FM Stereo and RDS encoder";
@@ -82,6 +82,10 @@ int main(int argc, char **argv) {
 	// SRC
 	SRC_STATE *src_state[2];
 	SRC_DATA src_data[2];
+
+	// AO
+	ao_device *device;
+	ao_sample_format format = {0};
 
 	// buffers
 	float *mpx_data;
@@ -258,10 +262,6 @@ int main(int argc, char **argv) {
 	mpx_data = malloc(NUM_MPX_FRAMES_OUT * sizeof(float));
 	dev_out = malloc(NUM_MPX_FRAMES_OUT * sizeof(short));
 
-	// AO
-	ao_device *device;
-	ao_sample_format format;
-	memset(&format, 0, sizeof(ao_sample_format));
 	format.channels = 2;
 	format.bits = 16;
 	format.rate = 192000;

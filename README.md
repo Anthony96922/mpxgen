@@ -1,6 +1,8 @@
 # mpxgen
 This program generates FM multiplex baseband audio that can be sent to a mono FM transmitter. This includes stereo audio as well as realtime RDS data.
 
+![Mpxgen on Eton](doc/mpxgen.jpg)
+
 ##### This is a work in progress! The audio input handling is not complete and buggy. This app works best as a standalone RDS encoder for now.
 
 #### Features
@@ -13,8 +15,12 @@ This program generates FM multiplex baseband audio that can be sent to a mono FM
 #### To do
 - Threading
 - Input and output buffering
-- Basic limiting (?)
+
+#### Planned features
+- Basic audio processing
 - RDS2 capabilities
+- SSB stereo
+- Configuration file
 
 Mpxgen's RDS encoder in action: https://www.youtube.com/watch?v=ORAMpYhDcVY
 
@@ -116,7 +122,7 @@ You can control PS, RT, TA (Traffic Announcement flag) and PTY (Program Type) at
 
 Scripts can be written to obtain and send "now playing" text data to Mpxgen for dynamically updated RDS.
 
-See the [command list](command_list.md) for a complete list of valid commands.
+See the [command list](doc/command_list.md) for a complete list of valid commands.
 
 ### RDS2 (WIP)
 Mpxgen has a WIP implementation of RDS2. Support for RDS2 features will be implemented once the spec has been released.

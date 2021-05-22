@@ -1,6 +1,6 @@
 /*
  * mpxgen - FM multiplex encoder with Stereo and RDS
- * Copyright (C) 2019 Anthony96922
+ * Copyright (C) 2019-2021 Anthony96922
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,16 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// MPX carrier index
-#define CARRIER_19K 0
-#define CARRIER_38K 1
-#define CARRIER_57K 2
-#define CARRIER_67K 3
-#define CARRIER_71K 4
-#define CARRIER_76K 5
-
-extern void create_mpx_carriers();
-extern float get_carrier(int num);
-extern float get_cos_carrier(int num);
-extern void update_carrier_phase();
-extern void clear_mpx_carriers();
+extern void init_hilbert_transformer();
+extern float get_hilbert(float in);
+extern float get_hilbert_delay(float in);
+extern void exit_hilbert_transformer();

@@ -25,13 +25,14 @@
 #endif
 #include "fm_mpx.h"
 #include "mpx_carriers.h"
+#include "ssb.h"
 
 #define FIR_HALF_SIZE	30
 #define FIR_SIZE	(2*FIR_HALF_SIZE-1)
 
 // coefficients of the low-pass FIR filter
-float *low_pass_fir;
-float *fir_buffer[2];
+static float *low_pass_fir;
+static float *fir_buffer[2];
 
 float mpx_vol;
 
@@ -40,14 +41,8 @@ void set_output_volume(unsigned int vol) {
 	mpx_vol = (vol / 100.0);
 }
 
-int polar_stereo;
-
-void set_polar_stereo(unsigned int st) {
-	if (st == 0 || st == 1) polar_stereo = st;
-}
-
 // subcarrier volumes
-float volumes[] = {
+static float volumes[] = {
 	0.09, // pilot tone: 9% modulation
 	0.09, // RDS: 4.5% modulation
 	0.09, 0.09, 0.09 // RDS 2
@@ -66,6 +61,7 @@ void set_carrier_volume(unsigned int carrier, int new_volume) {
 
 void fm_mpx_open() {
 	create_mpx_carriers();
+	init_hilbert_transformer();
 
 	low_pass_fir = malloc(FIR_HALF_SIZE * sizeof(float));
 	fir_buffer[0] = malloc(FIR_SIZE * sizeof(float));
@@ -81,6 +77,54 @@ void fm_mpx_open() {
 			sin(2 * M_PI * 24000 * i / MPX_SAMPLE_RATE) / (M_PI * i) // sinc
 			* (.54 - .46 * cos(2 * M_PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
 	}
+}
+
+/*
+ * SSB modulator
+ *
+ * Creates a single sideband signal
+ * 0: LSB
+ * 1: USB
+ */
+static inline float get_single_sideband(float in, int carrier, int sideband) {
+	float ht, delayed;
+	float inphase, quadrature;
+
+	ht      = get_hilbert(in);
+	delayed = get_hilbert_delay(in);
+
+	// I/Q components
+	inphase    = ht * get_cos_carrier(carrier);
+	quadrature = delayed * get_carrier(carrier);
+
+	return	!sideband ?
+		inphase + quadrature : /* lsb */
+		inphase - quadrature;  /* usb */
+}
+
+/*
+ * Asymmetric DSB modulator
+ *
+ * LSB/USB range: [-1,1]
+ * 0 is symmetric
+ */
+static inline float get_asymmetric_dsb(float in, int carrier, float asymmetry) {
+	float ht, delayed;
+	float inphase, quadrature;
+	float lsb_power, usb_power;
+
+	ht      = get_hilbert(in);
+	delayed = get_hilbert_delay(in);
+
+	// I/Q components
+	inphase    = ht * get_cos_carrier(carrier);
+	quadrature = delayed * get_carrier(carrier);
+
+	lsb_power = fabsf(1 - asymmetry) / 2;
+	usb_power = fabsf(1 + asymmetry) / 2;
+
+	return	(inphase + quadrature) * lsb_power + /* lsb */
+		(inphase - quadrature) * usb_power;  /* usb */
 }
 
 void fm_mpx_get_samples(float *out, float *in_audio) {
@@ -120,10 +164,6 @@ void fm_mpx_get_samples(float *out, float *in_audio) {
 		}
 		// End of FIR filter
 
-		// 6dB input gain
-		out_left  *= 2;
-		out_right *= 2;
-
 		// Create sum and difference signals
 		out_mono   = out_left + out_right;
 		out_stereo = out_left - out_right;
@@ -131,30 +171,21 @@ void fm_mpx_get_samples(float *out, float *in_audio) {
 		// audio signals need to be limited to 45% to remain within modulation limits
 		out[j] = out_mono * 0.45;
 
-		if (polar_stereo) {
-			// Polar stereo encoding system used in Eastern Europe
-			out[j] +=
-				get_carrier(CARRIER_31K) * ((out_stereo * 0.45) + volumes[0]);
-		} else {
-			out[j] +=
-				get_carrier(CARRIER_19K) * volumes[0] +
-				get_carrier(CARRIER_38K) * out_stereo * 0.45;
-		}
-
-		out[j] += get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
-
+		out[j] += get_cos_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
 #ifdef RDS2
-		out[j] += get_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
-		out[j] += get_carrier(CARRIER_71K) * get_rds2_sample(2) * volumes[3];
-		out[j] += get_carrier(CARRIER_76K) * get_rds2_sample(3) * volumes[4];
+		out[j] += get_cos_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
+		out[j] += get_cos_carrier(CARRIER_71K) * get_rds2_sample(2) * volumes[3];
+		out[j] += get_cos_carrier(CARRIER_76K) * get_rds2_sample(3) * volumes[4];
 #endif
+
+		out[j] +=
+			get_cos_carrier(CARRIER_19K) * volumes[0] +
+			get_cos_carrier(CARRIER_38K) * out_stereo * 0.45;
 
 		update_carrier_phase();
 
 		out[j] *= mpx_vol;
-
 		out[j+1] = out[j];
-
 		j += 2;
 	}
 }
@@ -164,27 +195,25 @@ void fm_rds_get_samples(float *out) {
 
 	for (int i = 0; i < NUM_RDS_FRAMES_IN; i++) {
 		// Pilot tone for calibration
-		//out[j] = get_carrier(CARRIER_19K) * volumes[0];
+		//out[j] = get_cos_carrier(CARRIER_19K) * volumes[0];
 
-		out[j] = get_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
-
+		out[j] = get_cos_carrier(CARRIER_57K) * get_rds_sample() * volumes[1];
 #ifdef RDS2
-		out[j] += get_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
-		out[j] += get_carrier(CARRIER_71K) * get_rds2_sample(2) * volumes[3];
-		out[j] += get_carrier(CARRIER_76K) * get_rds2_sample(3) * volumes[4];
+		out[j] += get_cos_carrier(CARRIER_67K) * get_rds2_sample(1) * volumes[2];
+		out[j] += get_cos_carrier(CARRIER_71K) * get_rds2_sample(2) * volumes[3];
+		out[j] += get_cos_carrier(CARRIER_76K) * get_rds2_sample(3) * volumes[4];
 #endif
 
 		update_carrier_phase();
 
 		out[j] *= mpx_vol;
-
 		out[j+1] = out[j];
-
 		j += 2;
 	}
 }
 
 void fm_mpx_close() {
+	exit_hilbert_transformer();
 	clear_mpx_carriers();
 	free(low_pass_fir);
 	free(fir_buffer[0]);
