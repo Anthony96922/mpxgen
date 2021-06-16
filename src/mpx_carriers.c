@@ -21,9 +21,12 @@
 #include "fm_mpx.h"
 
 // Create wave constants for a given frequency
-static int create_carrier(float freq, float *carrier, float *cos_carrier) {
+static void create_carrier(float freq, float *carrier, float *cos_carrier, int *max_phase) {
 	float sample, cos_sample;
+
+	// used to determine if we have completed a cycle
 	int sine_zero_crossings = 0;
+
 	int i;
 
 	// First value of a sine wave is always 0
@@ -42,23 +45,38 @@ static int create_carrier(float freq, float *carrier, float *cos_carrier) {
 		*cos_carrier++ = cos_sample;
 	}
 
-	return i;
+	*max_phase = i;
 }
 
-#define NUM_CARRIERS 6
-static float carrier_frequencies[NUM_CARRIERS] = {
-	19000, 38000, 57000,
-	66500, 71250, 76000 // RDS 2
+static float carrier_frequencies[] = {
+	19000, // pilot tone
+	38000, // stereo difference
+	57000, // RDS
+
+	// RDS 2
+	66500, // stream 1
+	71250, // stream 2
+	76000  // stream 2
 };
+
+#define NUM_CARRIERS sizeof(carrier_frequencies)/sizeof(float)
+
 static float *carrier[NUM_CARRIERS];
 static float *cos_carrier[NUM_CARRIERS];
-static int phase[NUM_CARRIERS][2]; // [carrier][current phase/max phase]
+
+/*
+ * Wave phase
+ *
+ * 0: current phase
+ * 1: max phase
+ */
+static int phase[NUM_CARRIERS][2];
 
 void create_mpx_carriers() {
 	for (int i = 0; i < NUM_CARRIERS; i++) {
 		carrier[i] = malloc(MPX_SAMPLE_RATE * sizeof(float));
 		cos_carrier[i] = malloc(MPX_SAMPLE_RATE * sizeof(float));
-		phase[i][1] = create_carrier(carrier_frequencies[i], carrier[i], cos_carrier[i]);
+		create_carrier(carrier_frequencies[i], carrier[i], cos_carrier[i], &phase[i][1]);
 	}
 }
 
