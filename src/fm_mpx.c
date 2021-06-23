@@ -27,13 +27,6 @@
 #include "mpx_carriers.h"
 #include "ssb.h"
 
-#define FIR_HALF_SIZE	30
-#define FIR_SIZE	(2*FIR_HALF_SIZE-1)
-
-// coefficients of the low-pass FIR filter
-static float *low_pass_fir;
-static float *fir_buffer[2];
-
 float mpx_vol;
 
 void set_output_volume(unsigned int vol) {
@@ -59,24 +52,91 @@ void set_carrier_volume(unsigned int carrier, int new_volume) {
 	}
 }
 
-void fm_mpx_init() {
-	create_mpx_carriers();
-	init_hilbert_transformer();
+/* 2-channel FIR filter struct */
+typedef struct filter_t {
+	uint32_t sample_rate;
+	uint16_t index;
+	uint16_t size;
+	uint16_t half_size;
+	float *in[2];
 
-	low_pass_fir = malloc(FIR_HALF_SIZE * sizeof(float));
-	fir_buffer[0] = malloc(FIR_SIZE * sizeof(float));
-	fir_buffer[1] = malloc(FIR_SIZE * sizeof(float));
+	// coefficients of the low-pass FIR filter
+	float *filter;
+
+	float out[2];
+} filter_t;
+
+// filter state
+static filter_t *fir_low_pass;
+
+static inline void fir_filter_init(filter_t *flt, uint32_t sample_rate, uint16_t half_size) {
+
+	flt = malloc(sizeof(filter_t));
+
+	flt->sample_rate = sample_rate;
+	flt->half_size = half_size;
+	flt->size = 2 * half_size - 1;
+
+	// setup input buffers
+	flt->in[0] = malloc(half_size * sizeof(float));
+	flt->in[1] = malloc(half_size * sizeof(float));
+
+	flt->filter = malloc(half_size * sizeof(float));
 
 	// Here we divide this coefficient by two because it will be counted twice
 	// when applying the filter
-	low_pass_fir[FIR_HALF_SIZE-1] = 2 * 24000 / MPX_SAMPLE_RATE / 2;
+	flt->filter[half_size-1] = 2 * 24000 / sample_rate / 2;
 
 	// Only store half of the filter since it is symmetric
-	for(int i=1; i<FIR_HALF_SIZE; i++) {
-		low_pass_fir[FIR_HALF_SIZE-1-i] =
-			sin(2 * M_PI * 24000 * i / MPX_SAMPLE_RATE) / (M_PI * i) // sinc
-			* (.54 - .46 * cos(2 * M_PI * (i+FIR_HALF_SIZE) / (2*FIR_HALF_SIZE))); // Hamming window
+	for(int i=1; i<half_size; i++) {
+		float tmp;
+		tmp = sin(2 * M_PI * 24000 * i / sample_rate) / (M_PI * i); // sinc
+		tmp *= .54 - .46 * cos(2 * M_PI * (i+half_size) / (2*half_size)); // Hamming window
+		flt->filter[half_size-1-i] = tmp;
 	}
+}
+
+static inline void fir_filter_add(filter_t *flt, float *in_buffer) {
+	flt->in[0][flt->index] = in_buffer[0];
+	flt->in[1][flt->index] = in_buffer[1];
+	if (++flt->index > flt->size) flt->index = 0;
+}
+
+static inline void fir_filter_apply(filter_t *flt) {
+
+	/* As the FIR filter is symmetric, we do not multiply all
+	   the coefficients independently, but two-by-two, thus reducing
+	   the total number of multiplications by a factor of two
+	 */
+	int16_t ifbi = flt->index;  // ifbi = increasing FIR Buffer Index
+	int16_t dfbi = flt->index;  // dfbi = decreasing FIR Buffer Index
+	flt->out[0] = 0;
+	flt->out[1] = 0;
+	for(int fi=0; fi < flt->size; fi++) {  // fi = Filter Index
+		if(--dfbi == -1) dfbi = flt->size-1;
+		flt->out[0] += flt->filter[fi] * (flt->in[0][ifbi] + flt->in[0][dfbi]);
+		flt->out[1] += flt->filter[fi] * (flt->in[1][ifbi] + flt->in[1][dfbi]);
+		if(++ifbi == flt->size) ifbi = 0;
+	}
+	// End of FIR filter
+}
+
+static inline void fir_filter_get(filter_t *flt, float *out) {
+	out[0] = flt->out[0];
+	out[1] = flt->out[1];
+}
+
+static inline void fir_filter_exit(filter_t *flt) {
+	free(flt->in[0]);
+	free(flt->in[1]);
+	free(flt->filter);
+	free(flt);
+}
+
+void fm_mpx_init() {
+	create_mpx_carriers();
+	init_hilbert_transformer();
+	fir_filter_init(fir_low_pass, MPX_SAMPLE_RATE, 30);
 }
 
 /*
@@ -129,40 +189,27 @@ static inline float get_asymmetric_dsb(float in, int carrier, float asymmetry) {
 
 void fm_mpx_get_samples(float *in_audio, float *out) {
 	int j = 0;
-	static int fir_index;
 
-	int ifbi, dfbi;
+	float lowpass_filter_in[2];
+	float lowpass_filter_out[2];
 	float out_left, out_right;
 	float out_mono, out_stereo;
 
 	for (int i = 0; i < NUM_AUDIO_FRAMES_OUT; i++) {
-		// First store the current sample(s) into the FIR filter's ring buffer
-		fir_buffer[0][fir_index] = in_audio[j+0];
-		fir_buffer[1][fir_index] = in_audio[j+1];
-		fir_index++;
-		if(fir_index == FIR_SIZE) fir_index = 0;
+		lowpass_filter_in[0] = in_audio[j+0];
+		lowpass_filter_in[1] = in_audio[j+1];
 
-		// L/R signals
-		out_left  = 0;
-		out_right = 0;
+		// First store the current sample(s) into the FIR filter's ring buffer
+		fir_filter_add(fir_low_pass, lowpass_filter_in);
 
 		// Now apply the FIR low-pass filter
+		fir_filter_apply(fir_low_pass);
 
-		/* As the FIR filter is symmetric, we do not multiply all
-		   the coefficients independently, but two-by-two, thus reducing
-		   the total number of multiplications by a factor of two
-		 */
-		ifbi = fir_index;  // ifbi = increasing FIR Buffer Index
-		dfbi = fir_index;  // dfbi = decreasing FIR Buffer Index
-		for(int fi=0; fi<FIR_HALF_SIZE; fi++) {  // fi = Filter Index
-			dfbi--;
-			if(dfbi < 0) dfbi = FIR_SIZE-1;
-			out_left  += low_pass_fir[fi] * (fir_buffer[0][ifbi] + fir_buffer[0][dfbi]);
-			out_right += low_pass_fir[fi] * (fir_buffer[1][ifbi] + fir_buffer[1][dfbi]);
-			ifbi++;
-			if(ifbi == FIR_SIZE) ifbi = 0;
-		}
-		// End of FIR filter
+		fir_filter_get(fir_low_pass, lowpass_filter_out);
+
+		// L/R signals
+		out_left  = lowpass_filter_out[0];
+		out_right = lowpass_filter_out[1];
 
 		// Create sum and difference signals
 		out_mono   = out_left + out_right;
@@ -215,7 +262,5 @@ void fm_rds_get_samples(float *out) {
 void fm_mpx_exit() {
 	exit_hilbert_transformer();
 	clear_mpx_carriers();
-	free(low_pass_fir);
-	free(fir_buffer[0]);
-	free(fir_buffer[1]);
+	fir_filter_exit(fir_low_pass);
 }
