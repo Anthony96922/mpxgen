@@ -61,8 +61,8 @@ static float carrier_frequencies[] = {
 
 #define NUM_CARRIERS sizeof(carrier_frequencies)/sizeof(float)
 
-static float *carrier[NUM_CARRIERS];
-static float *cos_carrier[NUM_CARRIERS];
+static float carrier[NUM_CARRIERS][MPX_SAMPLE_RATE];
+static float cos_carrier[NUM_CARRIERS][MPX_SAMPLE_RATE];
 
 /*
  * Wave phase
@@ -74,17 +74,12 @@ static int phase[NUM_CARRIERS][2];
 
 void create_mpx_carriers() {
 	for (int i = 0; i < NUM_CARRIERS; i++) {
-		carrier[i] = malloc(MPX_SAMPLE_RATE * sizeof(float));
-		cos_carrier[i] = malloc(MPX_SAMPLE_RATE * sizeof(float));
 		create_carrier(carrier_frequencies[i], carrier[i], cos_carrier[i], &phase[i][1]);
 	}
 }
 
 void clear_mpx_carriers() {
-	for (int i = 0; i < NUM_CARRIERS; i++) {
-		free(carrier[i]);
-		free(cos_carrier[i]);
-	}
+	// no-op
 }
 
 float get_carrier(int carrier_num) {
