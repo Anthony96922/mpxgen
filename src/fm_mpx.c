@@ -57,7 +57,6 @@ typedef struct filter_t {
 	uint32_t sample_rate;
 	uint16_t index;
 	uint16_t size;
-	uint16_t half_size;
 	float *in[2];
 
 	// coefficients of the low-pass FIR filter
@@ -74,7 +73,6 @@ static inline void fir_filter_init(filter_t *flt, uint32_t sample_rate, uint16_t
 	flt = malloc(sizeof(filter_t));
 
 	flt->sample_rate = sample_rate;
-	flt->half_size = half_size;
 	flt->size = 2 * half_size - 1;
 
 	// setup input buffers
