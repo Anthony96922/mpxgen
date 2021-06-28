@@ -26,49 +26,58 @@ int open_alsa_output(char *output_device, unsigned int sample_rate, unsigned int
 	int err;
 	snd_pcm_hw_params_t *hw_params;
 
-	if ((err = snd_pcm_hw_params_malloc(&hw_params)) < 0) {
+	err = snd_pcm_hw_params_malloc(&hw_params);
+	if (err < 0) {
 		fprintf(stderr, "Error: cannot allocate hardware parameter structure (%s)\n", snd_strerror(err));
 		return -1;
 	}
 
-	if ((err = snd_pcm_open(&pcm, output_device, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
+	err = snd_pcm_open(&pcm, output_device, SND_PCM_STREAM_PLAYBACK, 0);
+	if (err < 0) {
 		fprintf(stderr, "Error: cannot open output audio device '%s' (%s)\n", output_device, snd_strerror(err));
 		return -1;
 	}
 
-	if ((err = snd_pcm_hw_params_any(pcm, hw_params)) < 0) {
+	err = snd_pcm_hw_params_any(pcm, hw_params);
+	if (err < 0) {
 		fprintf(stderr, "Error: no configurations available (%s)\n", snd_strerror(err));
 		return -1;
 	}
 
-	if ((err = snd_pcm_hw_params_set_access(pcm, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0) {
+	err = snd_pcm_hw_params_set_access(pcm, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
+	if (err < 0) {
 		fprintf(stderr, "Error: cannot set access type (%s)\n", snd_strerror(err));
 		return -1;
 	}
 
-	if ((snd_pcm_hw_params_set_format(pcm, hw_params, SND_PCM_FORMAT_S16_LE)) < 0) {
+	err = snd_pcm_hw_params_set_format(pcm, hw_params, SND_PCM_FORMAT_S16_LE);
+	if (err < 0) {
 		fprintf(stderr, "Error: cannot set sample format (%s)\n", snd_strerror(err));
 		return -1;
 	}
 
-	if ((err = snd_pcm_hw_params_set_rate(pcm, hw_params, sample_rate, 0)) < 0) {
+	err = snd_pcm_hw_params_set_rate(pcm, hw_params, sample_rate, 0);
+	if (err < 0) {
 		fprintf(stderr, "Error: cannle set sample rate to %u Hz: %s\n", sample_rate, snd_strerror(err));
 		return -1;
 	}
 
-	if ((err = snd_pcm_hw_params_set_channels(pcm, hw_params, channels)) < 0) {
+	err = snd_pcm_hw_params_set_channels(pcm, hw_params, channels);
+	if (err < 0) {
 		fprintf(stderr, "Error: cannot set channel count to %u (%s)\n", channels, snd_strerror(err));
 		return -1;
 	}
 
-	if ((err = snd_pcm_hw_params(pcm, hw_params)) < 0) {
+	err = snd_pcm_hw_params(pcm, hw_params);
+	if (err < 0) {
 		fprintf(stderr, "Error: unable to set hw params for playback (%s)\n", snd_strerror(err));
 		return -1;
 	}
 
 	snd_pcm_hw_params_free(hw_params);
 
-	if ((err = snd_pcm_prepare(pcm)) < 0) {
+	err = snd_pcm_prepare(pcm);
+	if (err < 0) {
 		fprintf(stderr, "Error: cannot prepare audio interface for use (%s)\n", snd_strerror(err));
 		return -1;
 	}
@@ -91,7 +100,8 @@ int write_alsa_output(short *buffer, size_t frames) {
 int close_alsa_output() {
 	int err;
 
-	if ((err = snd_pcm_drain(pcm)) < 0) {
+	err = snd_pcm_drain(pcm);
+	if (err < 0) {
 		fprintf(stderr, "Error: could not drain source (%s)\n", snd_strerror(err));
 	}
 	snd_pcm_close(pcm);

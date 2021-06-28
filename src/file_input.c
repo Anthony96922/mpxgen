@@ -27,13 +27,13 @@ static int audio_wait;
 
 static SNDFILE *inf;
 
-static size_t buffer_size;
+static size_t target_len;
 
 int open_file_input(char *filename, unsigned int *sample_rate, int wait, size_t num_frames) {
 	// Open the input file
         SF_INFO sfinfo;
 
-	buffer_size = num_frames;
+	target_len = num_frames;
 
 	// stdin or file on the filesystem?
 	if(filename[0] == '-' && filename[1] == 0) {
@@ -60,38 +60,26 @@ int open_file_input(char *filename, unsigned int *sample_rate, int wait, size_t 
 }
 
 int read_file_input(short *audio) {
-	int audio_len;
-	int frames_to_read = buffer_size;
-	int buffer_offset = 0;
+	int read_len;
+	int frames_to_read = target_len;
+	int audio_len = 0;
 	static short tmpbuf[65536];
 
-	while (frames_to_read) {
-		if ((audio_len = sf_readf_short(inf, tmpbuf + (buffer_offset * channels), frames_to_read)) < 0) {
+	while (frames_to_read > 0 && audio_len < target_len) {
+		if ((read_len = sf_readf_short(inf, tmpbuf + (audio_len * channels), frames_to_read)) < 0) {
 			fprintf(stderr, "Error reading audio\n");
 			return -1;
 		}
 
-		buffer_offset += audio_len;
-		frames_to_read -= audio_len;
-		if (audio_len == 0) {
-			return -1;
-			// Check if we have more audio
-			if (sf_seek(inf, 0, SEEK_SET) < 0) {
-				if (audio_wait) {
-					memset(audio, 0, buffer_size * 2 * sizeof(short));
-					frames_to_read = 0;
-				} else {
-					fprintf(stderr, "Could not rewind in audio file, terminating\n");
-					return -1;
-				}
-			}
-		}
+		audio_len += read_len;
+		frames_to_read -= read_len;
+		if (audio_len == 0) return -1;
 	}
 
 	if (channels == 1)
-		stereoizes16(tmpbuf, audio, buffer_size);
+		stereoizes16(tmpbuf, audio, audio_len);
 	else
-		memcpy(audio, tmpbuf, buffer_size * 2 * sizeof(short));
+		memcpy(audio, tmpbuf, audio_len * 2 * sizeof(short));
 
 	return 1;
 }

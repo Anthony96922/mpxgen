@@ -25,6 +25,7 @@
 #include "fm_mpx.h"
 #include "control_pipe.h"
 
+extern void set_output_ppm(float new_ppm);
 //#define CONTROL_PIPE_MESSAGES
 
 #define CTL_BUFFER_SIZE 100
