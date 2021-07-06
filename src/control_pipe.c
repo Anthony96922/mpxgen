@@ -152,13 +152,13 @@ int poll_control_pipe() {
 			return 1;
 		}
 		if (res[0] == 'R' && res[1] == 'T' && res[2] == 'P') {
-			unsigned int type_1, start_1, len_1, type_2, start_2, len_2;
-			if (sscanf(arg, "%u,%u,%u,%u,%u,%u", &type_1, &start_1, &len_1, &type_2, &start_2, &len_2) == 6) {
+			unsigned int tags[8];
+			if (sscanf(arg, "%u,%u,%u,%u,%u,%u", &tags[0], &tags[1], &tags[2], &tags[3], &tags[4], &tags[5]) == 6) {
 #ifdef CONTROL_PIPE_MESSAGES
-				fprintf(stderr, "RT+ tag 1: type: %u, start: %u, length: %u\n", type_1, start_1, len_1);
-				fprintf(stderr, "RT+ tag 2: type: %u, start: %u, length: %u\n", type_2, start_2, len_2);
+				fprintf(stderr, "RT+ tag 1: type: %u, start: %u, length: %u\n", tags[0], tags[1], tags[2]);
+				fprintf(stderr, "RT+ tag 2: type: %u, start: %u, length: %u\n", tags[3], tags[4], tags[5]);
 #endif
-				set_rds_rtp_tags(type_1, start_1, len_1, type_2, start_2, len_2);
+				set_rds_rtplus_tags((uint8_t *)tags);
 			}
 #ifdef CONTROL_PIPE_MESSAGES
 			else {
@@ -196,7 +196,7 @@ int poll_control_pipe() {
 #ifdef CONTROL_PIPE_MESSAGES
 				fprintf(stderr, "RT+ flags: running: %u, toggle: %u\n", running, toggle);
 #endif
-				set_rds_rtp_flags(running, toggle);
+				set_rds_rtplus_flags(running, toggle);
 			}
 #ifdef CONTROL_PIPE_MESSAGES
 			else {

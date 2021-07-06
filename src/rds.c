@@ -24,53 +24,47 @@
 #include "waveforms.h"
 #include "rds.h"
 
-static struct {
-	uint16_t pi;
-	uint8_t ta;
-	uint8_t pty;
-	uint8_t tp;
-	uint8_t ms;
-	uint8_t ab;
-	uint8_t di;
-	// PS
-	char ps[8];
-	// RT
-	char rt[64];
-	// PTYN
-	char ptyn[8];
-} rds_params;
-/* Here, the first member of the struct must be a scalar to avoid a
-   warning on -Wmissing-braces with GCC < 4.8.3
-   (bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53119)
-*/
+static rds_params_t rds_data;
 
 // RDS data controls
 static struct {
 	uint8_t ps_update;
 	uint8_t rt_update;
+	uint8_t ab;
 	uint8_t rt_segments;
 	uint8_t rt_bursting;
 	uint8_t ptyn_update;
-	uint8_t tx_ctime;
-} rds_controls;
+} rds_state;
 
-// AF
-rds_af_t af_list;
+// ODA
+#define MAX_ODAS        8
+static rds_oda_t odas[MAX_ODAS];
+static struct {
+	uint8_t current;
+	uint8_t count;
+} oda_state;
 
 // RT+
 static struct {
-	uint8_t group_num;
+	uint8_t group;
 	uint8_t running;
 	uint8_t toggle;
-	uint8_t type_1;
-	uint8_t start_1;
-	uint8_t len_1;
-	uint8_t type_2;
-	uint8_t start_2;
-	uint8_t len_2;
-} rtp_params;
+	uint8_t type[2];
+	uint8_t start[2];
+	uint8_t len[2];
+} rtplus_cfg;
 
-static uint16_t offset_words[] = {0x0FC, 0x198, 0x168, 0x1B4};
+static void register_oda(uint8_t group, uint16_t aid, uint16_t scb) {
+
+	if (oda_state.count == MAX_ODAS) return; // can't accept more ODAs
+
+	odas[oda_state.count].group = group;
+	odas[oda_state.count].aid = aid;
+	odas[oda_state.count].scb = scb;
+	oda_state.count++;
+}
+
+static uint16_t offset_words[] = {0x0FC, 0x198, 0x168, 0x1B4, 0x350 /* now we do */};
 // We don't handle offset word C' here for the sake of simplicity
 
 /* Classical CRC computation */
@@ -90,10 +84,11 @@ static uint16_t crc(uint16_t block) {
 
 // Calculate the checkword for each block and emit the bits
 void add_checkwords(uint16_t *blocks, uint8_t *bits) {
-	uint16_t block, check;
+	uint16_t block, check, offset_word;
 	for(int i=0; i<GROUP_LENGTH; i++) {
 		block = blocks[i];
-		check = crc(block) ^ offset_words[i];
+		offset_word = i == 3 && (blocks[1] >> 11) & 1 ? offset_words[5] : offset_words[i];
+		check = crc(block) ^ offset_word;
 		for(int j=0; j<BLOCK_SIZE; j++) {
 			*bits++ = ((block & (1<<(BLOCK_SIZE-1))) != 0);
 			block <<= 1;
@@ -147,26 +142,26 @@ static void get_rds_ps_group(uint16_t *blocks) {
 	static char ps_text[8];
 	static uint8_t ps_state, af_state;
 
-	if (ps_state == 0 && rds_controls.ps_update) {
-		strncpy(ps_text, rds_params.ps, 8);
-		rds_controls.ps_update = 0;
+	if (ps_state == 0 && rds_state.ps_update) {
+		strncpy(ps_text, rds_data.ps, 8);
+		rds_state.ps_update = 0;
 	}
 
-	blocks[1] |= /* 0 << 12 | */ rds_params.ta << 4 | rds_params.ms << 3 | ps_state;
+	blocks[1] |= /* 0 << 12 | */ rds_data.ta << 4 | rds_data.ms << 3 | ps_state;
 
 	// DI
-	blocks[1] |= ((rds_params.di >> (3 - ps_state)) & 1) << 2;
+	blocks[1] |= ((rds_data.di >> (3 - ps_state)) & 1) << 2;
 
 	// AF
-	if (af_list.num_afs) {
+	if (rds_data.af.num_afs) {
 		if (af_state == 0) {
-			blocks[2] = (af_list.num_afs + 224) << 8 | af_list.af[0];
+			blocks[2] = (rds_data.af.num_afs + 224) << 8 | rds_data.af.af[0];
 		} else {
-			blocks[2] = af_list.af[af_state] << 8 |
-					(af_list.af[af_state+1] ? af_list.af[af_state+1] : 0xCD);
+			blocks[2] = rds_data.af.af[af_state] << 8 |
+					(rds_data.af.af[af_state+1] ? rds_data.af.af[af_state+1] : 0xCD);
 		}
 		af_state += 2;
-		if (af_state > af_list.num_afs) af_state = 0;
+		if (af_state > rds_data.af.num_afs) af_state = 0;
 	} else {
 		blocks[2] = 0xE0CD; // no AF
 	}
@@ -183,21 +178,21 @@ static void get_rds_rt_group(uint16_t *blocks) {
 	static char rt_text[64];
 	static uint8_t rt_state;
 
-	if (rds_controls.rt_bursting) rds_controls.rt_bursting--;
+	if (rds_state.rt_bursting) rds_state.rt_bursting--;
 
-	if (rds_controls.rt_update) {
-		strncpy(rt_text, rds_params.rt, 64);
-		rds_params.ab ^= 1;
-		rds_controls.rt_update = 0;
+	if (rds_state.rt_update) {
+		strncpy(rt_text, rds_data.rt, 64);
+		rds_state.ab ^= 1;
+		rds_state.rt_update = 0;
 		rt_state = 0; // rewind when new RT arrives
 	}
 
-	blocks[1] |= 2 << 12 | rds_params.ab << 4 | rt_state;
+	blocks[1] |= 2 << 12 | rds_state.ab << 4 | rt_state;
 	blocks[2] = rt_text[rt_state*4+0] << 8 | rt_text[rt_state*4+1];
 	blocks[3] = rt_text[rt_state*4+2] << 8 | rt_text[rt_state*4+3];
 
 	rt_state++;
-	if (rt_state == rds_controls.rt_segments) rt_state = 0;
+	if (rt_state == rds_state.rt_segments) rt_state = 0;
 }
 
 /* ODA group (3A)
@@ -205,9 +200,14 @@ static void get_rds_rt_group(uint16_t *blocks) {
 static void get_rds_oda_group(uint16_t *blocks) {
 	blocks[1] |= 3 << 12;
 
-	// RT+
-	blocks[1] |= rtp_params.group_num << 1;
-	blocks[3] = 0x4BD7; // RT+ AID
+	// select ODA
+	rds_oda_t this_oda = odas[oda_state.current++];
+
+	blocks[1] |= GET_GROUP_TYPE(this_oda.group) << 1 |
+		     GET_GROUP_VER(this_oda.group);
+	blocks[2] = this_oda.scb;
+	blocks[3] = this_oda.aid;
+	if (oda_state.current == oda_state.count) oda_state.current = 0;
 }
 
 /* PTYN group (10A)
@@ -216,9 +216,9 @@ static void get_rds_ptyn_group(uint16_t *blocks) {
 	static char ptyn_text[8];
 	static uint8_t ptyn_state;
 
-	if (ptyn_state == 0 && rds_controls.ptyn_update) {
-		strncpy(ptyn_text, rds_params.ptyn, 8);
-		rds_controls.ptyn_update = 0;
+	if (ptyn_state == 0 && rds_state.ptyn_update) {
+		strncpy(ptyn_text, rds_data.ptyn, 8);
+		rds_state.ptyn_update = 0;
 	}
 
 	blocks[1] |= 10 << 12 | ptyn_state;
@@ -229,16 +229,27 @@ static void get_rds_ptyn_group(uint16_t *blocks) {
 	if (ptyn_state == 2) ptyn_state = 0;
 }
 
+// RT+
+static void init_rtplus(uint8_t group) {
+        register_oda(group, 0x4BD7 /* RT+ AID */, 0);
+	rtplus_cfg.group = group;
+}
+
 /* RT+ group
  */
-static void get_rds_rtp_group(uint16_t *blocks) {
+static void get_rds_rtplus_group(uint16_t *blocks) {
 	// RT+ block format
-	blocks[1] |= rtp_params.group_num << 12 | rtp_params.toggle << 4 |
-		     rtp_params.running << 3 | (rtp_params.type_1 & 0x38) >> 3;
-	blocks[2] = (rtp_params.type_1 & 0x7) << 13 | (rtp_params.start_1 & 0x3F) << 7 |
-		    (rtp_params.len_1 & 0x3F) << 1 | (rtp_params.type_2 & 0x20) >> 5;
-	blocks[3] = (rtp_params.type_2 & 0x1F) << 11 | (rtp_params.start_2 & 0x3F) << 5 |
-		    (rtp_params.len_2 & 0x1F);
+	blocks[1] |= GET_GROUP_TYPE(rtplus_cfg.group) << 12 |
+		     GET_GROUP_VER(rtplus_cfg.group) << 11 |
+		     rtplus_cfg.toggle << 4 | rtplus_cfg.running << 3 |
+		    (rtplus_cfg.type[0] & 0x38) >> 3;
+	blocks[2] = (rtplus_cfg.type[0] & 0x7) << 13 |
+		    (rtplus_cfg.start[0] & 0x3F) << 7 |
+		    (rtplus_cfg.len[0] & 0x3F) << 1 |
+		    (rtplus_cfg.type[1] & 0x20) >> 5;
+	blocks[3] = (rtplus_cfg.type[1] & 0x1F) << 11 |
+		    (rtplus_cfg.start[1] & 0x3F) << 5 |
+		    (rtplus_cfg.len[1] & 0x1F);
 }
 
 /* Lower priority groups are placed in a subsequence
@@ -257,7 +268,7 @@ static int get_rds_other_groups(uint16_t *blocks) {
 	// Type 10A groups
 	if (!group_coded && ++group[10] == 10) {
 		group[10] = 0;
-		if (rds_params.ptyn[0]) {
+		if (rds_data.ptyn[0]) {
 			// Do not generate a 10A group if PTYN is off
 			get_rds_ptyn_group(blocks);
 			group_coded = 1;
@@ -265,9 +276,9 @@ static int get_rds_other_groups(uint16_t *blocks) {
 	}
 
 	// Type 11A groups
-	if (!group_coded && ++group[rtp_params.group_num] == 20) {
-		group[rtp_params.group_num] = 0;
-		get_rds_rtp_group(blocks);
+	if (!group_coded && ++group[rtplus_cfg.group] == 20) {
+		group[rtplus_cfg.group] = 0;
+		get_rds_rtplus_group(blocks);
 		group_coded = 1;
 	}
 
@@ -281,12 +292,12 @@ static void get_rds_group(uint16_t *blocks) {
 	static uint8_t state;
 
 	// Basic block data
-	blocks[0] = rds_params.pi;
-	blocks[1] = rds_params.tp << 10 | rds_params.pty << 5;
+	blocks[0] = rds_data.pi;
+	blocks[1] = rds_data.tp << 10 | rds_data.pty << 5;
 
 	// Generate block content
 	// CT (clock time) has priority on other group types
-	if(!(rds_controls.tx_ctime && get_rds_ct_group(blocks))) {
+	if(!(rds_data.tx_ctime && get_rds_ct_group(blocks))) {
 		if (!get_rds_other_groups(blocks)) { // Other groups
 			// These are always transmitted
 			if (!state) { // Type 0A groups
@@ -294,7 +305,7 @@ static void get_rds_group(uint16_t *blocks) {
 				state++;
 			} else { // Type 2A groups
 				get_rds_rt_group(blocks);
-				if (!rds_controls.rt_bursting) state++;
+				if (!rds_state.rt_bursting) state++;
 			}
 			if(state == 2) state = 0;
 		}
@@ -324,6 +335,8 @@ float get_rds_sample() {
 	static uint16_t in_sample_index;
 	static uint16_t out_sample_index;
 
+	float sample;
+
 	if(sample_count == SAMPLES_PER_BIT) {
 		if(bit_pos == BITS_PER_GROUP) {
 			get_rds_bits(bit_buffer);
@@ -352,8 +365,7 @@ float get_rds_sample() {
 	}
 	sample_count++;
 
-	float sample = sample_buffer[out_sample_index];
-
+	sample = sample_buffer[out_sample_index];
 	sample_buffer[out_sample_index++] = 0;
 	if(out_sample_index >= SAMPLE_BUFFER_SIZE) out_sample_index = 0;
 
@@ -399,7 +411,7 @@ static uint16_t callsign2pi(char *callsign) {
 	return pi_code;
 }
 
-int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, rds_af_t init_af, char *ptyn, char *call_sign) {
+int init_rds_encoder(rds_params_t rds_params, char *call_sign) {
 
 	// The RDS pty region. This determines which PTY list to use
 	enum rds_pty_regions {
@@ -425,7 +437,7 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, r
 			"Sport", "Education", "Drama", "Culture", "Science",
 			"Varied", "Pop music", "Rock music", "Easy listening",
 			"Light classical", "Serious classical", "Other music",
-			"Weather", "Finance", "Children's programmes",
+			"Weather", "Finance", "Children's programs",
 			"Social affairs", "Religion", "Phone-in", "Travel",
 			"Leisure", "Jazz music", "Country music",
 			"National music", "Oldies music", "Folk music",
@@ -434,7 +446,7 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, r
 	};
 
 
-	if (pty > 31) {
+	if (rds_data.pty > 31) {
 		fprintf(stderr, "PTY must be between 0 - 31.\n");
 		return -1;
 	}
@@ -443,7 +455,7 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, r
 		uint16_t new_pi;
 		if ((new_pi = callsign2pi(call_sign))) {
 			fprintf(stderr, "Calculated PI code from callsign '%s'.\n", call_sign);
-			pi = new_pi;
+			rds_params.pi = new_pi;
 		} else {
 			fprintf(stderr, "Invalid callsign '%s'.\n", call_sign);
 		}
@@ -451,132 +463,132 @@ int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty, uint8_t tp, r
 
 	fprintf(stderr, "RDS Options:\n");
 	fprintf(stderr, "PI: %04X, PS: \"%s\", PTY: %d (%s), TP: %d\n",
-		pi, ps, pty, ptys[pty_region][pty], tp);
-	fprintf(stderr, "RT: \"%s\"\n", rt);
+		rds_params.pi,
+		rds_params.ps,
+		rds_params.pty,
+		ptys[pty_region][rds_params.pty],
+		rds_params.tp);
+	fprintf(stderr, "RT: \"%s\"\n", rds_params.rt);
 
 	// AF
-	if(init_af.num_afs) {
-		set_rds_af(init_af);
-		fprintf(stderr, "AF: %d,", init_af.num_afs);
-		for(int f = 0; f < init_af.num_afs; f++) {
-			fprintf(stderr, " %.1f", (init_af.af[f]+875)/10.0);
+	if(rds_params.af.num_afs) {
+		set_rds_af(rds_params.af);
+		fprintf(stderr, "AF: %d,", rds_params.af.num_afs);
+		for(int f = 0; f < rds_params.af.num_afs; f++) {
+			fprintf(stderr, " %.1f", (rds_params.af.af[f]+875)/10.0);
 		}
 		fprintf(stderr, "\n");
 	}
 
-	set_rds_pi(pi);
-	set_rds_ps(ps);
+	set_rds_pi(rds_params.pi);
+	set_rds_ps(rds_params.ps);
 	set_rds_ab(1);
-	set_rds_rt(rt);
-	set_rds_pty(pty);
-	if (ptyn[0]) {
-		fprintf(stderr, "PTYN: \"%s\"\n", ptyn);
-		set_rds_ptyn(ptyn);
+	set_rds_rt(rds_params.rt);
+	set_rds_pty(rds_params.pty);
+	if (rds_params.ptyn[0]) {
+		fprintf(stderr, "PTYN: \"%s\"\n", rds_params.ptyn);
+		set_rds_ptyn(rds_params.ptyn);
 	}
-	set_rds_tp(tp);
+	set_rds_tp(rds_params.tp);
 	set_rds_ct(1);
 	set_rds_ms(1);
 	set_rds_di(DI_STEREO);
 
 	// Assign the RT+ AID to group 11A
-	rtp_params.group_num = 11;
+	init_rtplus(GROUP_11A);
 
 	return 0;
 }
 
 void set_rds_pi(uint16_t pi_code) {
-	rds_params.pi = pi_code;
+	rds_data.pi = pi_code;
 }
 
 void set_rds_rt(char *rt) {
 	uint8_t rt_len = strlen(rt);
-	rds_controls.rt_update = 1;
-	memset(rds_params.rt, 0, 64);
-	memcpy(rds_params.rt, rt, rt_len);
+	rds_state.rt_update = 1;
+	memset(rds_data.rt, 0, 64);
+	memcpy(rds_data.rt, rt, rt_len);
 
 	if (rt_len < 64) {
 		/* Terminate RT with '\r' (carriage return) if RT
 		 * is < 64 characters long
 		 */
-		rds_params.rt[rt_len++] = '\r';
+		rds_data.rt[rt_len++] = '\r';
 
 		for (int i = 0; i <= 64; i += 4) {
 			if (i >= rt_len) {
-				rds_controls.rt_segments = i / 4;
+				rds_state.rt_segments = i / 4;
 				break;
 			}
 			// We have reached the end of the text string
 		}
 	} else {
 		// Default to 16 if RT is 64 characters long
-		rds_controls.rt_segments = 16;
+		rds_state.rt_segments = 16;
 	}
 
-	rds_controls.rt_bursting = rds_controls.rt_segments;
+	rds_state.rt_bursting = rds_state.rt_segments;
 }
 
 void set_rds_ps(char *ps) {
-	rds_controls.ps_update = 1;
-	memset(rds_params.ps, ' ', 8);
-	memcpy(rds_params.ps, ps, strlen(ps));
+	rds_state.ps_update = 1;
+	memset(rds_data.ps, ' ', 8);
+	memcpy(rds_data.ps, ps, strlen(ps));
 }
 
-void set_rds_rtp_flags(uint8_t running, uint8_t toggle) {
-	rtp_params.running = running;
-	rtp_params.toggle = toggle;
+void set_rds_rtplus_flags(uint8_t running, uint8_t toggle) {
+	rtplus_cfg.running = running;
+	rtplus_cfg.toggle = toggle;
 }
 
-void set_rds_rtp_tags(uint8_t type_1, uint8_t start_1, uint8_t len_1,
-		      uint8_t type_2, uint8_t start_2, uint8_t len_2) {
-	rtp_params.type_1 = (type_1 < 63) ? type_1 : 0;
-	rtp_params.start_1 = (start_1 < 64) ? start_1 : 0;
-	rtp_params.len_1 = (len_1 < 63) ? len_1 : 0;
-	rtp_params.type_2 = (type_2 < 63) ? type_2 : 0;
-	rtp_params.start_2 = (start_2 < 64) ? start_2 : 0;
-	rtp_params.len_2 = (len_2 < 32) ? len_2 : 0;
+void set_rds_rtplus_tags(uint8_t *tags) {
+	rtplus_cfg.type[0]	= (tags[0] < 63) ? tags[0] : 0;
+	rtplus_cfg.start[0]	= (tags[1] < 64) ? tags[1] : 0;
+	rtplus_cfg.len[0]	= (tags[2] < 63) ? tags[2] : 0;
+	rtplus_cfg.type[1]	= (tags[3] < 63) ? tags[3] : 0;
+	rtplus_cfg.start[1]	= (tags[4] < 64) ? tags[4] : 0;
+	rtplus_cfg.len[1]	= (tags[5] < 32) ? tags[5] : 0;
 }
 
 void set_rds_af(rds_af_t new_af_list) {
-	af_list.num_afs = new_af_list.num_afs;
-	for(int f = 0; f < new_af_list.num_afs; f++) {
-		af_list.af[f] = new_af_list.af[f];
-	}
+	memcpy(&rds_data.af, &new_af_list, sizeof(new_af_list));
 }
 
 void set_rds_pty(uint8_t pty) {
-	rds_params.pty = pty;
+	rds_data.pty = pty;
 }
 
 void set_rds_ptyn(char *ptyn) {
-	rds_controls.ptyn_update = 1;
+	rds_state.ptyn_update = 1;
 	if (ptyn[0]) {
-		memset(rds_params.ptyn, ' ', 8);
-		memcpy(rds_params.ptyn, ptyn, strlen(ptyn));
+		memset(rds_data.ptyn, ' ', 8);
+		memcpy(rds_data.ptyn, ptyn, strlen(ptyn));
 	} else {
-		memset(rds_params.ptyn, 0, 8);
+		memset(rds_data.ptyn, 0, 8);
 	}
 }
 
 void set_rds_ta(uint8_t ta) {
-	rds_params.ta = ta;
+	rds_data.ta = ta;
 }
 
 void set_rds_tp(uint8_t tp) {
-	rds_params.tp = tp;
+	rds_data.tp = tp;
 }
 
 void set_rds_ms(uint8_t ms) {
-	rds_params.ms = ms;
+	rds_data.ms = ms;
 }
 
 void set_rds_ab(uint8_t ab) {
-	rds_params.ab = ab;
+	rds_state.ab = ab;
 }
 
 void set_rds_di(uint8_t di) {
-	rds_params.di = di;
+	rds_data.di = di;
 }
 
 void set_rds_ct(uint8_t ct) {
-	rds_controls.tx_ctime = ct;
+	rds_data.tx_ctime = ct;
 }

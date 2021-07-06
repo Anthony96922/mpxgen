@@ -37,29 +37,127 @@
 
 #define MAX_AF 25
 
-typedef struct {
+typedef struct rds_af_t {
 	uint8_t num_afs;
 	uint8_t af[MAX_AF];
 } rds_af_t;
+
+typedef struct rds_params_t {
+	uint16_t pi;
+	uint8_t ta;
+	uint8_t pty;
+	uint8_t tp;
+	uint8_t ms;
+	uint8_t di;
+	// PS
+	char ps[8];
+	// RT
+	char rt[64];
+	// PTYN
+	char ptyn[8];
+
+	rds_af_t af;
+
+	uint8_t tx_ctime;
+} rds_params_t;
+/* Here, the first member of the struct must be a scalar to avoid a
+   warning on -Wmissing-braces with GCC < 4.8.3
+   (bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53119)
+*/
+
+/* Group type
+ *
+ * 0-15
+ */
+#define GROUP_TYPE_0	(0 << 4)
+#define GROUP_TYPE_1	(1 << 4)
+#define GROUP_TYPE_2	(2 << 4)
+#define GROUP_TYPE_3	(3 << 4)
+#define GROUP_TYPE_4	(4 << 4)
+#define GROUP_TYPE_5	(5 << 4)
+#define GROUP_TYPE_6	(6 << 4)
+#define GROUP_TYPE_7	(7 << 4)
+#define GROUP_TYPE_8	(8 << 4)
+#define GROUP_TYPE_9	(9 << 4)
+#define GROUP_TYPE_10	(10 << 4)
+#define GROUP_TYPE_11	(11 << 4)
+#define GROUP_TYPE_12	(12 << 4)
+#define GROUP_TYPE_13	(13 << 4)
+#define GROUP_TYPE_14	(14 << 4)
+#define GROUP_TYPE_15	(15 << 4)
+
+/* Group versions
+ *
+ * The first 4 bits are the group number and the remaining 4 are
+ * the group version
+ */
+#define GROUP_VER_A	0
+#define GROUP_VER_B	1
+
+// Version A groups
+#define GROUP_0A	(GROUP_TYPE_0 | GROUP_VER_A)
+#define GROUP_1A	(GROUP_TYPE_1 | GROUP_VER_A)
+#define GROUP_2A	(GROUP_TYPE_2 | GROUP_VER_A)
+#define GROUP_3A	(GROUP_TYPE_3 | GROUP_VER_A)
+#define GROUP_4A	(GROUP_TYPE_4 | GROUP_VER_A)
+#define GROUP_5A	(GROUP_TYPE_5 | GROUP_VER_A)
+#define GROUP_6A	(GROUP_TYPE_6 | GROUP_VER_A)
+#define GROUP_7A	(GROUP_TYPE_7 | GROUP_VER_A)
+#define GROUP_8A	(GROUP_TYPE_8 | GROUP_VER_A)
+#define GROUP_9A	(GROUP_TYPE_9 | GROUP_VER_A)
+#define GROUP_10A	(GROUP_TYPE_10 | GROUP_VER_A)
+#define GROUP_11A	(GROUP_TYPE_11 | GROUP_VER_A)
+#define GROUP_12A	(GROUP_TYPE_12 | GROUP_VER_A)
+#define GROUP_13A	(GROUP_TYPE_13 | GROUP_VER_A)
+#define GROUP_14A	(GROUP_TYPE_14 | GROUP_VER_A)
+#define GROUP_15A	(GROUP_TYPE_15 | GROUP_VER_A)
+
+// Version B groups
+#define GROUP_0B	(GROUP_TYPE_0 | GROUP_VER_B)
+#define GROUP_1B	(GROUP_TYPE_1 | GROUP_VER_B)
+#define GROUP_2B	(GROUP_TYPE_2 | GROUP_VER_B)
+#define GROUP_3B	(GROUP_TYPE_3 | GROUP_VER_B)
+#define GROUP_4B	(GROUP_TYPE_4 | GROUP_VER_B)
+#define GROUP_5B	(GROUP_TYPE_5 | GROUP_VER_B)
+#define GROUP_6B	(GROUP_TYPE_6 | GROUP_VER_B)
+#define GROUP_7B	(GROUP_TYPE_7 | GROUP_VER_B)
+#define GROUP_8B	(GROUP_TYPE_8 | GROUP_VER_B)
+#define GROUP_9B	(GROUP_TYPE_9 | GROUP_VER_B)
+#define GROUP_10B	(GROUP_TYPE_10 | GROUP_VER_B)
+#define GROUP_11B	(GROUP_TYPE_11 | GROUP_VER_B)
+#define GROUP_12B	(GROUP_TYPE_12 | GROUP_VER_B)
+#define GROUP_13B	(GROUP_TYPE_13 | GROUP_VER_B)
+#define GROUP_14B	(GROUP_TYPE_14 | GROUP_VER_B)
+#define GROUP_15B	(GROUP_TYPE_15 | GROUP_VER_B)
+
+#define GET_GROUP_TYPE(x)	((x >> 4) & 15)
+#define GET_GROUP_VER(x)	(x & 1) // only check bit 0
+
+/* RDS ODA ID group
+ *
+ * This struct is for defining ODAs that will be transmitted
+ *
+ * Can signal version A or B data groups
+ */
+typedef struct rds_oda_t {
+	uint8_t group;
+	uint16_t aid;
+	uint16_t scb;
+} rds_oda_t;
 
 #define DI_STEREO	1 // 1 - Stereo
 #define DI_AH		2 // 2 - Artificial Head
 #define DI_COMPRESSED	4 // 4 - Compressed
 #define DI_DPTY		8 // 8 - Dynamic PTY
 
-extern int init_rds_encoder(uint16_t pi, char *ps, char *rt, uint8_t pty,
-			    uint8_t tp, rds_af_t init_afs, char *ptyn,
-			    char *call_sign);
-
+extern int init_rds_encoder(rds_params_t rds_params, char *call_sign);
 extern void add_checkwords(uint16_t *blocks, uint8_t *bits);
 extern float get_rds_sample();
-
 extern void set_rds_pi(uint16_t pi_code);
 extern void set_rds_rt(char *rt);
 extern void set_rds_ps(char *ps);
-extern void set_rds_rtp_flags(uint8_t running, uint8_t toggle);
-extern void set_rds_rtp_tags(uint8_t type_1, uint8_t start_1, uint8_t len_1,
-			     uint8_t type_2, uint8_t start_2, uint8_t len_2);
+extern void set_rds_rtplus_flags(uint8_t running, uint8_t toggle);
+extern void set_rds_rtplus_tags(uint8_t *tags);
 extern void set_rds_ta(uint8_t ta);
 extern void set_rds_pty(uint8_t pty);
 extern void set_rds_ptyn(char *ptyn);
