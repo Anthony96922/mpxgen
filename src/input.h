@@ -19,6 +19,6 @@
 #include "file_input.h"
 #include "alsa_input.h"
 
-int open_input(char *input_name, int wait, unsigned int *sample_rate);
+int open_input(char *input_name, int wait, unsigned int *sample_rate, size_t num_frames);
 int read_input(short *audio);
 void close_input();

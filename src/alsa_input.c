@@ -18,7 +18,6 @@
 
 #include <stdio.h>
 #include <alsa/asoundlib.h>
-#include "audio_conversion.h"
 
 static size_t buffer_size;
 static snd_pcm_t *pcm;

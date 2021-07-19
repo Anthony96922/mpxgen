@@ -18,7 +18,6 @@
 
 #include <stdio.h>
 #include <alsa/asoundlib.h>
-#include "audio_conversion.h"
 
 static snd_pcm_t *pcm;
 
@@ -58,7 +57,7 @@ int open_alsa_output(char *output_device, unsigned int sample_rate, unsigned int
 
 	err = snd_pcm_hw_params_set_rate(pcm, hw_params, sample_rate, 0);
 	if (err < 0) {
-		fprintf(stderr, "Error: cannle set sample rate to %u Hz: %s\n", sample_rate, snd_strerror(err));
+		fprintf(stderr, "Error: cannot set sample rate to %u Hz: %s\n", sample_rate, snd_strerror(err));
 		return -1;
 	}
 

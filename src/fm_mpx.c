@@ -68,7 +68,7 @@ typedef struct filter_t {
 // filter state
 static filter_t *fir_low_pass;
 
-static inline void fir_filter_init(filter_t *flt, uint32_t sample_rate, uint16_t half_size) {
+static void fir_filter_init(filter_t *flt, uint32_t sample_rate, uint16_t half_size) {
 
 	flt = malloc(sizeof(filter_t));
 
@@ -78,7 +78,6 @@ static inline void fir_filter_init(filter_t *flt, uint32_t sample_rate, uint16_t
 	// setup input buffers
 	flt->in[0] = malloc(half_size * sizeof(float));
 	flt->in[1] = malloc(half_size * sizeof(float));
-
 	flt->filter = malloc(half_size * sizeof(float));
 
 	// Here we divide this coefficient by two because it will be counted twice
@@ -86,11 +85,11 @@ static inline void fir_filter_init(filter_t *flt, uint32_t sample_rate, uint16_t
 	flt->filter[half_size-1] = 2 * 24000 / sample_rate / 2;
 
 	// Only store half of the filter since it is symmetric
+	float filter, window;
 	for(int i=1; i<half_size; i++) {
-		float tmp;
-		tmp = sin(2 * M_PI * 24000 * i / sample_rate) / (M_PI * i); // sinc
-		tmp *= .54 - .46 * cos(2 * M_PI * (i+half_size) / (2*half_size)); // Hamming window
-		flt->filter[half_size-1-i] = tmp;
+		filter = sin(2 * M_PI * 24000 * i / sample_rate) / (M_PI * i); // sinc
+		window = .54 - .46 * cos(2 * M_PI * (i+half_size) / (2*half_size)); // Hamming window
+		flt->filter[half_size-1-i] = filter * window;
 	}
 }
 
@@ -124,7 +123,7 @@ static inline void fir_filter_get(filter_t *flt, float *out) {
 	out[1] = flt->out[1];
 }
 
-static inline void fir_filter_exit(filter_t *flt) {
+static void fir_filter_exit(filter_t *flt) {
 	free(flt->in[0]);
 	free(flt->in[1]);
 	free(flt->filter);
@@ -134,7 +133,7 @@ static inline void fir_filter_exit(filter_t *flt) {
 void fm_mpx_init() {
 	create_mpx_carriers();
 	init_hilbert_transformer();
-	fir_filter_init(fir_low_pass, MPX_SAMPLE_RATE, 30);
+	fir_filter_init(fir_low_pass, MPX_SAMPLE_RATE, 256);
 }
 
 /*
@@ -185,7 +184,7 @@ static inline float get_asymmetric_dsb(float in, int carrier, float asymmetry) {
 		(inphase - quadrature) * usb_power;  /* usb */
 }
 
-void fm_mpx_get_samples(float *in_audio, float *out) {
+void fm_mpx_get_samples(float *in, float *out) {
 	int j = 0;
 
 	float lowpass_filter_in[2];
@@ -193,9 +192,9 @@ void fm_mpx_get_samples(float *in_audio, float *out) {
 	float out_left, out_right;
 	float out_mono, out_stereo;
 
-	for (int i = 0; i < NUM_AUDIO_FRAMES_OUT; i++) {
-		lowpass_filter_in[0] = in_audio[j+0];
-		lowpass_filter_in[1] = in_audio[j+1];
+	for (int i = 0; i < NUM_AUDIO_FRAMES_IN; i++) {
+		lowpass_filter_in[0] = in[j+0];
+		lowpass_filter_in[1] = in[j+1];
 
 		// First store the current sample(s) into the FIR filter's ring buffer
 		fir_filter_add(fir_low_pass, lowpass_filter_in);

@@ -18,25 +18,24 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "fm_mpx.h"
 #include "input.h"
 
 static int input_type;
 
-int open_input(char *input_name, int wait, unsigned int *sample_rate) {
+int open_input(char *input_name, int wait, unsigned int *sample_rate, size_t num_frames) {
 	// TODO: better detect live capture cards
 	if (input_name[0] == 'a' && input_name[1] == 'l' &&
 	    input_name[2] == 's' && input_name[3] == 'a' &&
 	    input_name[4] == ':') { // check if name is prefixed with "alsa:"
 		*sample_rate = 48000;
 		input_name = input_name+5; // don't pass prefix
-		if (open_alsa_input(input_name, *sample_rate, NUM_AUDIO_FRAMES_IN) < 0) {
+		if (open_alsa_input(input_name, *sample_rate, num_frames) < 0) {
 			fprintf(stderr, "Could not open ALSA source.\n");
 			return 0;
 		}
 		input_type = 2;
 	} else {
-		if (open_file_input(input_name, sample_rate, wait, NUM_AUDIO_FRAMES_IN) < 0) {
+		if (open_file_input(input_name, sample_rate, wait, num_frames) < 0) {
 			return 0;
 		}
 		input_type = 1;
