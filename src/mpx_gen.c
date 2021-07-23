@@ -37,6 +37,7 @@ static float *resampled_audio_in_buffer;
 static float *mpx_buffer;
 static float *resampled_mpx_buffer;
 
+// pthread
 static pthread_t control_pipe_thread;
 static pthread_t audio_input_thread;
 static pthread_t input_resampler_thread;
@@ -92,8 +93,7 @@ typedef struct resample_thread_args_t {
 } resample_thread_args_t;
 
 typedef struct audio_io_thread_args_t {
-	float *in;
-	float *out;
+	float *data;
 	size_t frames;
 } audio_io_thread_args_t;
 
@@ -116,24 +116,26 @@ static void *control_pipe_worker(void *arg) {
 
 static void *audio_input_worker(void *arg) {
 	int r;
-	short buf[65536];
+	short buf[NUM_AUDIO_FRAMES_IN*2];
 	audio_io_thread_args_t *args = (audio_io_thread_args_t *)arg;
 
 	while (!stop_mpx) {
 		r = read_input(buf);
 		if (r < 0) break;
-		short2float(buf, args->in, args->frames);
+		short2float(buf, args->data, args->frames * 2);
+		pthread_cond_signal(&input_resampler_cond);
 	}
 
 	pthread_exit(NULL);
 }
 
+// memcpy for copying float frames
 #define floatf_memcpy(x, y, z) memcpy(x, y, z * 2 * sizeof(float))
 
 static void *input_resampler_worker(void *arg) {
 	int r;
-	static float outbuf[1048576];
-	static float leftoverbuf[1048576];
+	static float outbuf[NUM_AUDIO_FRAMES_OUT*2];
+	static float leftoverbuf[NUM_AUDIO_FRAMES_OUT*4];
 	static size_t outframes;
 	static size_t total_outframes = 0;
 	static size_t extra_frames;
@@ -144,6 +146,9 @@ static void *input_resampler_worker(void *arg) {
 	args->data.output_frames = args->frames_out;
 
 	while (!stop_mpx) {
+
+		pthread_cond_wait(&input_resampler_cond, &input_resampler_mutex);
+
 		if (extra_frames) {
 			floatf_memcpy(args->out, leftoverbuf, extra_frames);
 			total_outframes += extra_frames;
@@ -152,6 +157,8 @@ static void *input_resampler_worker(void *arg) {
 		while (total_outframes < args->frames_out) {
 			r = resample(*args->state, args->data, &outframes);
 			if (r < 0) break;
+			floatf_memcpy(args->data.data_out, outbuf + outframes, outframes);
+			args->data.data_out += outframes*2;
 			total_outframes += outframes;
 		}
 		if (total_outframes > args->frames_out) {
@@ -160,8 +167,9 @@ static void *input_resampler_worker(void *arg) {
 			floatf_memcpy(leftoverbuf, args->data.data_out + extra_frames, extra_frames);
 		}
 		if (total_outframes == args->frames_out) {
-			memcpy(args->out, args->data.data_out, args->frames_out * 2 * sizeof(float));
+			floatf_memcpy(args->out, args->data.data_out, args->frames_out);
 		}
+		args->data.data_out = args->out;
 		total_outframes = 0;
 	}
 
@@ -172,7 +180,9 @@ static void *mpx_worker(void *arg) {
 	mpx_thread_args_t *args = (mpx_thread_args_t *)arg;
 
 	while (!stop_mpx) {
+		pthread_cond_wait(&mpx_cond, &mpx_mutex);
 		fm_mpx_get_samples(args->in, args->out);
+		pthread_cond_signal(&output_resampler_cond);
 	}
 
 	pthread_exit(NULL);
@@ -182,7 +192,9 @@ static void *rds_worker(void *arg) {
 	mpx_thread_args_t *args = (mpx_thread_args_t *)arg;
 
 	while (!stop_mpx) {
+		pthread_cond_wait(&rds_cond, &rds_mutex);
 		fm_rds_get_samples(args->out);
+		pthread_cond_signal(&output_resampler_cond);
 	}
 
 
@@ -191,8 +203,8 @@ static void *rds_worker(void *arg) {
 
 static void *output_resampler_worker(void *arg) {
 	int r;
-	static float outbuf[1048576];
-	static float leftoverbuf[1048576];
+	static float outbuf[NUM_MPX_FRAMES_OUT*2];
+	static float leftoverbuf[NUM_MPX_FRAMES_OUT*4];
 	static size_t outframes;
 	static size_t total_outframes = 0;
 	static size_t extra_frames;
@@ -203,6 +215,9 @@ static void *output_resampler_worker(void *arg) {
 	args->data.output_frames = args->frames_out;
 
 	while (!stop_mpx) {
+
+		pthread_cond_wait(&output_resampler_cond, &output_resampler_mutex);
+
 		if (extra_frames) {
 			floatf_memcpy(args->out, leftoverbuf, extra_frames);
 			total_outframes += extra_frames;
@@ -211,6 +226,8 @@ static void *output_resampler_worker(void *arg) {
 		while (total_outframes < args->frames_out) {
 			r = resample(*args->state, args->data, &outframes);
 			if (r < 0) break;
+			floatf_memcpy(args->data.data_out, outbuf + outframes, outframes);
+			args->data.data_out += outframes*2;
 			total_outframes += outframes;
 		}
 		if (total_outframes > args->frames_out) {
@@ -221,6 +238,7 @@ static void *output_resampler_worker(void *arg) {
 		if (total_outframes == args->frames_out) {
 			floatf_memcpy(args->out, args->data.data_out, args->frames_out);
 		}
+		args->data.data_out = args->out;
 		total_outframes = 0;
 	}
 
@@ -229,11 +247,12 @@ static void *output_resampler_worker(void *arg) {
 
 static void *audio_output_worker(void *arg) {
 	int r;
-	short buf[65536];
+	short buf[NUM_MPX_FRAMES_OUT*2];
 	audio_io_thread_args_t *args = (audio_io_thread_args_t *)arg;
 
 	while (!stop_mpx) {
-		float2short(args->out, buf, args->frames);
+		pthread_cond_wait(&audio_output_cond, &audio_output_mutex);
+		float2short(args->data, buf, args->frames * 2);
 		r = write_output(buf, args->frames);
 		if (r < 0) break;
 	}
@@ -437,8 +456,7 @@ int main(int argc, char **argv) {
 	pthread_cond_init(&mpx_cond, NULL);
 	pthread_cond_init(&rds_cond, NULL);
 	pthread_cond_init(&output_resampler_cond, NULL);
-	pthread_cond_init(&audio_input_cond, NULL);
-
+	pthread_cond_init(&audio_output_cond, NULL);
 	pthread_attr_init(&attr);
 
 	// buffers
@@ -468,8 +486,8 @@ int main(int argc, char **argv) {
 
 	if (output_open_success) {
 		audio_io_thread_args_t audio_output_thread_args;
-		audio_output_thread_args.in = resampled_mpx_buffer;
-		audio_output_thread_args.frames = NUM_AUDIO_FRAMES_OUT;
+		audio_output_thread_args.data = resampled_mpx_buffer;
+		audio_output_thread_args.frames = NUM_MPX_FRAMES_OUT;
 		// start output thread
 		r = pthread_create(&audio_output_thread, &attr, audio_output_worker, (void *)&audio_output_thread_args);
 		if (r < 0) {
@@ -479,6 +497,8 @@ int main(int argc, char **argv) {
 			fprintf(stderr, "Created output thread.\n");
 		}
 	}
+
+	usleep(10000);
 
 	if (audio_file[0]) {
 		audio_in_buffer = malloc(NUM_AUDIO_FRAMES_IN * 2 * sizeof(float));
@@ -493,7 +513,7 @@ int main(int argc, char **argv) {
 
 		r = resampler_init(&src_state[0], 2);
 		if (r < 0) {
-			fprintf(stderr, "Could not create input resampler thread.\n");
+			fprintf(stderr, "Could not create input resampler.\n");
 			goto exit;
 		}
 
@@ -514,8 +534,10 @@ int main(int argc, char **argv) {
 			fprintf(stderr, "Created input resampler thread.\n");
 		}
 
+		usleep(10000);
+
 		audio_io_thread_args_t audio_input_thread_args;
-		audio_input_thread_args.out = audio_in_buffer;
+		audio_input_thread_args.data = audio_in_buffer;
 		audio_input_thread_args.frames = NUM_AUDIO_FRAMES_IN;
 
 		// start audio input thread
@@ -526,10 +548,6 @@ int main(int argc, char **argv) {
 		} else {
 			fprintf(stderr, "Created file input thread.\n");
 		}
-
-		src_data[1].input_frames = NUM_MPX_FRAMES_IN;
-	} else {
-		src_data[1].input_frames = NUM_RDS_FRAMES_IN;
 	}
 
 	// SRC out (MPX -> output)
@@ -547,6 +565,8 @@ int main(int argc, char **argv) {
 		out_resampler_args.out = resampled_mpx_buffer;
 		out_resampler_args.frames_in = NUM_MPX_FRAMES_IN;
 		out_resampler_args.frames_out = NUM_MPX_FRAMES_OUT;
+
+		usleep(10000);
 
 		// start output resampler thread
 		r = pthread_create(&output_resampler_thread, &attr, output_resampler_worker, (void *)&out_resampler_args);
@@ -583,12 +603,14 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	usleep(10000);
+
 	// start MPX thread
 	mpx_thread_args_t mpx_thread_args;
 	mpx_thread_args.out = mpx_buffer;
+	mpx_thread_args.frames = NUM_MPX_FRAMES_IN;
 	if (audio_file[0]) {
 		mpx_thread_args.in = resampled_audio_in_buffer;
-		mpx_thread_args.frames = NUM_MPX_FRAMES_IN;
 		r = pthread_create(&mpx_thread, &attr, mpx_worker, (void *)&mpx_thread_args);
 		if (r < 0) {
 			fprintf(stderr, "Could not create MPX thread.\n");
@@ -597,7 +619,6 @@ int main(int argc, char **argv) {
 			fprintf(stderr, "Created MPX thread.\n");
 		}
 	} else {
-		mpx_thread_args.frames = NUM_RDS_FRAMES_IN;
 		r = pthread_create(&rds_thread, &attr, rds_worker, (void *)&mpx_thread_args);
 		if (r < 0) {
 			fprintf(stderr, "Could not create RDS thread.\n");
@@ -608,6 +629,12 @@ int main(int argc, char **argv) {
 	}
 
 	pthread_attr_destroy(&attr);
+
+	if (audio_file[0]) {
+		pthread_cond_signal(&mpx_cond);
+	} else {
+		pthread_cond_signal(&rds_cond);
+	}
 
 	for (;;) {
 		if (stop_mpx) {

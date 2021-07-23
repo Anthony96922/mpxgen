@@ -237,7 +237,7 @@ void fm_mpx_get_samples(float *in, float *out) {
 void fm_rds_get_samples(float *out) {
 	int j = 0;
 
-	for (int i = 0; i < NUM_RDS_FRAMES_IN; i++) {
+	for (int i = 0; i < NUM_MPX_FRAMES_IN; i++) {
 		// Pilot tone for calibration
 		out[j] = get_cos_carrier(CARRIER_19K) * volumes[0];
 

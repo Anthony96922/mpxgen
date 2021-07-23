@@ -18,9 +18,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "fm_mpx.h"
 #include "output.h"
-#include "audio_conversion.h"
 
 static int output_type;
 
