@@ -20,15 +20,11 @@
 #define NUM_AUDIO_FRAMES_IN	512
 #define NUM_AUDIO_FRAMES_OUT	(NUM_AUDIO_FRAMES_IN * 8)
 
-// RDS
-//#define NUM_RDS_FRAMES_IN	NUM_AUDIO_FRAMES_OUT
-
 // MPX
-#define NUM_MPX_FRAMES_IN	NUM_AUDIO_FRAMES_OUT
-#define NUM_MPX_FRAMES_OUT	(NUM_MPX_FRAMES_IN * 2)
+#define NUM_MPX_FRAMES		512
 
 // The sample rate at which the MPX generation runs at
-#define MPX_SAMPLE_RATE		190000
+#define MPX_SAMPLE_RATE		192000
 
 extern void fm_mpx_init();
 extern void fm_mpx_get_samples(float *in, float *out);

@@ -22,6 +22,8 @@
 #include <sndfile.h>
 #include "audio_conversion.h"
 
+#define shortf_memcpy(x, y, z) memcpy(x, y, z * 2 * sizeof(short))
+
 static int channels;
 static int audio_wait;
 
@@ -79,7 +81,7 @@ int read_file_input(short *audio) {
 	if (channels == 1)
 		stereoizes16(tmpbuf, audio, audio_len);
 	else
-		memcpy(audio, tmpbuf, audio_len * 2 * sizeof(short));
+		shortf_memcpy(audio, tmpbuf, audio_len);
 
 	return 1;
 }

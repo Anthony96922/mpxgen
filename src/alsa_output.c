@@ -67,6 +67,14 @@ int open_alsa_output(char *output_device, unsigned int sample_rate, unsigned int
 		return -1;
 	}
 
+	/*
+	err = snd_pcm_hw_params_set_buffer_size(pcm, hw_params, buffer_size);
+	if (err < 0) {
+		fprintf(stderr, "Error: cannot set buffer size to %u (%s)\n", buffer_size, snd_strerror(err));
+		return -1;
+	}
+	*/
+
 	err = snd_pcm_hw_params(pcm, hw_params);
 	if (err < 0) {
 		fprintf(stderr, "Error: unable to set hw params for playback (%s)\n", snd_strerror(err));
@@ -88,6 +96,12 @@ int write_alsa_output(short *buffer, size_t frames) {
 	int frames_written;
 
 	frames_written = snd_pcm_writei(pcm, buffer, frames);
+
+	if (frames_written == -EPIPE) {
+		snd_pcm_prepare(pcm);
+		frames_written = 0;
+	}
+
 	if (frames_written < 0) {
 		fprintf(stderr, "Error: write to audio interface failed (%s)\n", snd_strerror(frames_written));
 		return -1;

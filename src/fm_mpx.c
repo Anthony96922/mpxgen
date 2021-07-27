@@ -192,7 +192,7 @@ void fm_mpx_get_samples(float *in, float *out) {
 	float out_left, out_right;
 	float out_mono, out_stereo;
 
-	for (int i = 0; i < NUM_AUDIO_FRAMES_IN; i++) {
+	for (int i = 0; i < NUM_AUDIO_FRAMES_OUT; i++) {
 		lowpass_filter_in[0] = in[j+0];
 		lowpass_filter_in[1] = in[j+1];
 
@@ -237,7 +237,7 @@ void fm_mpx_get_samples(float *in, float *out) {
 void fm_rds_get_samples(float *out) {
 	int j = 0;
 
-	for (int i = 0; i < NUM_MPX_FRAMES_IN; i++) {
+	for (int i = 0; i < NUM_MPX_FRAMES; i++) {
 		// Pilot tone for calibration
 		out[j] = get_cos_carrier(CARRIER_19K) * volumes[0];
 
