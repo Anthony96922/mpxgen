@@ -133,6 +133,38 @@ typedef struct rds_params_t {
 #define GET_GROUP_TYPE(x)	((x >> 4) & 15)
 #define GET_GROUP_VER(x)	(x & 1) // only check bit 0
 
+#define DI_STEREO	1 // 1 - Stereo
+#define DI_AH		2 // 2 - Artificial Head
+#define DI_COMPRESSED	4 // 4 - Compressed
+#define DI_DPTY		8 // 8 - Dynamic PTY
+
+// Bit mask
+// Lower
+#define BIT_L1		0x00
+#define BIT_L2		0x03
+#define BIT_L3		0x07
+#define BIT_L4		0x0f
+#define BIT_L5		0x1f
+#define BIT_L6		0x3f
+#define BIT_L7		0x7f
+// Upper
+#define BIT_U7		0xfc
+#define BIT_U6		0xfc
+#define BIT_U5		0xf8
+#define BIT_U4		0xf0
+#define BIT_U3		0xe0
+#define BIT_U2		0xc0
+#define BIT_U1		0x80
+// Single
+#define BIT_0		0x01
+#define BIT_1		0x02
+#define BIT_2		0x04
+#define BIT_3		0x08
+#define BIT_4		0x10
+#define BIT_5		0x20
+#define BIT_6		0x40
+#define BIT_7		0x80
+
 /* RDS ODA ID group
  *
  * This struct is for defining ODAs that will be transmitted
@@ -144,11 +176,6 @@ typedef struct rds_oda_t {
 	uint16_t aid;
 	uint16_t scb;
 } rds_oda_t;
-
-#define DI_STEREO	1 // 1 - Stereo
-#define DI_AH		2 // 2 - Artificial Head
-#define DI_COMPRESSED	4 // 4 - Compressed
-#define DI_DPTY		8 // 8 - Dynamic PTY
 
 extern int init_rds_encoder(rds_params_t rds_params, char *call_sign);
 extern void add_checkwords(uint16_t *blocks, uint8_t *bits);

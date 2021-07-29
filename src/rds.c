@@ -38,7 +38,7 @@ static struct {
 } rds_state;
 
 // ODA
-#define MAX_ODAS	8
+#define MAX_ODAS 8
 static rds_oda_t odas[MAX_ODAS];
 static struct {
 	uint8_t current;
@@ -243,14 +243,14 @@ static void get_rds_rtplus_group(uint16_t *blocks) {
 	blocks[1] |= GET_GROUP_TYPE(rtplus_cfg.group) << 12 |
 		     GET_GROUP_VER(rtplus_cfg.group) << 11 |
 		     rtplus_cfg.toggle << 4 | rtplus_cfg.running << 3 |
-		    (rtplus_cfg.type[0] & 0x38) >> 3;
-	blocks[2] = (rtplus_cfg.type[0] & 0x7) << 13 |
-		    (rtplus_cfg.start[0] & 0x3F) << 7 |
-		    (rtplus_cfg.len[0] & 0x3F) << 1 |
-		    (rtplus_cfg.type[1] & 0x20) >> 5;
-	blocks[3] = (rtplus_cfg.type[1] & 0x1F) << 11 |
-		    (rtplus_cfg.start[1] & 0x3F) << 5 |
-		    (rtplus_cfg.len[1] & 0x1F);
+		    (rtplus_cfg.type[0]  & BIT_U5) >> 3;
+	blocks[2] = (rtplus_cfg.type[0]  & BIT_L3) << 13 |
+		    (rtplus_cfg.start[0] & BIT_L6) << 7 |
+		    (rtplus_cfg.len[0]   & BIT_L6) << 1 |
+		    (rtplus_cfg.type[1]  & BIT_U3) >> 5;
+	blocks[3] = (rtplus_cfg.type[1]  & BIT_L5) << 11 |
+		    (rtplus_cfg.start[1] & BIT_L6) << 5 |
+		    (rtplus_cfg.len[1]   & BIT_L5);
 }
 
 /* Lower priority groups are placed in a subsequence
@@ -295,6 +295,8 @@ static void get_rds_group(uint16_t *blocks) {
 	// Basic block data
 	blocks[0] = rds_data.pi;
 	blocks[1] = rds_data.tp << 10 | rds_data.pty << 5;
+	blocks[2] = 0;
+	blocks[3] = 0;
 
 	// Generate block content
 	// CT (clock time) has priority on other group types
@@ -314,7 +316,7 @@ static void get_rds_group(uint16_t *blocks) {
 }
 
 static void get_rds_bits(uint8_t *out_buffer) {
-	uint16_t out_blocks[GROUP_LENGTH] = {0};
+	static uint16_t out_blocks[GROUP_LENGTH];
 	get_rds_group(out_blocks);
 	add_checkwords(out_blocks, out_buffer);
 }
@@ -464,11 +466,11 @@ float get_rds_sample() {
 	float sample = 0;
 
 	// ZOH resampler
-	const double resample_ratio = (float)MPX_SAMPLE_RATE / (float)190000;
-	static double signal_pos = resample_ratio;
+	const float ratio = (float)MPX_SAMPLE_RATE / (float)190000;
+	static float signal_pos = ratio;
 
-	if (signal_pos >= resample_ratio) {
-		signal_pos -= resample_ratio;
+	if (signal_pos >= ratio) {
+		signal_pos -= ratio;
 
 		if(sample_count == SAMPLES_PER_BIT) {
 			if(bit_pos == BITS_PER_GROUP) {
@@ -567,6 +569,7 @@ int init_rds_encoder(rds_params_t rds_params, char *call_sign) {
 			"Spanish talk", "Spanish music", "Hip-Hop", "Unassigned",
 			"Unassigned", "Weather", "Emergency test", "Emergency"
 		},
+#if 0
 		{
 			"None", "News", "Current affairs", "Information",
 			"Sport", "Education", "Drama", "Culture", "Science",
@@ -578,6 +581,7 @@ int init_rds_encoder(rds_params_t rds_params, char *call_sign) {
 			"National music", "Oldies music", "Folk music",
 			"Documentary", "Alarm test", "Alarm"
 		}
+#endif
 	};
 
 
