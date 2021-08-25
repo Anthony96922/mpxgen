@@ -17,15 +17,19 @@
  */
 
 // MPX carrier index
-#define CARRIER_19K 0
-#define CARRIER_38K 1
-#define CARRIER_57K 2
-#define CARRIER_67K 3
-#define CARRIER_71K 4
-#define CARRIER_76K 5
+enum mpx_carrier_index {
+	CARRIER_19K,
+	CARRIER_38K,
+	CARRIER_57K,
+#ifdef RDS2
+	CARRIER_67K,
+	CARRIER_71K,
+	CARRIER_76K,
+#endif
+};
 
-extern void create_mpx_carriers();
-extern float get_carrier(int num);
-extern float get_cos_carrier(int num);
+extern void create_mpx_carriers(uint32_t sample_rate);
+extern float get_carrier(uint8_t num);
+extern float get_cos_carrier(uint8_t num);
 extern void update_carrier_phase();
 extern void clear_mpx_carriers();

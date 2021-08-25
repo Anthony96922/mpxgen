@@ -16,26 +16,26 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdlib.h>
-#include <math.h>
-#include "fm_mpx.h"
+#include "common.h"
+
+// code for MPX oscillator
 
 // Create wave constants for a given frequency
-static void create_carrier(float freq, float *sin_wave, float *cos_wave, int *max_phase) {
+static void create_carrier(uint32_t rate, float freq, float *sin_wave, float *cos_wave, uint32_t *max_phase) {
 	float sin_sample, cos_sample;
 
 	// used to determine if we have completed a cycle
-	int zero_crossings = 0;
+	uint8_t zero_crossings = 0;
 
-	int i;
+	uint16_t i;
 
 	// First value of a sine wave is always 0
 	*sin_wave++ = 0;
 	*cos_wave++ = 1;
 
-	for (i = 1; i < MPX_SAMPLE_RATE; i++) {
-		sin_sample = sin(2 * M_PI * freq * i / MPX_SAMPLE_RATE);
-		cos_sample = cos(2 * M_PI * freq * i / MPX_SAMPLE_RATE);
+	for (i = 1; i < rate; i++) {
+		sin_sample = sin(2 * M_PI * freq * i / rate);
+		cos_sample = cos(2 * M_PI * freq * i / rate);
 		if (sin_sample > -0.1e-6 && sin_sample < 0.1e-6) {
 			if (++zero_crossings == 2) break;
 			*sin_wave++ = 0;
@@ -63,32 +63,46 @@ static float carrier_frequencies[] = {
 
 #define NUM_CARRIERS sizeof(carrier_frequencies)/sizeof(float)
 
-static float sin_carrier[NUM_CARRIERS][MPX_SAMPLE_RATE];
-static float cos_carrier[NUM_CARRIERS][MPX_SAMPLE_RATE];
+static float **sin_carrier;
+static float **cos_carrier;
 
 /*
  * Wave phase
  *
- * 0: current phase
- * 1: max phase
+ * index 0: current phase
+ * index 1: max phase
  */
-static int phase[NUM_CARRIERS][2];
+static uint32_t **phase;
 
-void create_mpx_carriers() {
+void create_mpx_carriers(uint32_t sample_rate) {
+	sin_carrier = (float **)malloc(NUM_CARRIERS * sizeof(float));
+	cos_carrier = (float **)malloc(NUM_CARRIERS * sizeof(float));
+	phase = (uint32_t **)malloc(NUM_CARRIERS * 2 * sizeof(uint32_t));
 	for (int i = 0; i < NUM_CARRIERS; i++) {
-		create_carrier(carrier_frequencies[i], sin_carrier[i], cos_carrier[i], &phase[i][1]);
+		sin_carrier[i] = malloc(sample_rate * sizeof(float));
+		cos_carrier[i] = malloc(sample_rate * sizeof(float));
+		phase[i] = malloc(2 * sizeof(uint32_t));
+		phase[i][0] = 0;
+		create_carrier(sample_rate, carrier_frequencies[i], sin_carrier[i], cos_carrier[i], &phase[i][1]);
 	}
 }
 
 void clear_mpx_carriers() {
-	// no-op
+	for (int i = 0; i < NUM_CARRIERS; i++) {
+		free(sin_carrier[i]);
+		free(cos_carrier[i]);
+		free(phase[i]);
+	}
+	free(sin_carrier);
+	free(cos_carrier);
+	free(phase);
 }
 
-float get_carrier(int carrier_num) {
+float get_carrier(uint8_t carrier_num) {
 	return sin_carrier[carrier_num][phase[carrier_num][0]];
 }
 
-float get_cos_carrier(int carrier_num) {
+float get_cos_carrier(uint8_t carrier_num) {
 	return cos_carrier[carrier_num][phase[carrier_num][0]];
 }
 

@@ -25,7 +25,7 @@ This program generates FM multiplex baseband audio that can be sent to a mono FM
 Mpxgen's RDS encoder in action: https://www.youtube.com/watch?v=ORAMpYhDcVY
 
 ## Build
-This app depends on the sndfile, ao and samplerate libraries. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libao-dev libsamplerate0-dev` to install them.
+This app depends on libsndfile, libasound and libsamplerate. On Ubuntu-like distros, use `sudo apt-get install libsndfile1-dev libasound2-dev libsamplerate0-dev` to install them.
 
 Once those are installed, run
 ```sh

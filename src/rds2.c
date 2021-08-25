@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
+#include "common.h"
 #include "rds.h"
 #include "waveforms.h"
 
@@ -27,22 +27,6 @@
 // station logo
 extern unsigned char station_logo[];
 extern unsigned int station_logo_len;
-
-// RDS signal context
-typedef struct {
-	uint8_t bit_buffer[BITS_PER_GROUP];
-	uint8_t bit_pos;
-	float sample_buffer[SAMPLE_BUFFER_SIZE];
-	uint8_t prev_output;
-	uint8_t cur_output;
-	uint8_t cur_bit;
-	uint8_t sample_count;
-	uint8_t inverting;
-	uint16_t in_sample_index;
-	uint16_t out_sample_index;
-} rds_signal_context;
-
-rds_signal_context rds2_contexts[3];
 
 /*
  * Stuff for group type C
@@ -85,52 +69,8 @@ static void get_rds2_group(int stream_num, uint16_t *blocks) {
 	//	stream_num, blocks[0], blocks[1], blocks[2], blocks[3]);
 }
 
-static void get_rds2_bits(int stream, uint8_t *out_buffer) {
-	uint16_t out_blocks[GROUP_LENGTH] = {0};
+void get_rds2_bits(uint8_t stream, uint8_t *bits) {
+	static uint16_t out_blocks[GROUP_LENGTH];
 	get_rds2_group(stream, out_blocks);
-	add_checkwords(out_blocks, out_buffer);
-}
-
-/*
- * Creates the RDS 2 signal. Like get_rds_sample, but generates the signal
- * for a chosen stream number.
- */
-float get_rds2_sample(int stream_num) {
-	// select context from stream number
-	rds_signal_context *rds2 = &rds2_contexts[--stream_num];
-
-	if(rds2->sample_count == SAMPLES_PER_BIT) {
-		if(rds2->bit_pos == BITS_PER_GROUP) {
-			get_rds2_bits(stream_num, rds2->bit_buffer);
-			rds2->bit_pos = 0;
-		}
-
-		// do differential encoding
-		rds2->cur_bit = rds2->bit_buffer[rds2->bit_pos++];
-		rds2->prev_output = rds2->cur_output;
-		rds2->cur_output = rds2->prev_output ^ rds2->cur_bit;
-
-		rds2->inverting = (rds2->cur_output == 1);
-
-		int idx = rds2->in_sample_index;
-
-		for(int j=0; j<WAVEFORM_SIZE; j++) {
-			rds2->sample_buffer[idx++] +=
-				(!rds2->inverting) ? waveform_biphase[j] : -waveform_biphase[j];
-			if(idx == SAMPLE_BUFFER_SIZE) idx = 0;
-		}
-
-		rds2->in_sample_index += SAMPLES_PER_BIT;
-		if(rds2->in_sample_index == SAMPLE_BUFFER_SIZE) rds2->in_sample_index = 0;
-
-		rds2->sample_count = 0;
-	}
-	rds2->sample_count++;
-
-	float sample = rds2->sample_buffer[rds2->out_sample_index];
-
-	rds2->sample_buffer[rds2->out_sample_index++] = 0;
-	if(rds2->out_sample_index >= SAMPLE_BUFFER_SIZE) rds2->out_sample_index = 0;
-
-	return sample;
+	add_checkwords(out_blocks, bits);
 }

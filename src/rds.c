@@ -16,14 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <string.h>
-#include <time.h>
-#include <stdlib.h>
-#include <stdio.h>
-
-#include "waveforms.h"
+#include "common.h"
 #include "rds.h"
-#include "fm_mpx.h"
+
+#include <time.h>
 
 static rds_params_t rds_data;
 
@@ -65,20 +61,26 @@ static void register_oda(uint8_t group, uint16_t aid, uint16_t scb) {
 	oda_state.count++;
 }
 
-static uint16_t offset_words[] = {0x0FC, 0x198, 0x168, 0x1B4, 0x350 /* now we do */};
+static uint16_t offset_words[] = {
+	0x0FC,
+	0x198,
+	0x168,
+	0x1B4,
+	0x350 /* now we do */
+};
 // We don't handle offset word C' here for the sake of simplicity
 
 /* Classical CRC computation */
 static uint16_t crc(uint16_t block) {
 	uint16_t crc = 0;
 
-	for(int j=0; j<BLOCK_SIZE; j++) {
-		int bit = (block & MSB_BIT) != 0;
+	for (int j = 0; j < BLOCK_SIZE; j++) {
+		uint8_t bit = (block & MSB_BIT) != 0;
 		block <<= 1;
 
-		int msb = (crc >> (POLY_DEG-1)) & 1;
+		uint8_t msb = (crc >> (POLY_DEG-1)) & 1;
 		crc <<= 1;
-		if((msb ^ bit) != 0) crc ^= POLY;
+		if ((msb ^ bit) != 0) crc ^= POLY;
 	}
 	return crc;
 }
@@ -86,16 +88,17 @@ static uint16_t crc(uint16_t block) {
 // Calculate the checkword for each block and emit the bits
 void add_checkwords(uint16_t *blocks, uint8_t *bits) {
 	uint16_t block, check, offset_word;
-	for(int i=0; i<GROUP_LENGTH; i++) {
+	for (int i = 0; i < GROUP_LENGTH; i++) {
 		block = blocks[i];
-		offset_word = i == 3 && (blocks[1] >> 11) & 1 ? offset_words[5] : offset_words[i];
+		offset_word = offset_words[i];
+		if (((blocks[1] >> 11) & 1) && i == 3) offset_word = offset_words[5];
 		check = crc(block) ^ offset_word;
-		for(int j=0; j<BLOCK_SIZE; j++) {
-			*bits++ = ((block & (1<<(BLOCK_SIZE-1))) != 0);
+		for (int j = 0; j < BLOCK_SIZE; j++) {
+			*bits++ = ((block & (1 << (BLOCK_SIZE - 1))) != 0);
 			block <<= 1;
 		}
-		for(int j=0; j<POLY_DEG; j++) {
-			*bits++ = ((check & (1<<(POLY_DEG-1))) != 0);
+		for (int j = 0; j < POLY_DEG; j++) {
+			*bits++ = ((check & (1 << (POLY_DEG - 1))) != 0);
 			check <<= 1;
 		}
 	}
@@ -104,37 +107,36 @@ void add_checkwords(uint16_t *blocks, uint8_t *bits) {
 /* Generates a CT (clock time) group if the minute has just changed
  * Returns 1 if the CT group was generated, 0 otherwise
  */
-static int get_rds_ct_group(uint16_t *blocks) {
-	static int latest_minutes = -1;
+static uint8_t get_rds_ct_group(uint16_t *blocks) {
+	static uint8_t latest_minutes;
 
 	// Check time
-	time_t now;
-	static struct tm *utc;
+	time_t now = time(NULL);
+	struct tm *utc = gmtime(&now);
 
-	now = time (NULL);
-	utc = gmtime (&now);
-
-	if(utc->tm_min != latest_minutes) {
+	if (utc->tm_min != latest_minutes) {
 		// Generate CT group
 		latest_minutes = utc->tm_min;
 
-		int l = utc->tm_mon <= 1 ? 1 : 0;
-		int mjd = 14956 + utc->tm_mday +
-			(int)((utc->tm_year - l) * 365.25) +
-			(int)((utc->tm_mon + 2 + l*12) * 30.6001);
+		uint8_t l = utc->tm_mon <= 1 ? 1 : 0;
+		uint16_t mjd = 14956 + utc->tm_mday +
+			(uint16_t)((utc->tm_year - l) * 365.25) +
+			(uint16_t)((utc->tm_mon + 2 + l*12) * 30.6001);
 
 		blocks[1] |= 4 << 12 | (mjd>>15);
 		blocks[2] = (mjd<<1) | (utc->tm_hour>>4);
 		blocks[3] = (utc->tm_hour & 0xF)<<12 | utc->tm_min<<6;
 
-		utc = localtime(&now);
+		struct tm *local = localtime(&now);
 
-		int offset = utc->tm_gmtoff / (30 * 60);
+		int8_t offset = local->tm_hour - utc->tm_hour;
 		blocks[3] |= abs(offset);
-		if(offset < 0) blocks[3] |= 0x20;
+		if (offset < 0) blocks[3] |= (1 << 5);
 
 		return 1;
-	} else return 0;
+	}
+
+	return 0;
 }
 
 /* PS group (0A)
@@ -255,7 +257,7 @@ static void get_rds_rtplus_group(uint16_t *blocks) {
 
 /* Lower priority groups are placed in a subsequence
  */
-static int get_rds_other_groups(uint16_t *blocks) {
+static uint8_t get_rds_other_groups(uint16_t *blocks) {
 	static uint8_t group[15];
 	uint8_t group_coded = 0;
 
@@ -300,7 +302,7 @@ static void get_rds_group(uint16_t *blocks) {
 
 	// Generate block content
 	// CT (clock time) has priority on other group types
-	if(!(rds_data.tx_ctime && get_rds_ct_group(blocks))) {
+	if (!(rds_data.tx_ctime && get_rds_ct_group(blocks))) {
 		if (!get_rds_other_groups(blocks)) { // Other groups
 			// These are always transmitted
 			if (!state) { // Type 0A groups
@@ -310,203 +312,15 @@ static void get_rds_group(uint16_t *blocks) {
 				get_rds_rt_group(blocks);
 				if (!rds_state.rt_bursting) state++;
 			}
-			if(state == 2) state = 0;
+			if (state == 2) state = 0;
 		}
 	}
 }
 
-static void get_rds_bits(uint8_t *out_buffer) {
+void get_rds_bits(uint8_t *bits) {
 	static uint16_t out_blocks[GROUP_LENGTH];
 	get_rds_group(out_blocks);
-	add_checkwords(out_blocks, out_buffer);
-}
-
-/*
-
-FIR filter designed with
-http://t-filter.appspot.com
-
-sampling frequency: 192000 Hz
-
-* 0 Hz - 1187.5 Hz
-  gain = 1
-  desired ripple = 0.1 dB
-  actual ripple = 0.08742271310511548 dB
-
-* 3562.5 Hz - 96000 Hz
-  gain = 0
-  desired attenuation = -96 dB
-  actual attenuation = -94.5206984561014 dB
-
-*/
-
-#define FILTER_SIZE 333
-
-static float filter[FILTER_SIZE] = {
-	-0.0000098, -0.0000006, -0.0000005, -0.0000001,
-	 0.0000005,  0.0000012,  0.0000022,  0.0000035,
-	 0.0000051,  0.0000070,  0.0000092,  0.0000119,
-	 0.0000151,  0.0000187,  0.0000228,  0.0000276,
-	 0.0000329,  0.0000389,  0.0000456,  0.0000530,
-	 0.0000611,  0.0000701,  0.0000799,  0.0000906,
-	 0.0001021,  0.0001145,  0.0001279,  0.0001421,
-	 0.0001573,  0.0001733,  0.0001902,  0.0002080,
-	 0.0002266,  0.0002459,  0.0002660,  0.0002867,
-	 0.0003080,  0.0003297,  0.0003518,  0.0003741,
-	 0.0003966,  0.0004190,  0.0004413,  0.0004632,
-	 0.0004846,  0.0005053,  0.0005251,  0.0005438,
-	 0.0005611,  0.0005769,  0.0005909,  0.0006028,
-	 0.0006124,  0.0006195,  0.0006237,  0.0006250,
-	 0.0006229,  0.0006172,  0.0006077,  0.0005942,
-	 0.0005764,  0.0005540,  0.0005270,  0.0004951,
-	 0.0004581,  0.0004159,  0.0003684,  0.0003154,
-	 0.0002569,  0.0001928,  0.0001231,  0.0000479,
-	-0.0000329, -0.0001190, -0.0002104, -0.0003070,
-	-0.0004083, -0.0005143, -0.0006246, -0.0007388,
-	-0.0008566, -0.0009775, -0.0011009, -0.0012264,
-	-0.0013533, -0.0014811, -0.0016090, -0.0017364,
-	-0.0018624, -0.0019862, -0.0021071, -0.0022242,
-	-0.0023365, -0.0024431, -0.0025431, -0.0026354,
-	-0.0027193, -0.0027935, -0.0028571, -0.0029092,
-	-0.0029487, -0.0029746, -0.0029860, -0.0029819,
-	-0.0029614, -0.0029235, -0.0028675, -0.0027925,
-	-0.0026977, -0.0025824, -0.0024460, -0.0022879,
-	-0.0021076, -0.0019046, -0.0016785, -0.0014292,
-	-0.0011563, -0.0008598, -0.0005397, -0.0001961,
-	 0.0001709,  0.0005609,  0.0009736,  0.0014084,
-	 0.0018647,  0.0023419,  0.0028391,  0.0033554,
-	 0.0038897,  0.0044410,  0.0050081,  0.0055897,
-	 0.0061842,  0.0067904,  0.0074066,  0.0080311,
-	 0.0086623,  0.0092985,  0.0099378,  0.0105783,
-	 0.0112182,  0.0118554,  0.0124881,  0.0131143,
-	 0.0137319,  0.0143391,  0.0149338,  0.0155140,
-	 0.0160779,  0.0166236,  0.0171491,  0.0176528,
-	 0.0181328,  0.0185876,  0.0190154,  0.0194149,
-	 0.0197847,  0.0201233,  0.0204296,  0.0207026,
-	 0.0209412,  0.0211445,  0.0213119,  0.0214427,
-	 0.0215365,  0.0215929,  0.0216117,  0.0215929,
-	 0.0215365,  0.0214427,  0.0213119,  0.0211445,
-	 0.0209412,  0.0207026,  0.0204296,  0.0201233,
-	 0.0197847,  0.0194149,  0.0190154,  0.0185876,
-	 0.0181328,  0.0176528,  0.0171491,  0.0166236,
-	 0.0160779,  0.0155140,  0.0149338,  0.0143391,
-	 0.0137319,  0.0131143,  0.0124881,  0.0118554,
-	 0.0112182,  0.0105783,  0.0099378,  0.0092985,
-	 0.0086623,  0.0080311,  0.0074066,  0.0067904,
-	 0.0061842,  0.0055897,  0.0050081,  0.0044410,
-	 0.0038897,  0.0033554,  0.0028391,  0.0023419,
-	 0.0018647,  0.0014084,  0.0009736,  0.0005609,
-	 0.0001709, -0.0001961, -0.0005397, -0.0008598,
-	-0.0011563, -0.0014292, -0.0016785, -0.0019046,
-	-0.0021076, -0.0022879, -0.0024460, -0.0025824,
-	-0.0026977, -0.0027925, -0.0028675, -0.0029235,
-	-0.0029614, -0.0029819, -0.0029860, -0.0029746,
-	-0.0029487, -0.0029092, -0.0028571, -0.0027935,
-	-0.0027193, -0.0026354, -0.0025431, -0.0024431,
-	-0.0023365, -0.0022242, -0.0021071, -0.0019862,
-	-0.0018624, -0.0017364, -0.0016090, -0.0014811,
-	-0.0013533, -0.0012264, -0.0011009, -0.0009775,
-	-0.0008566, -0.0007388, -0.0006246, -0.0005143,
-	-0.0004083, -0.0003070, -0.0002104, -0.0001190,
-	-0.0000329,  0.0000479,  0.0001231,  0.0001928,
-	 0.0002569,  0.0003154,  0.0003684,  0.0004159,
-	 0.0004581,  0.0004951,  0.0005270,  0.0005540,
-	 0.0005764,  0.0005942,  0.0006077,  0.0006172,
-	 0.0006229,  0.0006250,  0.0006237,  0.0006195,
-	 0.0006124,  0.0006028,  0.0005909,  0.0005769,
-	 0.0005611,  0.0005438,  0.0005251,  0.0005053,
-	 0.0004846,  0.0004632,  0.0004413,  0.0004190,
-	 0.0003966,  0.0003741,  0.0003518,  0.0003297,
-	 0.0003080,  0.0002867,  0.0002660,  0.0002459,
-	 0.0002266,  0.0002080,  0.0001902,  0.0001733,
-	 0.0001573,  0.0001421,  0.0001279,  0.0001145,
-	 0.0001021,  0.0000906,  0.0000799,  0.0000701,
-	 0.0000611,  0.0000530,  0.0000456,  0.0000389,
-	 0.0000329,  0.0000276,  0.0000228,  0.0000187,
-	 0.0000151,  0.0000119,  0.0000092,  0.0000070,
-	 0.0000051,  0.0000035,  0.0000022,  0.0000012,
-	 0.0000005, -0.0000001, -0.0000005, -0.0000006,
-	-0.0000098
-};
-
-static inline float rds_filter(float in) {
-	static float buffer[FILTER_SIZE];
-	static int buffer_idx;
-
-	buffer[buffer_idx++] = in;
-	if (buffer_idx == FILTER_SIZE) buffer_idx = 0;
-
-	int filter_idx = buffer_idx;
-	float out = 0;
-	for (int i = 0; i < FILTER_SIZE; i++) {
-		out += buffer[filter_idx++] * filter[i];
-		if (filter_idx == FILTER_SIZE) filter_idx = 0;
-	}
-
-	return out;
-}
-
-/* Get an RDS sample. This generates the envelope of the waveform using
- * pre-generated elementary waveform samples.
- */
-float get_rds_sample() {
-	static uint8_t bit_buffer[BITS_PER_GROUP];
-	static uint8_t bit_pos;
-	static float sample_buffer[SAMPLE_BUFFER_SIZE];
-
-	static uint8_t prev_output;
-	static uint8_t cur_output;
-	static uint8_t cur_bit;
-	static uint8_t sample_count;
-	static uint8_t inverting;
-
-	static uint16_t in_sample_index;
-	static uint16_t out_sample_index;
-
-	float sample = 0;
-
-	// ZOH resampler
-	const float ratio = (float)MPX_SAMPLE_RATE / (float)190000;
-	static float signal_pos = ratio;
-
-	if (signal_pos >= ratio) {
-		signal_pos -= ratio;
-
-		if(sample_count == SAMPLES_PER_BIT) {
-			if(bit_pos == BITS_PER_GROUP) {
-				get_rds_bits(bit_buffer);
-				bit_pos = 0;
-			}
-
-			// do differential encoding
-			cur_bit = bit_buffer[bit_pos++];
-			prev_output = cur_output;
-			cur_output = prev_output ^ cur_bit;
-
-			inverting = (cur_output == 1);
-
-			int idx = in_sample_index;
-
-			for(int j=0; j<WAVEFORM_SIZE; j++) {
-				sample_buffer[idx++] +=
-					(!inverting) ? waveform_biphase[j] : -waveform_biphase[j];
-				if(idx == SAMPLE_BUFFER_SIZE) idx = 0;
-			}
-
-			in_sample_index += SAMPLES_PER_BIT;
-			if(in_sample_index == SAMPLE_BUFFER_SIZE) in_sample_index = 0;
-
-			sample_count = 0;
-		}
-		sample_count++;
-
-		sample = sample_buffer[out_sample_index];
-		sample_buffer[out_sample_index++] = 0;
-		if(out_sample_index >= SAMPLE_BUFFER_SIZE) out_sample_index = 0;
-	}
-	signal_pos += 1.0;
-
-	return rds_filter(sample);
+	add_checkwords(out_blocks, bits);
 }
 
 /*
@@ -548,7 +362,7 @@ static uint16_t callsign2pi(char *callsign) {
 	return pi_code;
 }
 
-int init_rds_encoder(rds_params_t rds_params, char *call_sign) {
+int8_t init_rds_encoder(rds_params_t rds_params, char *call_sign) {
 
 	// The RDS pty region. This determines which PTY list to use
 	enum rds_pty_regions {
@@ -584,7 +398,6 @@ int init_rds_encoder(rds_params_t rds_params, char *call_sign) {
 #endif
 	};
 
-
 	if (rds_data.pty > 31) {
 		fprintf(stderr, "PTY must be between 0 - 31.\n");
 		return -1;
@@ -610,10 +423,10 @@ int init_rds_encoder(rds_params_t rds_params, char *call_sign) {
 	fprintf(stderr, "RT: \"%s\"\n", rds_params.rt);
 
 	// AF
-	if(rds_params.af.num_afs) {
+	if (rds_params.af.num_afs) {
 		set_rds_af(rds_params.af);
 		fprintf(stderr, "AF: %d,", rds_params.af.num_afs);
-		for(int f = 0; f < rds_params.af.num_afs; f++) {
+		for (int f = 0; f < rds_params.af.num_afs; f++) {
 			fprintf(stderr, " %.1f", (rds_params.af.af[f]+875)/10.0);
 		}
 		fprintf(stderr, "\n");
@@ -677,6 +490,8 @@ void set_rds_ps(char *ps) {
 }
 
 void set_rds_rtplus_flags(uint8_t running, uint8_t toggle) {
+	if (running > 1) running = 1;
+	if (toggle > 1) toggle = 1;
 	rtplus_cfg.running = running;
 	rtplus_cfg.toggle = toggle;
 }

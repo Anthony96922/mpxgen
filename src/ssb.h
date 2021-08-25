@@ -16,7 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define HT_FILTER_HALF_SIZE 256
+#define HT_FILTER_SIZE (HT_FILTER_HALF_SIZE*2)+1
+#define HILBERT_GAIN 1.570483967
+
 extern void init_hilbert_transformer();
 extern float get_hilbert(float in);
-extern float get_hilbert_delay(float in);
 extern void exit_hilbert_transformer();

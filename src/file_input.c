@@ -16,24 +16,21 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+#include "common.h"
 #include <sndfile.h>
 #include "audio_conversion.h"
 
 #define shortf_memcpy(x, y, z) memcpy(x, y, z * 2 * sizeof(short))
 
-static int channels;
-static int audio_wait;
-
+static uint8_t channels;
+static uint8_t audio_wait;
 static SNDFILE *inf;
-
+static short *buf;
 static size_t target_len;
 
-int open_file_input(char *filename, unsigned int *sample_rate, int wait, size_t num_frames) {
+int8_t open_file_input(char *filename, uint32_t *sample_rate, uint8_t wait, size_t num_frames) {
 	// Open the input file
-        SF_INFO sfinfo;
+	SF_INFO sfinfo;
 
 	target_len = num_frames;
 
@@ -58,34 +55,53 @@ int open_file_input(char *filename, unsigned int *sample_rate, int wait, size_t 
 	channels = sfinfo.channels;
 	audio_wait = wait;
 
+	buf = malloc(num_frames * 2 * sizeof(short));
+
 	return 0;
 }
 
-int read_file_input(short *audio) {
-	int read_len;
-	int frames_to_read = target_len;
-	int audio_len = 0;
-	static short tmpbuf[65536];
+int16_t read_file_input(short *audio) {
+	uint16_t read_len;
+	uint16_t frames_to_read = target_len;
+	uint16_t audio_len = 0;
+	static uint8_t silent;
 
 	while (frames_to_read > 0 && audio_len < target_len) {
-		if ((read_len = sf_readf_short(inf, tmpbuf + (audio_len * channels), frames_to_read)) < 0) {
+		if ((read_len = sf_readf_short(inf, buf + (audio_len * channels), frames_to_read)) < 0) {
 			fprintf(stderr, "Error reading audio\n");
 			return -1;
 		}
 
 		audio_len += read_len;
 		frames_to_read -= read_len;
-		if (audio_len == 0) return -1;
+		if (audio_len == 0) {
+			// Check if we have more audio
+			if (sf_seek(inf, 0, SEEK_SET) < 0) {
+				if (audio_wait) {
+					if (silent) {
+						memset(buf, 0, target_len * 2 * sizeof(short));
+					} else {
+						silent = 1;
+					}
+					frames_to_read = 0;
+				} else {
+					return -1;
+				}
+			} else {
+				silent = 0;
+			}
+		}
 	}
 
 	if (channels == 1)
-		stereoizes16(tmpbuf, audio, audio_len);
+		stereoizes16(buf, audio, target_len);
 	else
-		shortf_memcpy(audio, tmpbuf, audio_len);
+		shortf_memcpy(audio, buf, target_len);
 
 	return 1;
 }
 
 void close_file_input() {
+	if (buf != NULL) free(buf);
 	if (sf_close(inf)) fprintf(stderr, "Error closing audio file\n");
 }

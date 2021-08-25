@@ -16,7 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdlib.h>
+#include "common.h"
+#include "ssb.h"
 
 /*
  * Hilbert transform FIR filter
@@ -24,11 +25,7 @@
  * https://www-users.cs.york.ac.uk/~fisher/mkfilter/
  * http://dp.nonoo.hu/projects/ham-dsp-tutorial/09-ssb-hartley/
  */
-#define FILTER_SIZE 512
-#define FILTER_HALF_SIZE (FILTER_SIZE/2)
-#define HILBERT_GAIN 1.570483967
-
-float hilbert_fir[FILTER_SIZE] = {
+float hilbert_fir[HT_FILTER_SIZE] = {
 	+0.0000000000, +0.0003138613, +0.0000000000, +0.0003174376,
 	+0.0000000000, +0.0003221740, +0.0000000000, +0.0003280972,
 	+0.0000000000, +0.0003352340, +0.0000000000, +0.0003436114,
@@ -156,15 +153,14 @@ float hilbert_fir[FILTER_SIZE] = {
 	-0.0000000000, -0.0003641970, -0.0000000000, -0.0003532566,
 	-0.0000000000, -0.0003436114, -0.0000000000, -0.0003352340,
 	-0.0000000000, -0.0003280972, -0.0000000000, -0.0003221740,
-	-0.0000000000, -0.0003174376, -0.0000000000, -0.0003138613
+	-0.0000000000, -0.0003174376, -0.0000000000, -0.0003138613,
+	+0.0000000000
 };
 
 static float *ht_buffer;
-static float *delay_buffer;
 
 void init_hilbert_transformer() {
-	ht_buffer = malloc(FILTER_SIZE * sizeof(float));
-	delay_buffer = malloc(FILTER_HALF_SIZE * sizeof(float));
+	ht_buffer = malloc(HT_FILTER_SIZE * sizeof(float));
 }
 
 float get_hilbert(float in) {
@@ -173,28 +169,18 @@ float get_hilbert(float in) {
 	int filter_idx;
 
 	ht_buffer[ht_buffer_idx++] = in / HILBERT_GAIN;
-	if (ht_buffer_idx == FILTER_SIZE) ht_buffer_idx = 0;
+	if (ht_buffer_idx == HT_FILTER_SIZE) ht_buffer_idx = 0;
 
 	filter_idx = ht_buffer_idx;
 	filter_out = 0;
-	for (int i = 0; i < FILTER_SIZE; i++) {
+	for (int i = 0; i < HT_FILTER_SIZE; i++) {
 		filter_out += ht_buffer[filter_idx++] * hilbert_fir[i];
-		if (filter_idx == FILTER_SIZE) filter_idx = 0;
+		if (filter_idx == HT_FILTER_SIZE) filter_idx = 0;
 	}
 
 	return filter_out;
 }
 
-float get_hilbert_delay(float in) {
-	static int delay_idx;
-
-	delay_buffer[delay_idx++] = in;
-	if (delay_idx == FILTER_HALF_SIZE) delay_idx = 0;
-
-	return delay_buffer[delay_idx];
-}
-
 void exit_hilbert_transformer() {
 	free(ht_buffer);
-	free(delay_buffer);
 }

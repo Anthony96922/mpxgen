@@ -16,7 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdlib.h>
 #include <sndfile.h>
 
 extern int open_file_output(char *filename, unsigned int sample_rate, unsigned int channels);

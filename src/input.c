@@ -16,13 +16,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
+#include "common.h"
 #include "input.h"
 
-static int input_type;
+static uint8_t input_type;
 
-int open_input(char *input_name, int wait, unsigned int *sample_rate, size_t num_frames) {
+int8_t open_input(char *input_name, uint8_t wait, uint32_t *sample_rate, size_t num_frames) {
 	// TODO: better detect live capture cards
 	if (input_name[0] == 'a' && input_name[1] == 'l' &&
 	    input_name[2] == 's' && input_name[3] == 'a' &&
@@ -49,7 +48,7 @@ int open_input(char *input_name, int wait, unsigned int *sample_rate, size_t num
 	return 1;
 }
 
-int read_input(short *audio) {
+int8_t read_input(short *audio) {
 	if (input_type == 1) {
 		if (read_file_input(audio) < 0) return -1;
 	}

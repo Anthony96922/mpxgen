@@ -31,9 +31,12 @@
 
 #define GROUP_LENGTH 4
 #define BITS_PER_GROUP (GROUP_LENGTH * (BLOCK_SIZE+POLY_DEG))
+#define RDS_SAMPLE_RATE 190000
 #define SAMPLES_PER_BIT 160
-#define WAVEFORM_SIZE 1120
-#define SAMPLE_BUFFER_SIZE (SAMPLES_PER_BIT + WAVEFORM_SIZE)
+#define FILTER_SIZE 1120
+#define SAMPLE_BUFFER_SIZE (SAMPLES_PER_BIT + FILTER_SIZE)
+
+#define RDS_SRC_RATIO ((float)MPX_SAMPLE_RATE / (float)RDS_SAMPLE_RATE)
 
 #define MAX_AF 25
 
@@ -177,9 +180,9 @@ typedef struct rds_oda_t {
 	uint16_t scb;
 } rds_oda_t;
 
-extern int init_rds_encoder(rds_params_t rds_params, char *call_sign);
+extern int8_t init_rds_encoder(rds_params_t rds_params, char *call_sign);
 extern void add_checkwords(uint16_t *blocks, uint8_t *bits);
-extern float get_rds_sample();
+extern void get_rds_bits(uint8_t *bits);
 extern void set_rds_pi(uint16_t pi_code);
 extern void set_rds_rt(char *rt);
 extern void set_rds_ps(char *ps);
@@ -194,5 +197,5 @@ extern void set_rds_ms(uint8_t ms);
 extern void set_rds_ab(uint8_t ab);
 extern void set_rds_ct(uint8_t ct);
 extern void set_rds_di(uint8_t di);
-
+extern float get_rds_sample(uint8_t stream_num);
 #endif /* RDS_H */

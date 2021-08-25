@@ -16,13 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
+#include "common.h"
 #include <alsa/asoundlib.h>
 
 static snd_pcm_t *pcm;
 
-int open_alsa_output(char *output_device, unsigned int sample_rate, unsigned int channels) {
-	int err;
+int8_t open_alsa_output(char *output_device, unsigned int sample_rate, unsigned int channels) {
+	int8_t err;
+#if 0
 	snd_pcm_hw_params_t *hw_params;
 
 	err = snd_pcm_hw_params_malloc(&hw_params);
@@ -30,6 +31,7 @@ int open_alsa_output(char *output_device, unsigned int sample_rate, unsigned int
 		fprintf(stderr, "Error: cannot allocate hardware parameter structure (%s)\n", snd_strerror(err));
 		return -1;
 	}
+#endif
 
 	err = snd_pcm_open(&pcm, output_device, SND_PCM_STREAM_PLAYBACK, 0);
 	if (err < 0) {
@@ -37,6 +39,7 @@ int open_alsa_output(char *output_device, unsigned int sample_rate, unsigned int
 		return -1;
 	}
 
+#if 0
 	err = snd_pcm_hw_params_any(pcm, hw_params);
 	if (err < 0) {
 		fprintf(stderr, "Error: no configurations available (%s)\n", snd_strerror(err));
@@ -82,42 +85,55 @@ int open_alsa_output(char *output_device, unsigned int sample_rate, unsigned int
 	}
 
 	snd_pcm_hw_params_free(hw_params);
+#else
+	err = snd_pcm_set_params(pcm, SND_PCM_FORMAT_S16_LE,
+		SND_PCM_ACCESS_RW_INTERLEAVED,
+		channels, sample_rate,
+		0,
+		50000);
+	if (err < 0) {
+		fprintf(stderr, "Cannot open open output device (%s)\n", snd_strerror(err));
+		return -1;
+	}
+#endif
 
+#if 0
 	err = snd_pcm_prepare(pcm);
 	if (err < 0) {
 		fprintf(stderr, "Error: cannot prepare audio interface for use (%s)\n", snd_strerror(err));
 		return -1;
 	}
+#endif
 
 	return 0;
 }
 
-int write_alsa_output(short *buffer, size_t frames) {
+int16_t write_alsa_output(short *buffer, size_t frames) {
 	int frames_written;
 
 	frames_written = snd_pcm_writei(pcm, buffer, frames);
 
-	if (frames_written == -EPIPE) {
-		snd_pcm_prepare(pcm);
-		frames_written = 0;
+	if (frames_written < 0) {
+		frames_written = snd_pcm_recover(pcm, frames_written, 0);
 	}
 
 	if (frames_written < 0) {
-		fprintf(stderr, "Error: write to audio interface failed (%s)\n", snd_strerror(frames_written));
+		fprintf(stderr, "Error: write to audio device failed (%s)\n", snd_strerror(frames_written));
 		return -1;
 	}
 
 	return frames_written;
 }
 
-int close_alsa_output() {
+int8_t close_alsa_output() {
 	int err;
 
 	err = snd_pcm_drain(pcm);
 	if (err < 0) {
-		fprintf(stderr, "Error: could not drain source (%s)\n", snd_strerror(err));
+		fprintf(stderr, "Error: could not drain sink (%s)\n", snd_strerror(err));
+		return -1;
 	}
 	snd_pcm_close(pcm);
 
-	return err;
+	return 0;
 }

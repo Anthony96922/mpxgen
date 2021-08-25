@@ -16,13 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
+#include "common.h"
 #include <alsa/asoundlib.h>
 
 static size_t buffer_size;
 static snd_pcm_t *pcm;
 
-int open_alsa_input(char *input, unsigned int sample_rate, size_t num_frames) {
+int8_t open_alsa_input(char *input, uint32_t sample_rate, size_t num_frames) {
 	int err;
 	snd_pcm_hw_params_t *hw_params;
 
@@ -87,19 +87,23 @@ int open_alsa_input(char *input, unsigned int sample_rate, size_t num_frames) {
 	return 0;
 }
 
-int read_alsa_input(short *buffer) {
-	int frames_read;
+uint16_t read_alsa_input(short *buffer) {
+	int16_t frames_read;
+	uint16_t frames;
 
 	frames_read = snd_pcm_readi(pcm, buffer, buffer_size);
 	if (frames_read < 0) {
-		fprintf(stderr, "Error: read from audio interface failed (%s)\n", snd_strerror(frames_read));
+		fprintf(stderr, "Error: read from audio device failed (%s)\n", snd_strerror(frames_read));
+		frames = 0;
+	} else {
+		frames = frames_read;
 	}
 
-	return frames_read;
+	return frames;
 }
 
-int close_alsa_input() {
-	int err;
+int8_t close_alsa_input() {
+	int8_t err;
 
 	err = snd_pcm_close(pcm);
 	if (err < 0) {

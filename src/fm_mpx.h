@@ -21,7 +21,7 @@
 #define NUM_AUDIO_FRAMES_OUT	(NUM_AUDIO_FRAMES_IN * 8)
 
 // MPX
-#define NUM_MPX_FRAMES		512
+#define NUM_MPX_FRAMES		NUM_AUDIO_FRAMES_OUT
 
 // The sample rate at which the MPX generation runs at
 #define MPX_SAMPLE_RATE		192000
@@ -30,5 +30,5 @@ extern void fm_mpx_init();
 extern void fm_mpx_get_samples(float *in, float *out);
 extern void fm_rds_get_samples(float *out);
 extern void fm_mpx_exit();
-extern void set_output_volume(unsigned int vol);
-extern void set_carrier_volume(unsigned int carrier, int new_volume);
+extern void set_output_volume(uint8_t vol);
+extern void set_carrier_volume(uint8_t carrier, int8_t new_volume);

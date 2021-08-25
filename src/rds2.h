@@ -16,4 +16,4 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern float get_rds2_sample(int stream_num);
+extern float get_rds2_bits(uint8_t stream_num, uint8_t *bits);
