@@ -25,7 +25,7 @@
  * https://www-users.cs.york.ac.uk/~fisher/mkfilter/
  * http://dp.nonoo.hu/projects/ham-dsp-tutorial/09-ssb-hartley/
  */
-float hilbert_fir[HT_FILTER_SIZE] = {
+static float const hilbert_fir[HT_FILTER_SIZE] = {
 	+0.0000000000, +0.0003138613, +0.0000000000, +0.0003174376,
 	+0.0000000000, +0.0003221740, +0.0000000000, +0.0003280972,
 	+0.0000000000, +0.0003352340, +0.0000000000, +0.0003436114,

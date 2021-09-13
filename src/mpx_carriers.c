@@ -18,27 +18,31 @@
 
 #include "common.h"
 
-// code for MPX oscillator
+/*
+ * code for MPX oscillator
+ *
+ */
 
 // Create wave constants for a given frequency
 static void create_carrier(uint32_t rate, float freq, float *sin_wave, float *cos_wave, uint32_t *max_phase) {
 	float sin_sample, cos_sample;
-
 	// used to determine if we have completed a cycle
 	uint8_t zero_crossings = 0;
-
-	uint16_t i;
+	uint32_t i;
+	float w = 2.0 * M_PI * freq;
+	float phase;
 
 	// First value of a sine wave is always 0
-	*sin_wave++ = 0;
-	*cos_wave++ = 1;
+	*sin_wave++ = 0.0;
+	*cos_wave++ = 1.0;
 
 	for (i = 1; i < rate; i++) {
-		sin_sample = sin(2 * M_PI * freq * i / rate);
-		cos_sample = cos(2 * M_PI * freq * i / rate);
+		phase = i / (float)rate;
+		sin_sample = sin(w * phase);
+		cos_sample = cos(w * phase);
 		if (sin_sample > -0.1e-6 && sin_sample < 0.1e-6) {
 			if (++zero_crossings == 2) break;
-			*sin_wave++ = 0;
+			*sin_wave++ = 0.0;
 		} else {
 			*sin_wave++ = sin_sample;
 		}

@@ -55,7 +55,10 @@ void set_carrier_volume(uint8_t carrier, int8_t new_volume) {
 	}
 }
 
-/* 2-channel FIR filter struct */
+/*
+ * 2-channel FIR filter struct
+ *
+ */
 typedef struct filter_t {
 	uint32_t sample_rate;
 	uint16_t index;
@@ -145,8 +148,17 @@ typedef struct delay_line_t {
 	uint32_t idx;
 } delay_line_t;
 
-static struct delay_line_t delay[2];
+/*
+ * delay buffers for hilbert transform
+ *
+ */
+static struct delay_line_t left_delay;
+static struct delay_line_t right_delay;
 
+/*
+ * filter delays needed for SSB
+ *
+ */
 static void init_delay_line(struct delay_line_t *delay_line) {
 	delay_line->buffer = malloc(MPX_SAMPLE_RATE * sizeof(float));
 }
@@ -169,10 +181,10 @@ void fm_mpx_init() {
 	create_mpx_carriers(MPX_SAMPLE_RATE);
 	init_hilbert_transformer();
 	fir_filter_init(fir_low_pass, MPX_SAMPLE_RATE, 128);
-	init_delay_line(&delay[0]);
-	init_delay_line(&delay[1]);
-	set_delay_line(&delay[0], HT_FILTER_HALF_SIZE);
-	set_delay_line(&delay[1], HT_FILTER_HALF_SIZE);
+	init_delay_line(&left_delay);
+	init_delay_line(&right_delay);
+	set_delay_line(&left_delay, HT_FILTER_HALF_SIZE);
+	set_delay_line(&right_delay, HT_FILTER_HALF_SIZE);
 }
 
 /*
@@ -181,21 +193,32 @@ void fm_mpx_init() {
  * Creates a single sideband signal
  * 0: LSB
  * 1: USB
+ *
+ * Might be removed in favor of the asymmetric DSB modulator below
  */
-static inline float get_single_sideband(float in, float in_delayed, uint8_t carrier, uint8_t sideband) {
+static inline float get_ssb(float in, float in_delayed, float sin, float cos, uint8_t sideband) {
 	float ht;
 	float inphase, quadrature;
 
-	ht      = get_hilbert(in);
+	// perform a 90 degree phase shift of all frequency components
+	ht = get_hilbert(in);
 
 	// I/Q components
-	inphase    = ht * get_cos_carrier(carrier);
-	quadrature = in_delayed * get_carrier(carrier);
+	inphase    = in_delayed * cos;
+	quadrature = ht * sin;
 
 	return	!sideband ?
-		inphase + quadrature : /* lsb */
-		inphase - quadrature;  /* usb */
+		inphase + quadrature : // lsb
+		inphase - quadrature;  // usb
 }
+
+/*
+ * Asymmetric DSB configuration
+ */
+struct {
+	float lsb_power;
+	float usb_power;
+} asym_dsb_config;
 
 /*
  * Asymmetric DSB modulator
@@ -203,22 +226,24 @@ static inline float get_single_sideband(float in, float in_delayed, uint8_t carr
  * LSB/USB range: [-1,1]
  * 0 is symmetric
  */
-static inline float get_asymmetric_dsb(float in, float in_delayed, uint8_t carrier, float asymmetry) {
+static inline float get_asym_dsb(float in, float in_delayed, float sin, float cos) {
 	float ht;
 	float inphase, quadrature;
-	float lsb_power, usb_power;
 
-	ht      = get_hilbert(in);
+	// perform a 90 degree phase shift of all frequency components
+	ht = get_hilbert(in);
 
 	// I/Q components
-	inphase    = ht * get_cos_carrier(carrier);
-	quadrature = in_delayed * get_carrier(carrier);
+	inphase    = in_delayed * cos;
+	quadrature = ht * sin;
 
-	lsb_power = fabsf(1.0f - asymmetry) / 2.0f;
-	usb_power = fabsf(1.0f + asymmetry) / 2.0f;
+	return	(inphase + quadrature) * asym_dsb_config.lsb_power + // lsb
+		(inphase - quadrature) * asym_dsb_config.usb_power;  // usb
+}
 
-	return	(inphase + quadrature) * lsb_power + /* lsb */
-		(inphase - quadrature) * usb_power;  /* usb */
+void set_asym_dsb(float asymmetry) {
+	asym_dsb_config.lsb_power = fabsf(1.0 - asymmetry) / 2.0;
+	asym_dsb_config.usb_power = fabsf(1.0 + asymmetry) / 2.0;
 }
 
 void fm_mpx_get_samples(float *in, float *out) {
@@ -228,6 +253,9 @@ void fm_mpx_get_samples(float *in, float *out) {
 	float lowpass_filter_out[2];
 	float out_left, out_right;
 	float out_mono, out_stereo;
+	// delayed versions of the above for SSB filter
+	float out_left_delayed, out_right_delayed;
+	float out_mono_delayed, out_stereo_delayed;
 
 	for (int i = 0; i < NUM_MPX_FRAMES; i++) {
 		lowpass_filter_in[0] = in[j+0];
@@ -242,17 +270,38 @@ void fm_mpx_get_samples(float *in, float *out) {
 		fir_filter_get(fir_low_pass, lowpass_filter_out);
 
 		// L/R signals
-		out_left  = delay_line(&delay[0], lowpass_filter_out[0]);
-		out_right = delay_line(&delay[1], lowpass_filter_out[1]);
+		out_left  = lowpass_filter_out[0];
+		out_right = lowpass_filter_out[1];
+		out_left_delayed  = delay_line(&left_delay, out_left);
+		out_right_delayed = delay_line(&right_delay, out_right);
 
 		// Create sum and difference signals
 		out_mono   = out_left + out_right;
 		out_stereo = out_left - out_right;
+		out_mono_delayed   = out_left_delayed + out_right_delayed;
+		out_stereo_delayed = out_left_delayed - out_right_delayed;
 
-		out[j] = 0;
+		// clear old buffer
+		out[j] = 0.0;
 
-		// audio signals need to be limited to 45% to remain within modulation limits
-		out[j] += out_mono * 0.45;
+		if (1) { // SSB mode
+			// delay mono so it is in sync with stereo
+			out[j] += out_mono_delayed * 0.45 +
+				get_cos_carrier(CARRIER_19K) * volumes[0];
+
+			out[j] +=
+				get_ssb(out_stereo,
+					out_stereo_delayed,
+					get_carrier(CARRIER_38K),
+					get_cos_carrier(CARRIER_38K),
+					0 /* LSB */) * 0.45;
+
+		} else {
+			// audio signals need to be limited to 45% to remain within modulation limits
+			out[j] += out_mono * 0.45 +
+				get_cos_carrier(CARRIER_19K) * volumes[0] +
+				get_cos_carrier(CARRIER_38K) * out_stereo * 0.45;
+		}
 
 		out[j] += get_cos_carrier(CARRIER_57K) * get_rds_sample(0) * volumes[1];
 #ifdef RDS2
@@ -260,10 +309,6 @@ void fm_mpx_get_samples(float *in, float *out) {
 		out[j] += get_cos_carrier(CARRIER_71K) * get_rds_sample(2) * volumes[3];
 		out[j] += get_cos_carrier(CARRIER_76K) * get_rds_sample(3) * volumes[4];
 #endif
-
-		out[j] +=
-			get_cos_carrier(CARRIER_19K) * volumes[0] +
-			get_cos_carrier(CARRIER_38K) * out_stereo * 0.45;
 
 		update_carrier_phase();
 
@@ -301,6 +346,6 @@ void fm_mpx_exit() {
 	exit_hilbert_transformer();
 	clear_mpx_carriers();
 	fir_filter_exit(fir_low_pass);
-	exit_delay_line(&delay[0]);
-	exit_delay_line(&delay[1]);
+	exit_delay_line(&left_delay);
+	exit_delay_line(&right_delay);
 }
