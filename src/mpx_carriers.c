@@ -40,7 +40,7 @@ static void create_carrier(uint32_t rate, float freq, float *sin_wave, float *co
 		phase = i / (float)rate;
 		sin_sample = sin(w * phase);
 		cos_sample = cos(w * phase);
-		if (sin_sample > -0.1e-6 && sin_sample < 0.1e-6) {
+		if (sin_sample > -0.1e-4 && sin_sample < 0.1e-4) {
 			if (++zero_crossings == 2) break;
 			*sin_wave++ = 0.0;
 		} else {
