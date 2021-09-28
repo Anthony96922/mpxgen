@@ -18,7 +18,9 @@
 
 #include "common.h"
 #include "rds.h"
+#include "rds_lib.h"
 
+// needed for clock time
 #include <time.h>
 
 static rds_params_t rds_data;
@@ -59,49 +61,6 @@ static void register_oda(uint8_t group, uint16_t aid, uint16_t scb) {
 	odas[oda_state.count].aid = aid;
 	odas[oda_state.count].scb = scb;
 	oda_state.count++;
-}
-
-static uint16_t offset_words[] = {
-	0x0FC,
-	0x198,
-	0x168,
-	0x1B4,
-	0x350 /* now we do */
-};
-// We don't handle offset word C' here for the sake of simplicity
-
-/* Classical CRC computation */
-static uint16_t crc(uint16_t block) {
-	uint16_t crc = 0;
-
-	for (int j = 0; j < BLOCK_SIZE; j++) {
-		uint8_t bit = (block & MSB_BIT) != 0;
-		block <<= 1;
-
-		uint8_t msb = (crc >> (POLY_DEG-1)) & 1;
-		crc <<= 1;
-		if ((msb ^ bit) != 0) crc ^= POLY;
-	}
-	return crc;
-}
-
-// Calculate the checkword for each block and emit the bits
-void add_checkwords(uint16_t *blocks, uint8_t *bits) {
-	uint16_t block, check, offset_word;
-	for (int i = 0; i < GROUP_LENGTH; i++) {
-		block = blocks[i];
-		offset_word = offset_words[i];
-		if (((blocks[1] >> 11) & 1) && i == 3) offset_word = offset_words[5];
-		check = crc(block) ^ offset_word;
-		for (int j = 0; j < BLOCK_SIZE; j++) {
-			*bits++ = ((block & (1 << (BLOCK_SIZE - 1))) != 0);
-			block <<= 1;
-		}
-		for (int j = 0; j < POLY_DEG; j++) {
-			*bits++ = ((check & (1 << (POLY_DEG - 1))) != 0);
-			check <<= 1;
-		}
-	}
 }
 
 /* Generates a CT (clock time) group if the minute has just changed
@@ -323,80 +282,16 @@ void get_rds_bits(uint8_t *bits) {
 	add_checkwords(out_blocks, bits);
 }
 
-/*
- * PI code calculator
- *
- * Calculates the PI code from a station's callsign.
- *
- * See
- * https://www.nrscstandards.org/standards-and-guidelines/documents/standards/nrsc-4-b.pdf
- * for more information.
- *
- */
-static uint16_t callsign2pi(char *callsign) {
-	uint16_t pi_code = 0;
-
-	if (callsign[0] == 'K' || callsign[0] == 'k') {
-		pi_code += 4096;
-	} else if (callsign[0] == 'W' || callsign[0] == 'w') {
-		pi_code += 21672;
-	} else {
-		return 0;
+static void show_af_list(rds_af_t af_list) {
+	fprintf(stderr, "AF: %d,", af_list.num_afs);
+	for (int i = 0; i < af_list.num_afs; i++) {
+		fprintf(stderr, " %.1f", (af_list.af[i] + 875) / 10.0);
 	}
-
-	pi_code +=
-		// Change nibbles to base-26 decimal
-		(callsign[1] - (callsign[1] >= 'a' ? 0x61 : 0x41)) * 676 +
-		(callsign[2] - (callsign[2] >= 'a' ? 0x61 : 0x41)) * 26 +
-		(callsign[3] - (callsign[3] >= 'a' ? 0x61 : 0x41));
-
-	// Call letter exceptions
-	if ((pi_code & 0x0F00) == 0) { // When 3rd char is 0
-		pi_code = 0xA000 + ((pi_code & 0xF000) >> 4) + (pi_code & 0x00FF);
-	}
-
-	if ((pi_code & 0x00FF) == 0) { // When 1st & 2nd chars are 0
-		pi_code = 0xAF00 + ((pi_code & 0xFF00) >> 8);
-	}
-
-	return pi_code;
+	fprintf(stderr, "\n");
 }
 
 int8_t init_rds_encoder(rds_params_t rds_params, char *call_sign) {
-
-	// The RDS pty region. This determines which PTY list to use
-	enum rds_pty_regions {
-		REGION_FCC, // NRSC RBDS
-		REGION_ROW  // Rest of the world
-	} pty_region = REGION_FCC;
-
-	// RDS PTY list
-	char ptys[2][32][30] = {
-		// RBDS
-		{
-			"None", "News", "Information", "Sports",
-			"Talk", "Rock", "Classic rock", "Adult hits",
-			"Soft rock" , "Top 40", "Country", "Oldies",
-			"Soft music", "Nostalgia", "Jazz", "Classical",
-			"R&B", "Soft R&B", "Language", "Religious music",
-			"Religious talk", "Personality", "Public", "College",
-			"Spanish talk", "Spanish music", "Hip-Hop", "Unassigned",
-			"Unassigned", "Weather", "Emergency test", "Emergency"
-		},
-#if 0
-		{
-			"None", "News", "Current affairs", "Information",
-			"Sport", "Education", "Drama", "Culture", "Science",
-			"Varied", "Pop music", "Rock music", "Easy listening",
-			"Light classical", "Serious classical", "Other music",
-			"Weather", "Finance", "Children's programs",
-			"Social affairs", "Religion", "Phone-in", "Travel",
-			"Leisure", "Jazz music", "Country music",
-			"National music", "Oldies music", "Folk music",
-			"Documentary", "Alarm test", "Alarm"
-		}
-#endif
-	};
+	enum rds_pty_regions pty_region = REGION_FCC;
 
 	if (rds_data.pty > 31) {
 		fprintf(stderr, "PTY must be between 0 - 31.\n");
@@ -425,11 +320,7 @@ int8_t init_rds_encoder(rds_params_t rds_params, char *call_sign) {
 	// AF
 	if (rds_params.af.num_afs) {
 		set_rds_af(rds_params.af);
-		fprintf(stderr, "AF: %d,", rds_params.af.num_afs);
-		for (int f = 0; f < rds_params.af.num_afs; f++) {
-			fprintf(stderr, " %.1f", (rds_params.af.af[f]+875)/10.0);
-		}
-		fprintf(stderr, "\n");
+		show_af_list(rds_params.af);
 	}
 
 	set_rds_pi(rds_params.pi);
@@ -505,8 +396,36 @@ void set_rds_rtplus_tags(uint8_t *tags) {
 	rtplus_cfg.len[1]	= (tags[5] < 32) ? tags[5] : 0;
 }
 
+/*
+ * AF stuff
+ */
+int8_t add_rds_af(rds_af_t af_list, float freq) {
+	uint16_t af = (uint16_t)(10 * freq);
+
+	// check if the AF list is full
+	if (af_list.num_afs > MAX_AF) {
+		fprintf(stderr, "AF list is full.\n");
+		return 1;
+	}
+
+	// check if new frequency is valid
+	if (af < 876 || af > 1079) {
+		fprintf(stderr, "AF must be between 87.6 - 107.9.\n");
+		return 1;
+	}
+
+	// append new AF entry
+	af_list.af[af_list.num_afs++] = af - 875;
+
+	return 0;
+}
+
 void set_rds_af(rds_af_t new_af_list) {
-	memcpy(&rds_data.af, &new_af_list, sizeof(new_af_list));
+	memcpy(&rds_data.af, &new_af_list, sizeof(struct rds_af_t));
+}
+
+void clear_rds_af() {
+	memset(&rds_data.af, 0, sizeof(struct rds_af_t));
 }
 
 void set_rds_pty(uint8_t pty) {

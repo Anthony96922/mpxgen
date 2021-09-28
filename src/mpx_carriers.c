@@ -53,15 +53,15 @@ static void create_carrier(uint32_t rate, float freq, float *sin_wave, float *co
 }
 
 static float carrier_frequencies[] = {
-	19000, // pilot tone
-	38000, // stereo difference
-	57000, // RDS
+	19000.0, // pilot tone
+	38000.0, // stereo difference
+	57000.0, // RDS
 
 #ifdef RDS2
 	// RDS 2
-	66500, // stream 1
-	71250, // stream 2
-	76000  // stream 2
+	66500.0, // stream 1
+	71250.0, // stream 2
+	76000.0  // stream 2
 #endif
 };
 
@@ -78,7 +78,7 @@ static float **cos_carrier;
  */
 static uint32_t **phase;
 
-void create_mpx_carriers(uint32_t sample_rate) {
+void init_mpx_carriers(uint32_t sample_rate) {
 	sin_carrier = (float **)malloc(NUM_CARRIERS * sizeof(float));
 	cos_carrier = (float **)malloc(NUM_CARRIERS * sizeof(float));
 	phase = (uint32_t **)malloc(NUM_CARRIERS * 2 * sizeof(uint32_t));
@@ -91,7 +91,7 @@ void create_mpx_carriers(uint32_t sample_rate) {
 	}
 }
 
-void clear_mpx_carriers() {
+void exit_mpx_carriers() {
 	for (int i = 0; i < NUM_CARRIERS; i++) {
 		free(sin_carrier[i]);
 		free(cos_carrier[i]);

@@ -43,12 +43,12 @@ static pthread_t mpx_thread;
 static pthread_t rds_thread;
 static pthread_t output_thread;
 
-static pthread_mutex_t control_pipe_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t input_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t resampler_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t mpx_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t rds_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t output_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t control_pipe_mutex	= PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t input_mutex		= PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t resampler_mutex		= PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t mpx_mutex		= PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t rds_mutex		= PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t output_mutex		= PTHREAD_MUTEX_INITIALIZER;
 
 static pthread_cond_t control_pipe_cond;
 static pthread_cond_t input_cond;
@@ -232,6 +232,55 @@ static void *output_worker(void *arg) {
 	pthread_exit(NULL);
 }
 
+static void show_help(char *name, rds_params_t def_params) {
+
+	fprintf(stderr,
+		"This is Mpxgen, a lightweight Stereo and RDS encoder.\n"
+		"\n"
+		"Usage: %s [options]\n"
+		"\n"
+		"[Audio]\n"
+		"\n"
+		"    -a / --audio        Input file, pipe or ALSA capture\n"
+		"    -o / --output-file  PCM out\n"
+		"\n"
+		"[MPX controls]\n"
+		"\n"
+		"    -m / --mpx          MPX volume\n"
+		"    -W / --wait         Wait for new audio\n"
+		"\n"
+		"[RDS encoder]\n"
+		"\n"
+		"    -R / --rds          RDS switch\n"
+		"\n"
+		"    -i / --pi           Program Identification code [default: %04X]\n"
+		"    -s / --ps           Program Service name [default: \"%s\"]\n"
+		"    -r / --rt           Radio Text [default: \"%s\"]\n"
+		"    -p / --pty          Program Type [default: %d]\n"
+		"    -T / --tp           Traffic Program [default: %d]\n"
+		"    -A / --af           Alternative Frequency\n"
+		"                        (more than one AF may be passed)\n"
+		"    -P / --ptyn         PTY Name\n"
+		"    -S / --callsign     Callsign to calculate the PI code from\n"
+		"                        (overrides -i/--pi)\n"
+		"    -C / --ctl          Control pipe\n"
+		"\n",
+		name,
+		def_params.pi, def_params.ps,
+		def_params.rt, def_params.pty,
+		def_params.tp
+	);
+}
+
+// check MPX volume level
+static int8_t check_mpx_vol(uint8_t volume) {
+	if (volume < 1 || volume > 100) {
+		fprintf(stderr, "MPX volume must be between 1 - 100.\n");
+		return 1;
+	}
+	return 0;
+}
+
 int main(int argc, char **argv) {
 	int opt;
 	char audio_file[51] = {0};
@@ -285,10 +334,8 @@ int main(int argc, char **argv) {
 		{ 0,		0,		0,	0 }
 	};
 
-	while((opt = getopt_long(argc, argv, short_opt, long_opt, NULL)) != -1)
-	{
-		switch(opt)
-		{
+	while ((opt = getopt_long(argc, argv, short_opt, long_opt, NULL)) != -1) {
+		switch (opt) {
 			case 'a': //audio
 				strncpy(audio_file, optarg, 50);
 				break;
@@ -299,10 +346,7 @@ int main(int argc, char **argv) {
 
 			case 'm': //mpx
 				mpx = strtoul(optarg, NULL, 10);
-				if (mpx < 1 || mpx > 100) {
-					fprintf(stderr, "MPX volume must be between 1 - 100.\n");
-					return 1;
-				}
+				if (check_mpx_vol(mpx) > 1) return 1;
 				break;
 
 			case 'W': //wait
@@ -336,18 +380,7 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'A': //af
-				if (rds_params.af.num_afs > MAX_AF) {
-					fprintf(stderr, "AF list is too large.\n");
-					return 1;
-				} else {
-					uint16_t freq = (uint16_t)(10*strtof(optarg, NULL));
-					if (freq < 876 || freq > 1079) {
-						fprintf(stderr, "Alternative Frequency has to be set in range of 87.6 MHz - 107.9 MHz\n");
-						return 1;
-					}
-					rds_params.af.af[rds_params.af.num_afs] = freq-875;
-				}
-				rds_params.af.num_afs++;
+				if (add_rds_af(rds_params.af, strtof(optarg, NULL)) > 0) return 1;
 				break;
 
 			case 'P': //ptyn
@@ -366,35 +399,7 @@ int main(int argc, char **argv) {
 			case 'h': //help
 			case '?':
 			default:
-				fprintf(stderr,
-					"This is Mpxgen, a lightweight Stereo and RDS encoder.\n"
-					"\n"
-					"Usage: %s [options]\n"
-					"\n"
-					"[Audio]\n"
-					"\n"
-					"    -a / --audio        Input file, pipe or ALSA capture\n"
-					"    -o / --output-file  PCM out\n"
-					"\n"
-					"[MPX controls]\n"
-					"\n"
-					"    -m / --mpx          MPX volume [default: %d]\n"
-					"    -W / --wait         Wait for new audio [default: %d]\n"
-					"\n"
-					"[RDS encoder]\n"
-					"\n"
-					"    -R / --rds          RDS switch [default: %d]\n"
-					"    -i / --pi           Program Identification code [default: %04X]\n"
-					"    -s / --ps           Program Service name [default: \"%s\"]\n"
-					"    -r / --rt           Radio Text [default: \"%s\"]\n"
-					"    -p / --pty          Program Type [default: %d]\n"
-					"    -T / --tp           Traffic Program [default: %d]\n"
-					"    -A / --af           Alternative Frequency (more than one AF may be passed)\n"
-					"    -P / --ptyn         PTY Name\n"
-					"    -S / --callsign     Callsign to calculate the PI code from (overrides -i/--pi)\n"
-					"    -C / --ctl          Control pipe\n"
-					"\n",
-				argv[0], mpx, wait, rds, rds_params.pi, rds_params.ps, rds_params.rt, rds_params.pty, rds_params.tp);
+				show_help(argv[0], rds_params);
 				return 1;
 		}
 	}
@@ -404,6 +409,7 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	// Initialize pthread stuff
 	pthread_mutex_init(&control_pipe_mutex, NULL);
 	pthread_mutex_init(&input_mutex, NULL);
 	pthread_mutex_init(&resampler_mutex, NULL);
@@ -418,7 +424,7 @@ int main(int argc, char **argv) {
 	pthread_cond_init(&output_cond, NULL);
 	pthread_attr_init(&attr);
 
-	// buffers
+	// Setup buffers
 	mpx_buffer = malloc(NUM_MPX_FRAMES*2*sizeof(float));
 	out_buffer = malloc(NUM_MPX_FRAMES*2*sizeof(float));
 
@@ -428,6 +434,14 @@ int main(int argc, char **argv) {
 
 	signal(SIGSEGV, free_and_shutdown);
 	signal(SIGKILL, free_and_shutdown);
+
+	// Initialize the baseband generator
+	fm_mpx_init();
+	set_output_volume(mpx);
+
+	// Initialize the RDS modulator
+	if (!rds) set_carrier_volume(1, 0);
+	if (init_rds_encoder(rds_params, callsign) < 0) goto exit;
 
 	if (output_file[0] == 0) {
 		r = open_output("alsa:default", MPX_SAMPLE_RATE, 2);
@@ -506,14 +520,6 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	// Initialize the baseband generator
-	fm_mpx_init();
-	set_output_volume(mpx);
-
-	// Initialize the RDS modulator
-	if (!rds) set_carrier_volume(1, 0);
-	if (init_rds_encoder(rds_params, callsign) < 0) goto exit;
-
 	// Initialize the control pipe reader
 	if(control_pipe[0]) {
 		if(open_control_pipe(control_pipe) == 0) {
@@ -581,12 +587,11 @@ exit:
 	pthread_join(rds_thread, NULL);
 	pthread_join(output_thread, NULL);
 
-	fm_mpx_exit();
 	if (audio_file[0]) close_input();
-
 	close_output();
-
 	if (audio_file[0]) resampler_exit(src_state);
+
+	fm_mpx_exit();
 
 free:
 	if (audio_file[0]) {

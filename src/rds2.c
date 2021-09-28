@@ -18,6 +18,7 @@
 
 #include "common.h"
 #include "rds.h"
+#include "rds_lib.h"
 #include "waveforms.h"
 
 /*

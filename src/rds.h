@@ -180,8 +180,13 @@ typedef struct rds_oda_t {
 	uint16_t scb;
 } rds_oda_t;
 
+// The PTY region. This determines which PTY list to use
+enum rds_pty_regions {
+	REGION_FCC, // NRSC RBDS
+	REGION_ROW  // Rest of the world
+};
+
 extern int8_t init_rds_encoder(rds_params_t rds_params, char *call_sign);
-extern void add_checkwords(uint16_t *blocks, uint8_t *bits);
 extern void get_rds_bits(uint8_t *bits);
 extern void set_rds_pi(uint16_t pi_code);
 extern void set_rds_rt(char *rt);
@@ -192,6 +197,7 @@ extern void set_rds_ta(uint8_t ta);
 extern void set_rds_pty(uint8_t pty);
 extern void set_rds_ptyn(char *ptyn);
 extern void set_rds_af(rds_af_t new_af_list);
+extern int8_t add_rds_af(rds_af_t af_list, float freq);
 extern void set_rds_tp(uint8_t tp);
 extern void set_rds_ms(uint8_t ms);
 extern void set_rds_ab(uint8_t ab);

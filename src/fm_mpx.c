@@ -44,15 +44,9 @@ static float volumes[] = {
 };
 
 void set_carrier_volume(uint8_t carrier, int8_t new_volume) {
-
-	if (new_volume == -1) return;
 	if (carrier > 4) return;
-
-	if (new_volume >= 0 && new_volume <= 15) {
-		volumes[carrier] = new_volume / 100.0;
-	} else {
-		volumes[carrier] = 0.09;
-	}
+	if (new_volume >= 15) volumes[carrier] = 0.09;
+	volumes[carrier] = new_volume / 100.0;
 }
 
 /*
@@ -75,7 +69,7 @@ typedef struct filter_t {
 // filter state
 static struct filter_t *fir_low_pass;
 
-static void fir_filter_init(struct filter_t *flt, uint32_t sample_rate, uint16_t half_size) {
+static void init_fir_filter(struct filter_t *flt, uint32_t sample_rate, uint16_t half_size) {
 
 	flt = malloc(sizeof(struct filter_t));
 
@@ -131,10 +125,7 @@ static inline void fir_filter_get(struct filter_t *flt, float *out) {
 	out[1] = flt->out[1];
 }
 
-static void fir_filter_exit(struct filter_t *flt) {
-	free(flt->in[0]);
-	free(flt->in[1]);
-	free(flt->filter);
+static void exit_fir_filter(struct filter_t *flt) {
 	free(flt);
 }
 
@@ -178,9 +169,9 @@ static void exit_delay_line(struct delay_line_t *delay_line) {
 }
 
 void fm_mpx_init() {
-	create_mpx_carriers(MPX_SAMPLE_RATE);
+	init_mpx_carriers(MPX_SAMPLE_RATE);
 	init_hilbert_transformer();
-	fir_filter_init(fir_low_pass, MPX_SAMPLE_RATE, 128);
+	init_fir_filter(fir_low_pass, MPX_SAMPLE_RATE, 128);
 	init_delay_line(&left_delay);
 	init_delay_line(&right_delay);
 	set_delay_line(&left_delay, HT_FILTER_HALF_SIZE);
@@ -344,8 +335,8 @@ void fm_rds_get_samples(float *out) {
 
 void fm_mpx_exit() {
 	exit_hilbert_transformer();
-	clear_mpx_carriers();
-	fir_filter_exit(fir_low_pass);
+	exit_mpx_carriers();
+	exit_fir_filter(fir_low_pass);
 	exit_delay_line(&left_delay);
 	exit_delay_line(&right_delay);
 }
