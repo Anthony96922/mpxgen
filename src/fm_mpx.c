@@ -84,7 +84,7 @@ static void init_fir_filter(struct filter_t *flt, uint32_t sample_rate, uint16_t
 
 	// Here we divide this coefficient by two because it will be counted twice
 	// when applying the filter
-	flt->filter[half_size-1] = 2 * 15500 / sample_rate / 2;
+	flt->filter[half_size-1] = 2 * 24000 / sample_rate / 2;
 
 	// Only store half of the filter since it is symmetric
 	float filter, window;
@@ -126,6 +126,11 @@ static inline void fir_filter_get(struct filter_t *flt, float *out) {
 }
 
 static void exit_fir_filter(struct filter_t *flt) {
+#if 0 // these cause a crash for some reason
+	free(flt->in[0]);
+	free(flt->in[1]);
+	free(flt->filter);
+#endif
 	free(flt);
 }
 
@@ -172,6 +177,7 @@ void fm_mpx_init() {
 	init_mpx_carriers(MPX_SAMPLE_RATE);
 	init_hilbert_transformer();
 	init_fir_filter(fir_low_pass, MPX_SAMPLE_RATE, 128);
+	exit_fir_filter(fir_low_pass);
 	init_delay_line(&left_delay);
 	init_delay_line(&right_delay);
 	set_delay_line(&left_delay, HT_FILTER_HALF_SIZE);
@@ -248,7 +254,7 @@ void fm_mpx_get_samples(float *in, float *out) {
 	float out_left_delayed, out_right_delayed;
 	float out_mono_delayed, out_stereo_delayed;
 
-	for (int i = 0; i < NUM_MPX_FRAMES; i++) {
+	for (int i = 0; i < NUM_MPX_FRAMES_IN; i++) {
 		lowpass_filter_in[0] = in[j+0];
 		lowpass_filter_in[1] = in[j+1];
 
@@ -312,7 +318,7 @@ void fm_mpx_get_samples(float *in, float *out) {
 void fm_rds_get_samples(float *out) {
 	uint16_t j = 0;
 
-	for (int i = 0; i < NUM_MPX_FRAMES; i++) {
+	for (int i = 0; i < NUM_MPX_FRAMES_IN; i++) {
 		out[j] = 0;
 
 		// Pilot tone for calibration

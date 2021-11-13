@@ -19,6 +19,7 @@
 #include "common.h"
 #include "rds.h"
 #include "rds_lib.h"
+#include "rds_modulator.h"
 
 // needed for clock time
 #include <time.h>
@@ -313,7 +314,7 @@ int8_t init_rds_encoder(rds_params_t rds_params, char *call_sign) {
 		rds_params.pi,
 		rds_params.ps,
 		rds_params.pty,
-		ptys[pty_region][rds_params.pty],
+		get_pty(rds_params.pty, pty_region),
 		rds_params.tp);
 	fprintf(stderr, "RT: \"%s\"\n", rds_params.rt);
 
@@ -340,7 +341,14 @@ int8_t init_rds_encoder(rds_params_t rds_params, char *call_sign) {
 	// Assign the RT+ AID to group 11A
 	init_rtplus(GROUP_11A);
 
+	// initialize signal
+	init_symbol_waveforms();
+
 	return 0;
+}
+
+void exit_rds_encoder() {
+	exit_symbol_waveforms();
 }
 
 void set_rds_pi(uint16_t pi_code) {

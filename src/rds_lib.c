@@ -25,8 +25,8 @@
  */
 
 // RDS PTY list
-const char ptys[2][32][30] = {
-	// RBDS
+static char ptys[2][32][30] = {
+	// NRSC RBDS
 	{
 		"None", "News", "Information", "Sports",
 		"Talk", "Rock", "Classic rock", "Adult hits",
@@ -37,6 +37,7 @@ const char ptys[2][32][30] = {
 		"Spanish talk", "Spanish music", "Hip-Hop", "Unassigned",
 		"Unassigned", "Weather", "Emergency test", "Emergency"
 	},
+	// ETSI
 	{
 		"None", "News", "Current affairs", "Information",
 		"Sport", "Education", "Drama", "Culture", "Science",
@@ -50,14 +51,17 @@ const char ptys[2][32][30] = {
 	}
 };
 
+char *get_pty(uint8_t pty, uint8_t region) {
+	return ptys[pty][region];
+}
+
 static uint16_t offset_words[] = {
-	0x0FC,
-	0x198,
-	0x168,
-	0x1B4,
-	0x350 /* now we do */
+	0x0FC, // A
+	0x198, // B
+	0x168, // C
+	0x1B4, // D
+	0x350  // C'
 };
-// We don't handle offset word C' here for the sake of simplicity
 
 /* Classical CRC computation */
 static uint16_t crc(uint16_t block) {

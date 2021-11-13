@@ -16,6 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern const char ***ptys;
+extern char *get_pty(uint8_t pty, uint8_t region);
 extern void add_checkwords(uint16_t *blocks, uint8_t *bits);
 extern uint16_t callsign2pi(char *callsign);

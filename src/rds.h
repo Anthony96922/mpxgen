@@ -24,17 +24,18 @@
 /* The RDS error-detection code generator polynomial is
    x^10 + x^8 + x^7 + x^5 + x^4 + x^3 + x^0
 */
-#define POLY 0x1B9
-#define POLY_DEG 10
-#define MSB_BIT 0x8000
-#define BLOCK_SIZE 16
+#define POLY			0x1B9
+#define POLY_DEG		10
+#define MSB_BIT			0x8000
+#define BLOCK_SIZE		16
 
-#define GROUP_LENGTH 4
-#define BITS_PER_GROUP (GROUP_LENGTH * (BLOCK_SIZE+POLY_DEG))
-#define RDS_SAMPLE_RATE 190000
-#define SAMPLES_PER_BIT 160
-#define FILTER_SIZE 1120
-#define SAMPLE_BUFFER_SIZE (SAMPLES_PER_BIT + FILTER_SIZE)
+#define GROUP_LENGTH		4
+#define BITS_PER_GROUP		(GROUP_LENGTH * (BLOCK_SIZE+POLY_DEG))
+#define RDS_SAMPLE_RATE		190000
+#define SAMPLES_PER_BIT		160
+#define FILTER_SIZE		1120
+#define SAMPLE_BUFFER_SIZE	(SAMPLES_PER_BIT + FILTER_SIZE)
+#define SAMPLES_PER_3BIT	(SAMPLES_PER_BIT * 3)
 
 #define RDS_SRC_RATIO ((float)MPX_SAMPLE_RATE / (float)RDS_SAMPLE_RATE)
 
