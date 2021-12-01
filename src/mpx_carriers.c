@@ -17,6 +17,7 @@
  */
 
 #include "common.h"
+#include "mpx_carriers.h"
 
 /*
  * code for MPX oscillator
@@ -24,20 +25,20 @@
  */
 
 // Create wave constants for a given frequency
-static void create_carrier(uint32_t rate, float freq, float *sin_wave, float *cos_wave, uint32_t *max_phase) {
+static void create_carrier(uint32_t rate, float freq, float *sin_wave, float *cos_wave, uint16_t *max_phase) {
 	float sin_sample, cos_sample;
 	// used to determine if we have completed a cycle
 	uint8_t zero_crossings = 0;
-	uint32_t i;
-	float w = 2.0 * M_PI * freq;
-	float phase;
+	uint16_t i;
+	double w = 2.0 * M_PI * freq;
+	double phase;
 
 	// First value of a sine wave is always 0
 	*sin_wave++ = 0.0;
 	*cos_wave++ = 1.0;
 
 	for (i = 1; i < rate; i++) {
-		phase = i / (float)rate;
+		phase = i / (double)rate;
 		sin_sample = sin(w * phase);
 		cos_sample = cos(w * phase);
 		if (sin_sample > -0.1e-4 && sin_sample < 0.1e-4) {
@@ -52,66 +53,62 @@ static void create_carrier(uint32_t rate, float freq, float *sin_wave, float *co
 	*max_phase = i;
 }
 
-static float carrier_frequencies[] = {
-	19000.0, // pilot tone
-	38000.0, // stereo difference
-	57000.0, // RDS
+void init_mpx_carriers(struct osc_ctx *mpx_osc_ctx, uint32_t sample_rate, const float *c_freqs) {
+	uint8_t num_carriers = 0;
+	// look for the terminator (0)
+	for (;;) {
+		if (c_freqs[num_carriers] == 0.0) break;
+		num_carriers++;
+	}
 
-#ifdef RDS2
-	// RDS 2
-	66500.0, // stream 1
-	71250.0, // stream 2
-	76000.0  // stream 2
-#endif
-};
+	mpx_osc_ctx->num_carriers = num_carriers;
 
-#define NUM_CARRIERS sizeof(carrier_frequencies)/sizeof(float)
+	mpx_osc_ctx->sine_waves = malloc(num_carriers * sizeof(float));
+	mpx_osc_ctx->cosine_waves = malloc(num_carriers * sizeof(float));
+	mpx_osc_ctx->phases = malloc(num_carriers * 2 * sizeof(uint16_t));
 
-static float **sin_carrier;
-static float **cos_carrier;
+	for (uint8_t i = 0; i < num_carriers; i++) {
+		mpx_osc_ctx->sine_waves[i] = malloc(sample_rate * sizeof(float));
+		mpx_osc_ctx->cosine_waves[i] = malloc(sample_rate * sizeof(float));
+		mpx_osc_ctx->phases[i] = malloc(2 * sizeof(uint16_t));
+		mpx_osc_ctx->phases[i][CURRENT] = 0;
 
-/*
- * Wave phase
- *
- * index 0: current phase
- * index 1: max phase
- */
-static uint32_t **phase;
-
-void init_mpx_carriers(uint32_t sample_rate) {
-	sin_carrier = (float **)malloc(NUM_CARRIERS * sizeof(float));
-	cos_carrier = (float **)malloc(NUM_CARRIERS * sizeof(float));
-	phase = (uint32_t **)malloc(NUM_CARRIERS * 2 * sizeof(uint32_t));
-	for (int i = 0; i < NUM_CARRIERS; i++) {
-		sin_carrier[i] = malloc(sample_rate * sizeof(float));
-		cos_carrier[i] = malloc(sample_rate * sizeof(float));
-		phase[i] = malloc(2 * sizeof(uint32_t));
-		phase[i][0] = 0;
-		create_carrier(sample_rate, carrier_frequencies[i], sin_carrier[i], cos_carrier[i], &phase[i][1]);
+		// create waveform constants and load them into our oscillator
+		create_carrier(sample_rate, c_freqs[i],
+			mpx_osc_ctx->sine_waves[i],
+			mpx_osc_ctx->cosine_waves[i],
+			&mpx_osc_ctx->phases[i][MAX]
+		);
 	}
 }
 
-void exit_mpx_carriers() {
-	for (int i = 0; i < NUM_CARRIERS; i++) {
-		free(sin_carrier[i]);
-		free(cos_carrier[i]);
-		free(phase[i]);
+void exit_mpx_carriers(struct osc_ctx *mpx_osc_ctx) {
+	for (uint8_t i = 0; i < mpx_osc_ctx->num_carriers; i++) {
+		free(mpx_osc_ctx->sine_waves[i]);
+		free(mpx_osc_ctx->cosine_waves[i]);
+		free(mpx_osc_ctx->phases[i]);
 	}
-	free(sin_carrier);
-	free(cos_carrier);
-	free(phase);
+	free(mpx_osc_ctx->sine_waves);
+	free(mpx_osc_ctx->cosine_waves);
+	free(mpx_osc_ctx->phases);
 }
 
-float get_carrier(uint8_t carrier_num) {
-	return sin_carrier[carrier_num][phase[carrier_num][0]];
+float get_carrier(struct osc_ctx *mpx_osc_ctx, uint8_t carrier_num) {
+	uint16_t cur_phase = mpx_osc_ctx->phases[carrier_num][CURRENT];
+	return mpx_osc_ctx->sine_waves[carrier_num][cur_phase];
 }
 
-float get_cos_carrier(uint8_t carrier_num) {
-	return cos_carrier[carrier_num][phase[carrier_num][0]];
+float get_cos_carrier(struct osc_ctx *mpx_osc_ctx, uint8_t carrier_num) {
+	uint16_t cur_phase = mpx_osc_ctx->phases[carrier_num][CURRENT];
+	return mpx_osc_ctx->cosine_waves[carrier_num][cur_phase];
 }
 
-void update_carrier_phase() {
-	for (int i = 0; i < NUM_CARRIERS; i++) {
-		if (++phase[i][0] == phase[i][1]) phase[i][0] = 0;
+void update_carrier_phase(struct osc_ctx *mpx_osc_ctx) {
+	uint16_t cur_phase, max_phase;
+	for (uint8_t i = 0; i < mpx_osc_ctx->num_carriers; i++) {
+		cur_phase = mpx_osc_ctx->phases[i][CURRENT]++;
+		max_phase = mpx_osc_ctx->phases[i][MAX];
+		if (cur_phase == max_phase)
+			mpx_osc_ctx->phases[i][CURRENT] = 0;
 	}
 }

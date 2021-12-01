@@ -17,12 +17,12 @@
  */
 
 #include "common.h"
-#include "rds.h"
 #ifdef RDS2
 #include "rds2.h"
 #endif
 #include "fm_mpx.h"
 #include "waveforms.h"
+#include "rds_modulator.h"
 
 static float *sym_waveforms[2];
 
@@ -47,21 +47,6 @@ void exit_symbol_waveforms() {
 		free(sym_waveforms[i]);
 	}
 }
-
-// RDS signal context
-typedef struct rds_context {
-	uint8_t bit_buffer[BITS_PER_GROUP];
-	uint8_t bit_pos;
-	float sample_buffer[SAMPLE_BUFFER_SIZE];
-	uint8_t prev_output;
-	uint8_t cur_output;
-	uint8_t cur_bit;
-	uint8_t sample_count;
-	uint16_t in_sample_index;
-	uint16_t out_sample_index;
-	float sample_pos;
-	float sample;
-} rds_context;
 
 static struct rds_context rds_contexts[4];
 

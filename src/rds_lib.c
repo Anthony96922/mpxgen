@@ -135,3 +135,44 @@ uint16_t callsign2pi(char *callsign) {
 
 	return pi_code;
 }
+
+/*
+ * TMC stuff (for future use)
+ *
+ * Based on the the implementation described here:
+ * http://www.windytan.com/2013/05/a-determined-hacker-decrypts-rds-tmc.html
+ */
+
+/*
+ * bit rotation operations
+ *
+ */
+static inline uint16_t rotr16(uint16_t value, uint8_t count) {
+	return value >> count | value << (16 - count);
+}
+
+static inline uint16_t rotl16(uint16_t value, uint8_t count) {
+	return value << count | value >> (16 - count);
+}
+
+uint16_t tmc_encrypt(uint16_t loc, uint16_t key) {
+	uint16_t enc_loc;
+	uint16_t p1, p2;
+
+	p1 = rotr16(loc, key >> 12);
+	p2 = (key & 0xff) << ((key >> 8) & 0xf);
+	enc_loc = p1 ^ p2;
+
+	return enc_loc;
+}
+
+uint16_t tmc_decrypt(uint16_t loc, uint16_t key) {
+	uint16_t dec_loc;
+	uint16_t p1, p2;
+
+	p1 = (key & 0xff) << ((key >> 8) & 0xf);
+	p2 = loc ^ p1;
+	dec_loc = rotl16(p2, key >> 12);
+
+	return dec_loc;
+}

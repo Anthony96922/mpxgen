@@ -19,3 +19,7 @@
 extern char *get_pty(uint8_t pty, uint8_t region);
 extern void add_checkwords(uint16_t *blocks, uint8_t *bits);
 extern uint16_t callsign2pi(char *callsign);
+
+// TMC
+extern uint16_t tmc_encrypt(uint16_t loc, uint16_t key);
+extern uint16_t tmc_decrypt(uint16_t loc, uint16_t key);

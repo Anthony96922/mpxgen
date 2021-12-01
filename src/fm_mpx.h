@@ -27,9 +27,36 @@
 // The sample rate at which the MPX generation runs at
 #define MPX_SAMPLE_RATE		190000
 
+/*
+ * 2-channel FIR filter struct
+ *
+ */
+typedef struct filter_t {
+	uint32_t sample_rate;
+	uint16_t index;
+	uint16_t size;
+	uint16_t half_size;
+	float *in[2];
+
+	// coefficients of the low-pass FIR filter
+	float *filter;
+
+	float out[2];
+} filter_t;
+
+/*
+ * Filter delay line
+ *
+ */
+typedef struct delay_line_t {
+	float *buffer;
+	uint32_t delay;
+	uint32_t idx;
+} delay_line_t;
+
 extern void fm_mpx_init();
 extern void fm_mpx_get_samples(float *in, float *out);
 extern void fm_rds_get_samples(float *out);
 extern void fm_mpx_exit();
 extern void set_output_volume(uint8_t vol);
-extern void set_carrier_volume(uint8_t carrier, int8_t new_volume);
+extern void set_carrier_volume(uint8_t carrier, uint8_t new_volume);
