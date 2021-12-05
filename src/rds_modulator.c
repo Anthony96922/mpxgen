@@ -30,20 +30,17 @@ static float *sym_waveforms[2];
  * Also create the inverted version of the symbol waveform
  */
 void init_symbol_waveforms() {
-	for (int i = 0; i < 2; i++) {
+	for (uint8_t i = 0; i < 2; i++) {
 		sym_waveforms[i] = malloc(FILTER_SIZE * sizeof(float));
-		for (int j = 0; j < FILTER_SIZE; j++) {
-			if (i) {
-				sym_waveforms[i][j] = +waveform_biphase[j];
-			} else {
-				sym_waveforms[i][j] = -waveform_biphase[j];
-			}
+		for (uint16_t j = 0; j < FILTER_SIZE; j++) {
+			sym_waveforms[i][j] = (i) ?
+				+waveform_biphase[j] : -waveform_biphase[j];
 		}
 	}
 }
 
 void exit_symbol_waveforms() {
-	for (int i = 0; i < 2; i++) {
+	for (uint8_t i = 0; i < 2; i++) {
 		free(sym_waveforms[i]);
 	}
 }
@@ -77,20 +74,15 @@ float get_rds_sample(uint8_t stream_num) {
 
 		uint16_t idx = rds->in_sample_index;
 
-		for (int j = 0; j < FILTER_SIZE; j++) {
-			if (rds->cur_output) {
-				rds->sample_buffer[idx] += sym_waveforms[1][j];
-			} else {
-				rds->sample_buffer[idx] += sym_waveforms[0][j];
-			}
-			idx++;
+		for (uint16_t j = 0; j < FILTER_SIZE; j++) {
+			rds->sample_buffer[idx++] +=
+				sym_waveforms[rds->cur_output][j];
 			if (idx == SAMPLE_BUFFER_SIZE) idx = 0;
 		}
 
 		rds->in_sample_index += SAMPLES_PER_BIT;
-		if (rds->in_sample_index == SAMPLE_BUFFER_SIZE) {
+		if (rds->in_sample_index == SAMPLE_BUFFER_SIZE)
 			rds->in_sample_index = 0;
-		}
 
 		rds->sample_count = 0;
 	}
@@ -98,9 +90,8 @@ float get_rds_sample(uint8_t stream_num) {
 
 	rds->sample = rds->sample_buffer[rds->out_sample_index];
 	rds->sample_buffer[rds->out_sample_index++] = 0;
-	if (rds->out_sample_index >= SAMPLE_BUFFER_SIZE) {
+	if (rds->out_sample_index == SAMPLE_BUFFER_SIZE)
 		rds->out_sample_index = 0;
-	}
 
 	return rds->sample;
 }

@@ -61,7 +61,7 @@ int8_t open_file_input(char *filename, uint32_t *sample_rate, uint8_t wait, size
 }
 
 int16_t read_file_input(short *audio) {
-	uint16_t read_len;
+	int16_t read_len;
 	uint16_t frames_to_read = target_len;
 	uint16_t audio_len = 0;
 	static uint8_t silent;

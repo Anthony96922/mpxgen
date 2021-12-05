@@ -19,8 +19,6 @@
 #ifndef RDS_H
 #define RDS_H
 
-#include <stdint.h>
-
 /* The RDS error-detection code generator polynomial is
    x^10 + x^8 + x^7 + x^5 + x^4 + x^3 + x^0
 */
@@ -35,15 +33,22 @@
 #define SAMPLES_PER_BIT		160
 #define FILTER_SIZE		1120
 #define SAMPLE_BUFFER_SIZE	(SAMPLES_PER_BIT + FILTER_SIZE)
-#define SAMPLES_PER_3BIT	(SAMPLES_PER_BIT * 3)
 
-#define RDS_SRC_RATIO ((float)MPX_SAMPLE_RATE / (float)RDS_SAMPLE_RATE)
+/* Text items
+ *
+ */
+#define RT_LENGTH 64
+#define PS_LENGTH 8
+#define PTYN_LENGTH 8
 
-#define MAX_AF 25
+/* AF list size
+ *
+ */
+#define MAX_AFS 25
 
 typedef struct rds_af_t {
 	uint8_t num_afs;
-	uint8_t af[MAX_AF];
+	uint8_t af[MAX_AFS];
 } rds_af_t;
 
 typedef struct rds_params_t {
@@ -54,13 +59,14 @@ typedef struct rds_params_t {
 	uint8_t ms;
 	uint8_t di;
 	// PS
-	char ps[8];
+	char ps[PS_LENGTH];
 	// RT
-	char rt[64];
+	char rt[RT_LENGTH];
 	// PTYN
-	char ptyn[8];
+	char ptyn[PTYN_LENGTH];
 
-	rds_af_t af;
+	// AF
+	struct rds_af_t af;
 
 	uint8_t tx_ctime;
 } rds_params_t;
@@ -144,7 +150,7 @@ typedef struct rds_params_t {
 
 // Bit mask
 // Lower
-#define BIT_L1		0x00
+#define BIT_L1		0x01
 #define BIT_L2		0x03
 #define BIT_L3		0x07
 #define BIT_L4		0x0f
@@ -152,7 +158,7 @@ typedef struct rds_params_t {
 #define BIT_L6		0x3f
 #define BIT_L7		0x7f
 // Upper
-#define BIT_U7		0xfc
+#define BIT_U7		0xfe
 #define BIT_U6		0xfc
 #define BIT_U5		0xf8
 #define BIT_U4		0xf0
@@ -187,7 +193,7 @@ enum rds_pty_regions {
 	REGION_ROW  // Rest of the world
 };
 
-extern int8_t init_rds_encoder(rds_params_t rds_params, char *call_sign);
+extern void init_rds_encoder(struct rds_params_t rds_params, char *call_sign);
 extern void get_rds_bits(uint8_t *bits);
 extern void set_rds_pi(uint16_t pi_code);
 extern void set_rds_rt(char *rt);
@@ -197,12 +203,13 @@ extern void set_rds_rtplus_tags(uint8_t *tags);
 extern void set_rds_ta(uint8_t ta);
 extern void set_rds_pty(uint8_t pty);
 extern void set_rds_ptyn(char *ptyn);
-extern void set_rds_af(rds_af_t new_af_list);
-extern int8_t add_rds_af(rds_af_t af_list, float freq);
+extern void set_rds_af(struct rds_af_t new_af_list);
+extern int8_t add_rds_af(struct rds_af_t af_list, float freq);
 extern void set_rds_tp(uint8_t tp);
 extern void set_rds_ms(uint8_t ms);
 extern void set_rds_ab(uint8_t ab);
 extern void set_rds_ct(uint8_t ct);
 extern void set_rds_di(uint8_t di);
 extern float get_rds_sample(uint8_t stream_num);
+
 #endif /* RDS_H */

@@ -20,14 +20,14 @@
 
 // float to short
 static inline void float2short(float *inbuf, int16_t *outbuf, size_t inbufsize) {
-	for (int i = 0; i < inbufsize; i++) {
+	for (size_t i = 0; i < inbufsize; i++) {
 		outbuf[i] = lround(inbuf[i] * 32767);
 	}
 }
 
 // converts 16 bit shorts (stored as two 8 bit ints) to floats
 static inline void char2float(int8_t *inbuf, float *outbuf, size_t inbufsize) {
-	int i = 0, j = 0;
+	size_t i = 0, j = 0;
 
 	for (i = 0; i < inbufsize; i++) {
 		outbuf[i] = ((inbuf[j+0] & 0xff) | (inbuf[j+1] << 8)) / 32767.0;
@@ -37,7 +37,7 @@ static inline void char2float(int8_t *inbuf, float *outbuf, size_t inbufsize) {
 
 // converts 16 bit shorts to floats
 static inline void short2float(int16_t *inbuf, float *outbuf, size_t inbufsize) {
-	for (int i = 0; i < inbufsize; i++) {
+	for (size_t i = 0; i < inbufsize; i++) {
 		outbuf[i] = inbuf[i] / 32767.0;
 	}
 }
@@ -47,7 +47,7 @@ static inline void short2float(int16_t *inbuf, float *outbuf, size_t inbufsize) 
 
 // s16le
 static inline void stereoizes16(int16_t *inbuf, int16_t *outbuf, size_t inbufsize) {
-	int i = 0, j = 0;
+	size_t i = 0, j = 0;
 
 	for (i = 0; i < inbufsize; i++) {
 		outbuf[j+0] = outbuf[j+1] = inbuf[i];
@@ -57,7 +57,7 @@ static inline void stereoizes16(int16_t *inbuf, int16_t *outbuf, size_t inbufsiz
 
 // float
 static inline void stereoizef(float *inbuf, float *outbuf, size_t inbufsize) {
-	int i = 0, j = 0;
+	size_t i = 0, j = 0;
 
 	for (i = 0; i < inbufsize; i++) {
 		outbuf[j+0] = outbuf[j+1] = inbuf[i];

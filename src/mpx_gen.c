@@ -103,7 +103,7 @@ typedef struct mpx_thread_args_t {
 } mpx_thread_args_t;
 
 // threads
-static void *control_pipe_worker(void *arg) {
+static void *control_pipe_worker() {
 	while (!stop_mpx) {
 		poll_control_pipe();
 		usleep(10000);
@@ -287,8 +287,7 @@ static void *output_worker(void *arg) {
 	pthread_exit(NULL);
 }
 
-static void show_help(char *name, rds_params_t def_params) {
-
+static void show_help(char *name, struct rds_params_t def_params) {
 	fprintf(stderr,
 		"This is Mpxgen, a lightweight Stereo and RDS encoder.\n"
 		"\n"
@@ -328,7 +327,7 @@ static void show_help(char *name, rds_params_t def_params) {
 }
 
 // check MPX volume level
-static int8_t check_mpx_vol(uint8_t volume) {
+static uint8_t check_mpx_vol(uint8_t volume) {
 	if (volume < 1 || volume > 100) {
 		fprintf(stderr, "MPX volume must be between 1 - 100.\n");
 		return 1;
@@ -342,7 +341,7 @@ int main(int argc, char **argv) {
 	char output_file[51] = {0};
 	char control_pipe[51] = {0};
 	uint8_t rds = 1;
-	rds_params_t rds_params = {
+	struct rds_params_t rds_params = {
 		.ps = "Mpxgen",
 		.rt = "Mpxgen: FM Stereo and RDS encoder",
 		.pi = 0x1000
@@ -401,7 +400,7 @@ int main(int argc, char **argv) {
 
 			case 'm': //mpx
 				mpx = strtoul(optarg, NULL, 10);
-				if (check_mpx_vol(mpx) > 1) return 1;
+				if (check_mpx_vol(mpx) > 0) return 1;
 				break;
 
 			case 'W': //wait
@@ -435,7 +434,7 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'A': //af
-				if (add_rds_af(rds_params.af, strtof(optarg, NULL)) > 0) return 1;
+				if (add_rds_af(rds_params.af, strtof(optarg, NULL)) < 0) return 1;
 				break;
 
 			case 'P': //ptyn
@@ -498,16 +497,16 @@ int main(int argc, char **argv) {
 
 	// Initialize the RDS modulator
 	if (!rds) set_carrier_volume(1, 0);
-	if (init_rds_encoder(rds_params, callsign) < 0) goto exit;
+	init_rds_encoder(rds_params, callsign);
 
 	if (output_file[0] == 0) {
-		r = open_output("alsa:default", MPX_SAMPLE_RATE, 2);
+		r = open_output("alsa:default", OUTPUT_SAMPLE_RATE, 2);
 		if (r < 0) {
 			goto free;
 		}
 		output_open_success = 1;
 	} else {
-		r = open_output(output_file, MPX_SAMPLE_RATE, 2);
+		r = open_output(output_file, OUTPUT_SAMPLE_RATE, 2);
 		if (r < 0) {
 			goto free;
 		}
@@ -546,13 +545,14 @@ int main(int argc, char **argv) {
 		memset(&src_data[0], 0, sizeof(src_data[0]));
 
 		struct resample_thread_args_t in_resampler_args;
+		memset(&in_resampler_args, 0, sizeof(struct resample_thread_args_t));
 		in_resampler_args.state = &src_state[0];
 		in_resampler_args.data = src_data[0];
 		in_resampler_args.in = audio_in_buffer;
 		in_resampler_args.out = resampled_audio_in_buffer;
 		in_resampler_args.frames_in = NUM_AUDIO_FRAMES_IN;
 		in_resampler_args.frames_out = NUM_AUDIO_FRAMES_OUT;
-		in_resampler_args.ratio = (float)MPX_SAMPLE_RATE / (float)sample_rate;
+		in_resampler_args.ratio = (double)MPX_SAMPLE_RATE / (double)sample_rate;
 
 		// start input resampler thread
 		r = pthread_create(&in_resampler_thread, &attr, in_resampler_worker, (void *)&in_resampler_args);
@@ -604,22 +604,23 @@ int main(int argc, char **argv) {
 
 	memset(&src_data[1], 0, sizeof(src_data[1]));
 
-	struct resample_thread_args_t in_resampler_args;
-	in_resampler_args.state = &src_state[1];
-	in_resampler_args.data = src_data[1];
-	in_resampler_args.in = mpx_buffer;
-	in_resampler_args.out = out_buffer;
-	in_resampler_args.frames_in = NUM_MPX_FRAMES_IN;
-	in_resampler_args.frames_out = NUM_MPX_FRAMES_OUT;
-	in_resampler_args.ratio = (float)192000 / (float)MPX_SAMPLE_RATE;
+	struct resample_thread_args_t out_resampler_args;
+	memset(&out_resampler_args, 0, sizeof(struct resample_thread_args_t));
+	out_resampler_args.state = &src_state[1];
+	out_resampler_args.data = src_data[1];
+	out_resampler_args.in = mpx_buffer;
+	out_resampler_args.out = out_buffer;
+	out_resampler_args.frames_in = NUM_MPX_FRAMES_IN;
+	out_resampler_args.frames_out = NUM_MPX_FRAMES_OUT;
+	out_resampler_args.ratio = (double)OUTPUT_SAMPLE_RATE / (double)MPX_SAMPLE_RATE;
 
 	// start output resampler thread
-	r = pthread_create(&in_resampler_thread, &attr, out_resampler_worker, (void *)&in_resampler_args);
+	r = pthread_create(&in_resampler_thread, &attr, out_resampler_worker, (void *)&out_resampler_args);
 	if (r < 0) {
-		fprintf(stderr, "Could not create input resampler thread.\n");
+		fprintf(stderr, "Could not create output resampler thread.\n");
 		goto exit;
 	} else {
-		fprintf(stderr, "Created input resampler thread.\n");
+		fprintf(stderr, "Created output resampler thread.\n");
 	}
 
 	// start MPX thread

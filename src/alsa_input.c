@@ -87,14 +87,14 @@ int8_t open_alsa_input(char *input, uint32_t sample_rate, size_t num_frames) {
 	return 0;
 }
 
-uint16_t read_alsa_input(short *buffer) {
+int16_t read_alsa_input(short *buffer) {
 	int16_t frames_read;
 	uint16_t frames;
 
 	frames_read = snd_pcm_readi(pcm, buffer, buffer_size);
 	if (frames_read < 0) {
 		fprintf(stderr, "Error: read from audio device failed (%s)\n", snd_strerror(frames_read));
-		frames = 0;
+		frames = -1;
 	} else {
 		frames = frames_read;
 	}

@@ -3,7 +3,7 @@
 RDS2 = 0
 
 CC = gcc
-CFLAGS = -Wall -O2 -std=gnu99 -pedantic
+CFLAGS = -Wall -Wextra -O2 -std=gnu99 -pedantic
 
 obj = mpx_gen.o rds.o waveforms.o fm_mpx.o control_pipe.o mpx_carriers.o \
 	resampler.o input.o file_input.o ssb.o output.o alsa_output.o \
@@ -18,7 +18,7 @@ endif
 all: mpxgen
 
 mpxgen: $(obj)
-	$(CC) $(obj) $(libs) -o mpxgen
+	$(CC) $(obj) $(libs) -o mpxgen -s
 
 clean:
 	rm -f *.o

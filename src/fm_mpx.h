@@ -27,6 +27,8 @@
 // The sample rate at which the MPX generation runs at
 #define MPX_SAMPLE_RATE		190000
 
+#define OUTPUT_SAMPLE_RATE	192000
+
 /*
  * 2-channel FIR filter struct
  *

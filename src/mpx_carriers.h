@@ -17,8 +17,12 @@
  */
 
 // context for MPX oscillator
-typedef struct osc_ctx {
-	uint8_t num_carriers;
+typedef struct osc_t {
+	/*
+	 * number of freqs the struct will store waveforms for
+	 *
+	 */
+	uint8_t num_freqs;
 
 	/*
 	 * Arrays of carrier wave constants
@@ -32,15 +36,15 @@ typedef struct osc_ctx {
 	 *
 	 */
 	uint16_t **phases;
-} osc_ctx;
+} osc_t;
 
-enum phase_index {
+// oscillator phase index
+enum osc_phase_index {
 	CURRENT,
 	MAX
 };
 
-extern void init_mpx_carriers(struct osc_ctx *ctx, uint32_t sample_rate, const float *c_freqs);
-extern float get_carrier(struct osc_ctx *ctx, uint8_t num);
-extern float get_cos_carrier(struct osc_ctx *ctx, uint8_t num);
-extern void update_carrier_phase(struct osc_ctx *ctx);
-extern void exit_mpx_carriers(struct osc_ctx *ctx);
+extern void init_osc(struct osc_t *osc_ctx, uint32_t sample_rate, const float *c_freqs);
+extern float get_wave(struct osc_t *osc_ctx, uint8_t num, uint8_t cosine);
+extern void update_osc_phase(struct osc_t *osc_ctx);
+extern void exit_osc(struct osc_t *osc_ctx);

@@ -50,7 +50,7 @@ int open_file_output(char *filename, unsigned int sample_rate, unsigned int chan
 }
 
 int write_file_output(short *audio, size_t num_frames) {
-	unsigned int audio_len;
+	int audio_len;
 
 	if ((audio_len = sf_writef_short(inf, audio, num_frames)) < 0) {
 		return -1;

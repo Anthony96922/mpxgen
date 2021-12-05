@@ -41,14 +41,15 @@ void init_hilbert_transformer(struct hilbert_fir_t *flt, uint16_t size) {
 
 	// start from the center
 	for (uint16_t i = 1; i < half_size + 1; i++) {
-		if (i & 1) {
+		if (i & 1) { // calculate for odd indexes only
 			filter = 1.0 / (double)i;
-			window = 0.54 - 0.46 * cos(2 * M_PI * (double)(half_size + i) / (double)size);
+			// Hamming window
+			window = 0.54 - 0.46 * cos(M_2PI * (double)(half_size + i) / (double)size);
 			flt->coeffs[half_size+i] = (float)(-filter * window);
 			flt->coeffs[half_size-i] = (float)(+filter * window);
 		} else {
-			flt->coeffs[half_size+i] = 0.0;
-			flt->coeffs[half_size-i] = 0.0;
+			flt->coeffs[half_size+i] = 0.0f;
+			flt->coeffs[half_size-i] = 0.0f;
 		}
 	}
 
@@ -62,7 +63,7 @@ void init_hilbert_transformer(struct hilbert_fir_t *flt, uint16_t size) {
 	}
 
 	if (odd) flt->gain = -flt->gain;
-	flt->gain *= 2.0;
+	flt->gain *= 2.0f;
 
 #if 0
 	printf("coeffs: ");
@@ -74,7 +75,7 @@ void init_hilbert_transformer(struct hilbert_fir_t *flt, uint16_t size) {
 }
 
 float get_hilbert(struct hilbert_fir_t *flt, float in) {
-	float filter_out = 0.0;
+	float filter_out;
 	uint16_t filter_idx;
 
 	flt->in_buffer[flt->flt_buffer_idx++] = in / flt->gain;
@@ -82,6 +83,7 @@ float get_hilbert(struct hilbert_fir_t *flt, float in) {
 
 	filter_idx = flt->flt_buffer_idx;
 
+	filter_out = 0.0f;
 	for (uint16_t i = 0; i < flt->num_coeffs; i++) {
 		filter_out += flt->in_buffer[filter_idx++] * flt->coeffs[i];
 		if (filter_idx == flt->num_coeffs) filter_idx = 0;

@@ -23,3 +23,5 @@
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
+
+#define M_2PI M_PI * 2.0

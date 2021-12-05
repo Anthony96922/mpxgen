@@ -24,7 +24,7 @@
 // needed for clock time
 #include <time.h>
 
-static rds_params_t rds_data;
+static struct rds_params_t rds_data;
 
 // RDS data controls
 static struct {
@@ -38,7 +38,7 @@ static struct {
 
 // ODA
 #define MAX_ODAS 8
-static rds_oda_t odas[MAX_ODAS];
+static struct rds_oda_t odas[MAX_ODAS];
 static struct {
 	uint8_t current;
 	uint8_t count;
@@ -106,11 +106,11 @@ static void get_rds_ps_group(uint16_t *blocks) {
 	static uint8_t ps_state, af_state;
 
 	if (ps_state == 0 && rds_state.ps_update) {
-		strncpy(ps_text, rds_data.ps, 8);
+		strncpy(ps_text, rds_data.ps, PS_LENGTH);
 		rds_state.ps_update = 0;
 	}
 
-	blocks[1] |= /* 0 << 12 | */ rds_data.ta << 4 | rds_data.ms << 3 | ps_state;
+	blocks[1] |= /* 0 << 12 | */ (rds_data.ta & 1) << 4 | (rds_data.ms & 1) << 3 | (ps_state & 3);
 
 	// DI
 	blocks[1] |= ((rds_data.di >> (3 - ps_state)) & 1) << 2;
@@ -120,13 +120,16 @@ static void get_rds_ps_group(uint16_t *blocks) {
 		if (af_state == 0) {
 			blocks[2] = (rds_data.af.num_afs + 224) << 8 | rds_data.af.af[0];
 		} else {
-			blocks[2] = rds_data.af.af[af_state] << 8 |
-					(rds_data.af.af[af_state+1] ? rds_data.af.af[af_state+1] : 0xCD);
+			blocks[2] = rds_data.af.af[af_state] << 8;
+			if (rds_data.af.af[af_state+1])
+				blocks[2] |= rds_data.af.af[af_state+1];
+			else
+				blocks[2] |= 205; // filler
 		}
 		af_state += 2;
 		if (af_state > rds_data.af.num_afs) af_state = 0;
 	} else {
-		blocks[2] = 0xE0CD; // no AF
+		blocks[2] = 224 << 8 | 205; // no AF
 	}
 
 	blocks[3] = ps_text[ps_state*2] << 8 | ps_text[ps_state*2+1];
@@ -138,13 +141,13 @@ static void get_rds_ps_group(uint16_t *blocks) {
 /* RT group (2A)
  */
 static void get_rds_rt_group(uint16_t *blocks) {
-	static char rt_text[64];
+	static char rt_text[RT_LENGTH];
 	static uint8_t rt_state;
 
 	if (rds_state.rt_bursting) rds_state.rt_bursting--;
 
 	if (rds_state.rt_update) {
-		strncpy(rt_text, rds_data.rt, 64);
+		strncpy(rt_text, rds_data.rt, RT_LENGTH);
 		rds_state.ab ^= 1;
 		rds_state.rt_update = 0;
 		rt_state = 0; // rewind when new RT arrives
@@ -180,7 +183,7 @@ static void get_rds_ptyn_group(uint16_t *blocks) {
 	static uint8_t ptyn_state;
 
 	if (ptyn_state == 0 && rds_state.ptyn_update) {
-		strncpy(ptyn_text, rds_data.ptyn, 8);
+		strncpy(ptyn_text, rds_data.ptyn, PTYN_LENGTH);
 		rds_state.ptyn_update = 0;
 	}
 
@@ -256,7 +259,7 @@ static void get_rds_group(uint16_t *blocks) {
 
 	// Basic block data
 	blocks[0] = rds_data.pi;
-	blocks[1] = rds_data.tp << 10 | rds_data.pty << 5;
+	blocks[1] = (rds_data.tp & 1) << 10 | (rds_data.pty & 31) << 5;
 	blocks[2] = 0;
 	blocks[3] = 0;
 
@@ -283,20 +286,20 @@ void get_rds_bits(uint8_t *bits) {
 	add_checkwords(out_blocks, bits);
 }
 
-static void show_af_list(rds_af_t af_list) {
+static void show_af_list(struct rds_af_t af_list) {
 	fprintf(stderr, "AF: %d,", af_list.num_afs);
 	for (int i = 0; i < af_list.num_afs; i++) {
-		fprintf(stderr, " %.1f", (af_list.af[i] + 875) / 10.0);
+		fprintf(stderr, " %.1f", (af_list.af[i] + 875) / 10.0f);
 	}
 	fprintf(stderr, "\n");
 }
 
-int8_t init_rds_encoder(rds_params_t rds_params, char *call_sign) {
-	enum rds_pty_regions pty_region = REGION_FCC;
+void init_rds_encoder(rds_params_t rds_params, char *call_sign) {
+	enum rds_pty_regions region = REGION_FCC;
 
 	if (rds_data.pty > 31) {
 		fprintf(stderr, "PTY must be between 0 - 31.\n");
-		return -1;
+		rds_data.pty = 0;
 	}
 
 	if (call_sign[3]) {
@@ -314,7 +317,7 @@ int8_t init_rds_encoder(rds_params_t rds_params, char *call_sign) {
 		rds_params.pi,
 		rds_params.ps,
 		rds_params.pty,
-		get_pty(rds_params.pty, pty_region),
+		get_pty(rds_params.pty, region),
 		rds_params.tp);
 	fprintf(stderr, "RT: \"%s\"\n", rds_params.rt);
 
@@ -343,8 +346,6 @@ int8_t init_rds_encoder(rds_params_t rds_params, char *call_sign) {
 
 	// initialize signal
 	init_symbol_waveforms();
-
-	return 0;
 }
 
 void exit_rds_encoder() {
@@ -358,16 +359,16 @@ void set_rds_pi(uint16_t pi_code) {
 void set_rds_rt(char *rt) {
 	uint8_t rt_len = strlen(rt);
 	rds_state.rt_update = 1;
-	memset(rds_data.rt, 0, 64);
+	memset(rds_data.rt, 0, RT_LENGTH);
 	memcpy(rds_data.rt, rt, rt_len);
 
-	if (rt_len < 64) {
+	if (rt_len < RT_LENGTH) {
 		/* Terminate RT with '\r' (carriage return) if RT
 		 * is < 64 characters long
 		 */
 		rds_data.rt[rt_len++] = '\r';
 
-		for (int i = 0; i <= 64; i += 4) {
+		for (int i = 0; i < RT_LENGTH + 1; i += 4) {
 			if (i >= rt_len) {
 				rds_state.rt_segments = i / 4;
 				break;
@@ -384,7 +385,7 @@ void set_rds_rt(char *rt) {
 
 void set_rds_ps(char *ps) {
 	rds_state.ps_update = 1;
-	memset(rds_data.ps, ' ', 8);
+	memset(rds_data.ps, ' ', PS_LENGTH);
 	memcpy(rds_data.ps, ps, strlen(ps));
 }
 
@@ -407,28 +408,28 @@ void set_rds_rtplus_tags(uint8_t *tags) {
 /*
  * AF stuff
  */
-int8_t add_rds_af(rds_af_t af_list, float freq) {
-	uint16_t af = (uint16_t)(10 * freq);
+int8_t add_rds_af(struct rds_af_t af_list, float freq) {
+	uint16_t af = (uint16_t)(10.0f * freq);
 
 	// check if the AF list is full
-	if (af_list.num_afs > MAX_AF) {
+	if (af_list.num_afs + 1 > MAX_AFS) {
 		fprintf(stderr, "AF list is full.\n");
-		return 1;
+		return -1;
 	}
 
 	// check if new frequency is valid
 	if (af < 876 || af > 1079) {
 		fprintf(stderr, "AF must be between 87.6 - 107.9.\n");
-		return 1;
+		return -1;
 	}
 
 	// append new AF entry
 	af_list.af[af_list.num_afs++] = af - 875;
 
-	return 0;
+	return 1;
 }
 
-void set_rds_af(rds_af_t new_af_list) {
+void set_rds_af(struct rds_af_t new_af_list) {
 	memcpy(&rds_data.af, &new_af_list, sizeof(struct rds_af_t));
 }
 
@@ -443,10 +444,10 @@ void set_rds_pty(uint8_t pty) {
 void set_rds_ptyn(char *ptyn) {
 	rds_state.ptyn_update = 1;
 	if (ptyn[0]) {
-		memset(rds_data.ptyn, ' ', 8);
+		memset(rds_data.ptyn, ' ', PTYN_LENGTH);
 		memcpy(rds_data.ptyn, ptyn, strlen(ptyn));
 	} else {
-		memset(rds_data.ptyn, 0, 8);
+		memset(rds_data.ptyn, 0, PTYN_LENGTH);
 	}
 }
 

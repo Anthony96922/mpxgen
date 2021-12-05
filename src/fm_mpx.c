@@ -72,7 +72,7 @@ static struct delay_line_t right_delay;
  * this is where the MPX waveforms are stored
  *
  */
-static struct osc_ctx mpx_osc;
+static struct osc_t mpx_osc;
 
 /*
  * Hilbert transformer object
@@ -82,7 +82,7 @@ static struct hilbert_fir_t ssb_ht;
 
 void set_output_volume(uint8_t vol) {
 	if (vol > 100) vol = 100;
-	mpx_vol = (vol / 100.0);
+	mpx_vol = (vol / 100.0f);
 }
 
 // subcarrier volumes
@@ -97,8 +97,8 @@ static float volumes[] = {
 
 void set_carrier_volume(uint8_t carrier, uint8_t new_volume) {
 	if (carrier > 4) return;
-	if (new_volume >= 15) volumes[carrier] = 0.09;
-	volumes[carrier] = new_volume / 100.0;
+	if (new_volume >= 15) volumes[carrier] = 0.09f;
+	volumes[carrier] = new_volume / 100.0f;
 }
 
 static void init_fir_filter(struct filter_t *flt, uint32_t sample_rate, uint16_t half_size) {
@@ -121,8 +121,8 @@ static void init_fir_filter(struct filter_t *flt, uint32_t sample_rate, uint16_t
 	// Only store half of the filter since it is symmetric
 	double filter, window;
 	for (int i = 1; i < half_size; i++) {
-		filter = sin(2 * M_PI * 24000 * i / sample_rate) / (M_PI * i); // sinc
-		window = 0.54 - 0.46 * cos(2 * M_PI * (double)(half_size + i) / (double)(2 * half_size)); // Hamming window
+		filter = sin(M_2PI * 24000 * i / sample_rate) / (M_PI * i); // sinc
+		window = 0.54 - 0.46 * cos(M_2PI * (double)(half_size + i) / (double)(2 * half_size)); // Hamming window
 		flt->filter[half_size-1-i] = (float)(filter * window);
 	}
 }
@@ -187,7 +187,7 @@ static void exit_delay_line(struct delay_line_t *delay_line) {
 }
 
 void fm_mpx_init() {
-	init_mpx_carriers(&mpx_osc, MPX_SAMPLE_RATE, carrier_frequencies);
+	init_osc(&mpx_osc, MPX_SAMPLE_RATE, carrier_frequencies);
 	init_hilbert_transformer(&ssb_ht, 512);
 	init_fir_filter(&fir_low_pass, MPX_SAMPLE_RATE, 128);
 	init_delay_line(&left_delay, MPX_SAMPLE_RATE);
@@ -291,35 +291,35 @@ void fm_mpx_get_samples(float *in, float *out) {
 		out_stereo_delayed = out_left_delayed - out_right_delayed;
 
 		// clear old buffer
-		out[j] = 0.0;
+		out[j] = 0.0f;
 
 		if (1) { // SSB mode
 			// delay mono so it is in sync with stereo
 			out[j] += out_mono_delayed * 0.45 +
-				get_cos_carrier(&mpx_osc, CARRIER_19K) * volumes[0];
+				get_wave(&mpx_osc, CARRIER_19K, 1) * volumes[0];
 
 			out[j] +=
 				get_ssb(out_stereo,
 					out_stereo_delayed,
-					get_carrier(&mpx_osc, CARRIER_38K),
-					get_cos_carrier(&mpx_osc, CARRIER_38K),
+					get_wave(&mpx_osc, CARRIER_38K, 0),
+					get_wave(&mpx_osc, CARRIER_38K, 1),
 					0 /* LSB */) * 0.45;
 
 		} else {
 			// audio signals need to be limited to 45% to remain within modulation limits
 			out[j] += out_mono * 0.45 +
-				get_cos_carrier(&mpx_osc, CARRIER_19K) * volumes[0] +
-				get_cos_carrier(&mpx_osc, CARRIER_38K) * out_stereo * 0.45;
+				get_wave(&mpx_osc, CARRIER_19K, 1) * volumes[0] +
+				get_wave(&mpx_osc, CARRIER_38K, 1) * out_stereo * 0.45;
 		}
 
-		out[j] += get_cos_carrier(&mpx_osc, CARRIER_57K) * get_rds_sample(0) * volumes[1];
+		out[j] += get_wave(&mpx_osc, CARRIER_57K, 1) * get_rds_sample(0) * volumes[1];
 #ifdef RDS2
-		out[j] += get_cos_carrier(&mpx_osc, CARRIER_67K) * get_rds_sample(1) * volumes[2];
-		out[j] += get_cos_carrier(&mpx_osc, CARRIER_71K) * get_rds_sample(2) * volumes[3];
-		out[j] += get_cos_carrier(&mpx_osc, CARRIER_76K) * get_rds_sample(3) * volumes[4];
+		out[j] += get_wave(&mpx_osc, CARRIER_67K, 1) * get_rds_sample(1) * volumes[2];
+		out[j] += get_wave(&mpx_osc, CARRIER_71K, 1) * get_rds_sample(2) * volumes[3];
+		out[j] += get_wave(&mpx_osc, CARRIER_76K, 1) * get_rds_sample(3) * volumes[4];
 #endif
 
-		update_carrier_phase(&mpx_osc);
+		update_osc_phase(&mpx_osc);
 
 		out[j] *= mpx_vol;
 		out[j+1] = out[j];
@@ -331,19 +331,19 @@ void fm_rds_get_samples(float *out) {
 	uint16_t j = 0;
 
 	for (int i = 0; i < NUM_MPX_FRAMES_IN; i++) {
-		out[j] = 0.0;
+		out[j] = 0.0f;
 
 		// Pilot tone for calibration
-		out[j] += get_cos_carrier(&mpx_osc, CARRIER_19K) * volumes[0];
+		out[j] += get_wave(&mpx_osc, CARRIER_19K, 1) * volumes[0];
 
-		out[j] += get_cos_carrier(&mpx_osc, CARRIER_57K) * get_rds_sample(0) * volumes[1];
+		//out[j] += get_wave(&mpx_osc, CARRIER_57K, 1) * get_rds_sample(0) * volumes[1];
 #ifdef RDS2
-		out[j] += get_cos_carrier(&mpx_osc, CARRIER_67K) * get_rds_sample(1) * volumes[2];
-		out[j] += get_cos_carrier(&mpx_osc, CARRIER_71K) * get_rds_sample(2) * volumes[3];
-		out[j] += get_cos_carrier(&mpx_osc, CARRIER_76K) * get_rds_sample(3) * volumes[4];
+		out[j] += get_wave(&mpx_osc, CARRIER_67K, 1) * get_rds_sample(1) * volumes[2];
+		out[j] += get_wave(&mpx_osc, CARRIER_71K, 1) * get_rds_sample(2) * volumes[3];
+		out[j] += get_wave(&mpx_osc, CARRIER_76K, 1) * get_rds_sample(3) * volumes[4];
 #endif
 
-		update_carrier_phase(&mpx_osc);
+		update_osc_phase(&mpx_osc);
 
 		out[j] *= mpx_vol;
 		out[j+1] = out[j];
@@ -353,7 +353,7 @@ void fm_rds_get_samples(float *out) {
 
 void fm_mpx_exit() {
 	exit_hilbert_transformer(&ssb_ht);
-	exit_mpx_carriers(&mpx_osc);
+	exit_osc(&mpx_osc);
 	exit_fir_filter(&fir_low_pass);
 	exit_delay_line(&left_delay);
 	exit_delay_line(&right_delay);

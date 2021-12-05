@@ -20,22 +20,28 @@
 #include "mpx_carriers.h"
 
 /*
- * code for MPX oscillator
+ * Code for MPX oscillator
+ *
+ * This uses lookup tables to speed up the waveform generation
  *
  */
 
-// Create wave constants for a given frequency
-static void create_carrier(uint32_t rate, float freq, float *sin_wave, float *cos_wave, uint16_t *max_phase) {
+/*
+ * DDS function generator
+ *
+ * Create wave constants for a given frequency
+ */
+static void create_wave(uint32_t rate, float freq, float *sin_wave, float *cos_wave, uint16_t *max_phase) {
 	float sin_sample, cos_sample;
 	// used to determine if we have completed a cycle
 	uint8_t zero_crossings = 0;
 	uint16_t i;
-	double w = 2.0 * M_PI * freq;
+	double w = M_2PI * freq;
 	double phase;
 
 	// First value of a sine wave is always 0
-	*sin_wave++ = 0.0;
-	*cos_wave++ = 1.0;
+	*sin_wave++ = 0.0f;
+	*cos_wave++ = 1.0f;
 
 	for (i = 1; i < rate; i++) {
 		phase = i / (double)rate;
@@ -43,7 +49,7 @@ static void create_carrier(uint32_t rate, float freq, float *sin_wave, float *co
 		cos_sample = cos(w * phase);
 		if (sin_sample > -0.1e-4 && sin_sample < 0.1e-4) {
 			if (++zero_crossings == 2) break;
-			*sin_wave++ = 0.0;
+			*sin_wave++ = 0.0f;
 		} else {
 			*sin_wave++ = sin_sample;
 		}
@@ -53,62 +59,87 @@ static void create_carrier(uint32_t rate, float freq, float *sin_wave, float *co
 	*max_phase = i;
 }
 
-void init_mpx_carriers(struct osc_ctx *mpx_osc_ctx, uint32_t sample_rate, const float *c_freqs) {
-	uint8_t num_carriers = 0;
-	// look for the terminator (0)
+/*
+ * Create waveform lookup tables for frequencies in the array
+ *
+ */
+void init_osc(struct osc_t *osc_ctx, uint32_t sample_rate, const float *c_freqs) {
+	uint8_t num_freqs = 0;
+	// look for the 0 terminator
 	for (;;) {
-		if (c_freqs[num_carriers] == 0.0) break;
-		num_carriers++;
+		if (c_freqs[num_freqs] == 0.0) break;
+		num_freqs++;
 	}
 
-	mpx_osc_ctx->num_carriers = num_carriers;
+	osc_ctx->num_freqs = num_freqs;
 
-	mpx_osc_ctx->sine_waves = malloc(num_carriers * sizeof(float));
-	mpx_osc_ctx->cosine_waves = malloc(num_carriers * sizeof(float));
-	mpx_osc_ctx->phases = malloc(num_carriers * 2 * sizeof(uint16_t));
+	/*
+	 * waveform tables
+	 *
+	 * first index is wave frequency
+	 * second index is wave data
+	 */
+	osc_ctx->sine_waves = malloc(num_freqs * sizeof(float));
+	osc_ctx->cosine_waves = malloc(num_freqs * sizeof(float));
+	/*
+	 * phase table
+	 *
+	 * current and max
+	 */
+	osc_ctx->phases = malloc(num_freqs * 2 * sizeof(uint16_t));
 
-	for (uint8_t i = 0; i < num_carriers; i++) {
-		mpx_osc_ctx->sine_waves[i] = malloc(sample_rate * sizeof(float));
-		mpx_osc_ctx->cosine_waves[i] = malloc(sample_rate * sizeof(float));
-		mpx_osc_ctx->phases[i] = malloc(2 * sizeof(uint16_t));
-		mpx_osc_ctx->phases[i][CURRENT] = 0;
+	for (uint8_t i = 0; i < num_freqs; i++) {
+		osc_ctx->sine_waves[i] = malloc(sample_rate * sizeof(float));
+		osc_ctx->cosine_waves[i] = malloc(sample_rate * sizeof(float));
+		osc_ctx->phases[i] = malloc(2 * sizeof(uint16_t));
+		osc_ctx->phases[i][CURRENT] = 0;
 
-		// create waveform constants and load them into our oscillator
-		create_carrier(sample_rate, c_freqs[i],
-			mpx_osc_ctx->sine_waves[i],
-			mpx_osc_ctx->cosine_waves[i],
-			&mpx_osc_ctx->phases[i][MAX]
+		// create waveform data and load into lookup tables
+		create_wave(sample_rate, c_freqs[i],
+			osc_ctx->sine_waves[i],
+			osc_ctx->cosine_waves[i],
+			&osc_ctx->phases[i][MAX]
 		);
 	}
 }
 
-void exit_mpx_carriers(struct osc_ctx *mpx_osc_ctx) {
-	for (uint8_t i = 0; i < mpx_osc_ctx->num_carriers; i++) {
-		free(mpx_osc_ctx->sine_waves[i]);
-		free(mpx_osc_ctx->cosine_waves[i]);
-		free(mpx_osc_ctx->phases[i]);
+/*
+ * Get a waveform sample for a given frequency
+ *
+ * Cosine is needed for SSB generation
+ *
+ */
+float get_wave(struct osc_t *osc_ctx, uint8_t waveform_num, uint8_t cosine) {
+	uint16_t cur_phase = osc_ctx->phases[waveform_num][CURRENT];
+	if (cosine) {
+		return osc_ctx->cosine_waves[waveform_num][cur_phase];
+	} else {
+		return osc_ctx->sine_waves[waveform_num][cur_phase];
 	}
-	free(mpx_osc_ctx->sine_waves);
-	free(mpx_osc_ctx->cosine_waves);
-	free(mpx_osc_ctx->phases);
 }
 
-float get_carrier(struct osc_ctx *mpx_osc_ctx, uint8_t carrier_num) {
-	uint16_t cur_phase = mpx_osc_ctx->phases[carrier_num][CURRENT];
-	return mpx_osc_ctx->sine_waves[carrier_num][cur_phase];
-}
-
-float get_cos_carrier(struct osc_ctx *mpx_osc_ctx, uint8_t carrier_num) {
-	uint16_t cur_phase = mpx_osc_ctx->phases[carrier_num][CURRENT];
-	return mpx_osc_ctx->cosine_waves[carrier_num][cur_phase];
-}
-
-void update_carrier_phase(struct osc_ctx *mpx_osc_ctx) {
-	uint16_t cur_phase, max_phase;
-	for (uint8_t i = 0; i < mpx_osc_ctx->num_carriers; i++) {
-		cur_phase = mpx_osc_ctx->phases[i][CURRENT]++;
-		max_phase = mpx_osc_ctx->phases[i][MAX];
-		if (cur_phase == max_phase)
-			mpx_osc_ctx->phases[i][CURRENT] = 0;
+/*
+ * Shift the oscillator to the next phase
+ *
+ */
+void update_osc_phase(struct osc_t *osc_ctx) {
+	for (uint8_t i = 0; i < osc_ctx->num_freqs; i++) {
+		if (++osc_ctx->phases[i][CURRENT] == osc_ctx->phases[i][MAX])
+			osc_ctx->phases[i][CURRENT] = 0;
 	}
+}
+
+/*
+ * Unload all waveform and phase tables
+ *
+ */
+void exit_osc(struct osc_t *osc_ctx) {
+	for (uint8_t i = 0; i < osc_ctx->num_freqs; i++) {
+		free(osc_ctx->sine_waves[i]);
+		free(osc_ctx->cosine_waves[i]);
+		free(osc_ctx->phases[i]);
+	}
+	free(osc_ctx->sine_waves);
+	free(osc_ctx->cosine_waves);
+	free(osc_ctx->phases);
 }
