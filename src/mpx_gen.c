@@ -434,7 +434,7 @@ int main(int argc, char **argv) {
 				break;
 
 			case 'A': //af
-				if (add_rds_af(rds_params.af, strtof(optarg, NULL)) < 0) return 1;
+				if (add_rds_af(&rds_params.af, strtof(optarg, NULL)) < 0) return 1;
 				break;
 
 			case 'P': //ptyn

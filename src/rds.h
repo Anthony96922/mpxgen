@@ -47,9 +47,12 @@
 #define MAX_AFS 25
 
 typedef struct rds_af_t {
+	uint8_t num_entries;
 	uint8_t num_afs;
-	uint8_t af[MAX_AFS];
+	uint8_t afs[MAX_AFS*2]; // doubled for LF/MF codes
 } rds_af_t;
+
+#define AF_LFMF_FOLLOWS	250
 
 typedef struct rds_params_t {
 	uint16_t pi;
@@ -204,7 +207,7 @@ extern void set_rds_ta(uint8_t ta);
 extern void set_rds_pty(uint8_t pty);
 extern void set_rds_ptyn(char *ptyn);
 extern void set_rds_af(struct rds_af_t new_af_list);
-extern int8_t add_rds_af(struct rds_af_t af_list, float freq);
+extern int8_t add_rds_af(struct rds_af_t *af_list, float freq);
 extern void set_rds_tp(uint8_t tp);
 extern void set_rds_ms(uint8_t ms);
 extern void set_rds_ab(uint8_t ab);

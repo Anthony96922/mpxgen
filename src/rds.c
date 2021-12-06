@@ -99,39 +99,58 @@ static uint8_t get_rds_ct_group(uint16_t *blocks) {
 	return 0;
 }
 
+/* Get the next AF entry
+ */
+static uint16_t get_next_af() {
+	static uint8_t af_state;
+	uint16_t out;
+
+	if (rds_data.af.num_afs) {
+		if (af_state == 0) {
+			out = (rds_data.af.num_afs + 224) << 8 | rds_data.af.afs[0];
+		} else {
+			out = rds_data.af.afs[af_state] << 8;
+			if (rds_data.af.afs[af_state+1])
+				out |= rds_data.af.afs[af_state+1];
+			else
+				out |= 205; // filler
+		}
+		af_state += 2;
+		if (af_state >= rds_data.af.num_entries) af_state = 0;
+	} else {
+		out = 224 << 8 | 205; // no AF
+	}
+
+	return out;
+}
+
 /* PS group (0A)
  */
 static void get_rds_ps_group(uint16_t *blocks) {
 	static char ps_text[8];
-	static uint8_t ps_state, af_state;
+	static uint8_t ps_state;
 
 	if (ps_state == 0 && rds_state.ps_update) {
 		strncpy(ps_text, rds_data.ps, PS_LENGTH);
-		rds_state.ps_update = 0;
+		rds_state.ps_update = 0; // rewind
 	}
 
-	blocks[1] |= /* 0 << 12 | */ (rds_data.ta & 1) << 4 | (rds_data.ms & 1) << 3 | (ps_state & 3);
+	// TA
+	blocks[1] |= (rds_data.ta & 1) << 4;
+
+	// MS
+	blocks[1] |= (rds_data.ms & 1) << 3;
 
 	// DI
 	blocks[1] |= ((rds_data.di >> (3 - ps_state)) & 1) << 2;
 
-	// AF
-	if (rds_data.af.num_afs) {
-		if (af_state == 0) {
-			blocks[2] = (rds_data.af.num_afs + 224) << 8 | rds_data.af.af[0];
-		} else {
-			blocks[2] = rds_data.af.af[af_state] << 8;
-			if (rds_data.af.af[af_state+1])
-				blocks[2] |= rds_data.af.af[af_state+1];
-			else
-				blocks[2] |= 205; // filler
-		}
-		af_state += 2;
-		if (af_state > rds_data.af.num_afs) af_state = 0;
-	} else {
-		blocks[2] = 224 << 8 | 205; // no AF
-	}
+	// PS segment address
+	blocks[1] |= (ps_state & 2);
 
+	// AF
+	blocks[2] = get_next_af();
+
+	// PS
 	blocks[3] = ps_text[ps_state*2] << 8 | ps_text[ps_state*2+1];
 
 	ps_state++;
@@ -287,19 +306,43 @@ void get_rds_bits(uint8_t *bits) {
 }
 
 static void show_af_list(struct rds_af_t af_list) {
+	float freq;
+	uint8_t af_is_lf_mf = 0;
+
 	fprintf(stderr, "AF: %d,", af_list.num_afs);
-	for (int i = 0; i < af_list.num_afs; i++) {
-		fprintf(stderr, " %.1f", (af_list.af[i] + 875) / 10.0f);
+
+	for (uint8_t i = 0; i < af_list.num_entries; i++) {
+		if (af_list.afs[i] == AF_LFMF_FOLLOWS) {
+			// The next AF will be for LF/MF
+			af_is_lf_mf = 1;
+		} else {
+			if (af_is_lf_mf) {
+				// LF
+				if (af_list.afs[i] >= 1 && af_list.afs[i] <= 15) {
+					freq = 153.0f + ((af_list.afs[i] - 1) * 9.0f);
+					fprintf(stderr, " (LF)%.0f", freq);
+				} else { // (af_list.afs[i] >= 16 && af_list.afs[i] <= 135)
+					freq = 531.0f + ((af_list.afs[i] - 16) * 9.0f);
+					fprintf(stderr, " (MF)%.0f", freq);
+				}
+			} else {
+				// FM
+				freq = (af_list.afs[i] + 875) / 10.0f;
+				fprintf(stderr, " %.1f", freq);
+			}
+			af_is_lf_mf = 0;
+		}
 	}
+
 	fprintf(stderr, "\n");
 }
 
-void init_rds_encoder(rds_params_t rds_params, char *call_sign) {
+void init_rds_encoder(struct rds_params_t rds_params, char *call_sign) {
 	enum rds_pty_regions region = REGION_FCC;
 
-	if (rds_data.pty > 31) {
-		fprintf(stderr, "PTY must be between 0 - 31.\n");
-		rds_data.pty = 0;
+	if (rds_params.pty > 31) {
+		fprintf(stderr, "PTY must be between 0-31.\n");
+		rds_params.pty = 0;
 	}
 
 	if (call_sign[3]) {
@@ -317,7 +360,7 @@ void init_rds_encoder(rds_params_t rds_params, char *call_sign) {
 		rds_params.pi,
 		rds_params.ps,
 		rds_params.pty,
-		get_pty(rds_params.pty, region),
+		get_pty(region, rds_params.pty),
 		rds_params.tp);
 	fprintf(stderr, "RT: \"%s\"\n", rds_params.rt);
 
@@ -408,23 +451,37 @@ void set_rds_rtplus_tags(uint8_t *tags) {
 /*
  * AF stuff
  */
-int8_t add_rds_af(struct rds_af_t af_list, float freq) {
-	uint16_t af = (uint16_t)(10.0f * freq);
+int8_t add_rds_af(struct rds_af_t *af_list, float freq) {
+	uint16_t af;
 
 	// check if the AF list is full
-	if (af_list.num_afs + 1 > MAX_AFS) {
+	if (af_list->num_afs + 1 > MAX_AFS) {
 		fprintf(stderr, "AF list is full.\n");
 		return -1;
 	}
 
 	// check if new frequency is valid
-	if (af < 876 || af > 1079) {
-		fprintf(stderr, "AF must be between 87.6 - 107.9.\n");
+	if (freq >= 87.6f && freq <= 107.9f) { // FM
+		af = (uint8_t)(freq * 10.0f) - 875;
+		af_list->afs[af_list->num_entries] = af;
+		af_list->num_entries += 1;
+	} else if (freq >= 153.0f && freq <= 279.0f) {
+		af = (uint8_t)((freq - 153.0f) / 9) + 1;
+		af_list->afs[af_list->num_entries+0] = AF_LFMF_FOLLOWS;
+		af_list->afs[af_list->num_entries+1] = af;
+		af_list->num_entries += 2;
+	} else if (freq >= 531.0f && freq <= 1602.0f) {
+		af = (uint8_t)((freq - 531.0f) / 9) + 16;
+		af_list->afs[af_list->num_entries+0] = AF_LFMF_FOLLOWS;
+		af_list->afs[af_list->num_entries+1] = af;
+		af_list->num_entries += 2;
+	} else {
+		fprintf(stderr, "AF must be between 87.6-107.9 MHz, "
+			"153-279 kHz or 531-1602 kHz\n");
 		return -1;
 	}
 
-	// append new AF entry
-	af_list.af[af_list.num_afs++] = af - 875;
+	af_list->num_afs++;
 
 	return 1;
 }

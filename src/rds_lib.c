@@ -51,8 +51,8 @@ static char ptys[2][32][30] = {
 	}
 };
 
-char *get_pty(uint8_t pty, uint8_t region) {
-	return ptys[pty][region];
+char *get_pty(uint8_t region, uint8_t pty) {
+	return ptys[region][pty];
 }
 
 static uint16_t offset_words[] = {
