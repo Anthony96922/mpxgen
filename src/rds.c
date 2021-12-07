@@ -108,14 +108,15 @@ static uint16_t get_next_af() {
 	if (rds_data.af.num_afs) {
 		if (af_state == 0) {
 			out = (rds_data.af.num_afs + 224) << 8 | rds_data.af.afs[0];
+			af_state += 1;
 		} else {
 			out = rds_data.af.afs[af_state] << 8;
 			if (rds_data.af.afs[af_state+1])
 				out |= rds_data.af.afs[af_state+1];
 			else
 				out |= 205; // filler
+			af_state += 2;
 		}
-		af_state += 2;
 		if (af_state >= rds_data.af.num_entries) af_state = 0;
 	} else {
 		out = 224 << 8 | 205; // no AF
@@ -145,7 +146,7 @@ static void get_rds_ps_group(uint16_t *blocks) {
 	blocks[1] |= ((rds_data.di >> (3 - ps_state)) & 1) << 2;
 
 	// PS segment address
-	blocks[1] |= (ps_state & 2);
+	blocks[1] |= (ps_state & 3);
 
 	// AF
 	blocks[2] = get_next_af();
