@@ -1,7 +1,10 @@
 # mpxgen
+
+### As of December 2021, development has been halted until further notice. Pull requests may be accepted for the time being. For a standalone RDS encoder, see [MiniRDS](https://github.com/Anthony96922/MiniRDS).
+
 This program generates FM multiplex baseband audio that can be sent to a mono FM transmitter. This includes stereo audio as well as realtime RDS data.
 
-![Mpxgen on Eton](doc/mpxgen.jpg)
+![Mpxgen on Eton/Tecsun](doc/mpxgen.jpg)
 
 ##### This is a work in progress! The audio input handling is not complete and buggy. This app works best as a standalone RDS encoder for now.
 
