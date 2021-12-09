@@ -1,6 +1,6 @@
 /*
  * mpxgen - FM multiplex encoder with Stereo and RDS
- * Copyright (C) 2019 Anthony96922
+ * Copyright (C) 2021 Anthony96922
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,9 +16,22 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "file_input.h"
-#include "alsa_input.h"
+#include "rds.h"
 
-int8_t open_input(char *input_name, uint8_t wait, uint32_t *sample_rate, size_t num_frames);
-int8_t read_input(short *audio);
-void close_input();
+// RDS signal context
+typedef struct rds_context {
+	uint8_t bit_buffer[BITS_PER_GROUP];
+	uint8_t bit_pos;
+	float sample_buffer[SAMPLE_BUFFER_SIZE];
+	uint8_t prev_output;
+	uint8_t cur_output;
+	uint8_t cur_bit;
+	uint8_t sample_count;
+	uint16_t in_sample_index;
+	uint16_t out_sample_index;
+	float sample_pos;
+	float sample;
+} rds_context;
+
+extern void init_symbol_waveforms();
+extern void exit_symbol_waveforms();

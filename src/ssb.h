@@ -16,7 +16,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern void init_hilbert_transformer();
-extern float get_hilbert(float in);
-extern float get_hilbert_delay(float in);
-extern void exit_hilbert_transformer();
+/*
+ * Object for a Hilbert transform filter
+ *
+ */
+typedef struct hilbert_fir_t {
+	float *coeffs;
+	float *in_buffer;
+	uint16_t num_coeffs;
+	float gain;
+	uint16_t flt_buffer_idx;
+} hilbert_fir_t;
+
+extern void init_hilbert_transformer(struct hilbert_fir_t *flt, uint16_t size);
+extern float get_hilbert(struct hilbert_fir_t *flt, float in);
+extern void exit_hilbert_transformer(struct hilbert_fir_t *flt);

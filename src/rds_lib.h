@@ -1,6 +1,6 @@
 /*
  * mpxgen - FM multiplex encoder with Stereo and RDS
- * Copyright (C) 2019 Anthony96922
+ * Copyright (C) 2021 Anthony96922
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,9 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "file_input.h"
-#include "alsa_input.h"
+extern char *get_pty(uint8_t region, uint8_t pty);
+extern void add_checkwords(uint16_t *blocks, uint8_t *bits);
+extern uint16_t callsign2pi(char *callsign);
 
-int8_t open_input(char *input_name, uint8_t wait, uint32_t *sample_rate, size_t num_frames);
-int8_t read_input(short *audio);
-void close_input();
+// TMC
+extern uint16_t tmc_encrypt(uint16_t loc, uint16_t key);
+extern uint16_t tmc_decrypt(uint16_t loc, uint16_t key);

@@ -16,6 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern int open_alsa_input(char *input_card, unsigned int sample_rate, size_t buf_size);
-extern int read_alsa_input(float *buffer);
-extern int close_alsa_input();
+extern int8_t open_alsa_input(char *input_card, uint32_t sample_rate, size_t buf_size);
+extern int16_t read_alsa_input(short *buffer);
+extern int8_t close_alsa_input();

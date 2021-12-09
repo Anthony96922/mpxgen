@@ -16,33 +16,29 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "fm_mpx.h"
+#include "common.h"
 #include "input.h"
 
-int input_type;
+static uint8_t input_type;
 
-int open_input(char *input_name, int wait, unsigned int *sample_rate) {
-#ifdef ALSA
+int8_t open_input(char *input_name, uint8_t wait, uint32_t *sample_rate, size_t num_frames) {
 	// TODO: better detect live capture cards
-	if (strstr(input_name, ":") != NULL) {
+	if (input_name[0] == 'a' && input_name[1] == 'l' &&
+	    input_name[2] == 's' && input_name[3] == 'a' &&
+	    input_name[4] == ':') { // check if name is prefixed with "alsa:"
 		*sample_rate = 48000;
-		if (open_alsa_input(input_name, *sample_rate, NUM_AUDIO_FRAMES_IN) < 0) {
+		input_name = input_name+5; // don't pass prefix
+		if (open_alsa_input(input_name, *sample_rate, num_frames) < 0) {
 			fprintf(stderr, "Could not open ALSA source.\n");
 			return 0;
 		}
 		input_type = 2;
 	} else {
-#endif
-		if (open_file_input(input_name, sample_rate, wait, NUM_AUDIO_FRAMES_IN) < 0) {
+		if (open_file_input(input_name, sample_rate, wait, num_frames) < 0) {
 			return 0;
 		}
 		input_type = 1;
-#ifdef ALSA
 	}
-#endif
 
 	if (*sample_rate < 16000) {
 		fprintf(stderr, "Input sample rate must be at least 16k.\n");
@@ -52,30 +48,21 @@ int open_input(char *input_name, int wait, unsigned int *sample_rate) {
 	return 1;
 }
 
-int get_input(float *audio) {
-	switch (input_type) {
-	case 1:
+int8_t read_input(short *audio) {
+	if (input_type == 1) {
 		if (read_file_input(audio) < 0) return -1;
-		break;
-#ifdef ALSA
-	case 2:
-		if (read_alsa_input(audio) < 0) return -1;
-		break;
-#endif
 	}
-
+	if (input_type == 2) {
+		if (read_alsa_input(audio) < 0) return -1;
+	}
 	return 0;
 }
 
 void close_input() {
-	switch (input_type) {
-	case 1:
+	if (input_type == 1) {
 		close_file_input();
-		break;
-#ifdef ALSA
-	case 2:
+	}
+	if (input_type == 2) {
 		close_alsa_input();
-		break;
-#endif
 	}
 }

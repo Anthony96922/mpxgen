@@ -16,10 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
+#include "common.h"
 #include "resampler.h"
 
-int resampler_init(SRC_STATE **src_state, int channels) {
+int8_t resampler_init(SRC_STATE **src_state, uint8_t channels) {
 	int src_error;
 
 	*src_state = src_new(CONVERTER_TYPE, channels, &src_error);
@@ -32,11 +32,12 @@ int resampler_init(SRC_STATE **src_state, int channels) {
 	return 0;
 }
 
-int resample(SRC_STATE *src_state, SRC_DATA src_data, size_t *frames_generated) {
+int8_t resample(SRC_STATE *src_state, SRC_DATA src_data, size_t *frames_generated) {
 	int src_error;
 
+	src_error = src_process(src_state, &src_data);
 
-	if ((src_error = src_process(src_state, &src_data))) {
+	if (src_error) {
 		fprintf(stderr, "Error: src_process failed: %s\n", src_strerror(src_error));
 		return -1;
 	}

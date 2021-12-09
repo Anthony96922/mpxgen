@@ -16,25 +16,49 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// RDS
-#define NUM_RDS_FRAMES_IN 4096
-#define NUM_RDS_FRAMES_OUT NUM_RDS_FRAMES_IN * 2
-
 // Audio in
-#define NUM_AUDIO_FRAMES_IN 4096
-#define NUM_AUDIO_FRAMES_OUT NUM_AUDIO_FRAMES_IN * 8
+#define NUM_AUDIO_FRAMES_IN	512
+#define NUM_AUDIO_FRAMES_OUT	(NUM_AUDIO_FRAMES_IN * 8)
 
 // MPX
-#define NUM_MPX_FRAMES_IN 16384
-#define NUM_MPX_FRAMES_OUT NUM_MPX_FRAMES_IN * 2
+#define NUM_MPX_FRAMES_IN	NUM_AUDIO_FRAMES_OUT
+#define NUM_MPX_FRAMES_OUT	(NUM_MPX_FRAMES_IN * 2)
 
 // The sample rate at which the MPX generation runs at
-#define MPX_SAMPLE_RATE 190000
+#define MPX_SAMPLE_RATE		190000
 
-extern void fm_mpx_open();
-extern void fm_mpx_get_samples(float *out, float *in_audio);
+#define OUTPUT_SAMPLE_RATE	192000
+
+/*
+ * 2-channel FIR filter struct
+ *
+ */
+typedef struct filter_t {
+	uint32_t sample_rate;
+	uint16_t index;
+	uint16_t size;
+	uint16_t half_size;
+	float *in[2];
+
+	// coefficients of the low-pass FIR filter
+	float *filter;
+
+	float out[2];
+} filter_t;
+
+/*
+ * Filter delay line
+ *
+ */
+typedef struct delay_line_t {
+	float *buffer;
+	uint32_t delay;
+	uint32_t idx;
+} delay_line_t;
+
+extern void fm_mpx_init();
+extern void fm_mpx_get_samples(float *in, float *out);
 extern void fm_rds_get_samples(float *out);
-extern void fm_mpx_close();
-extern void set_output_volume(unsigned int vol);
-extern void set_carrier_volume(unsigned int carrier, int new_volume);
-extern void set_output_ppm(float new_ppm);
+extern void fm_mpx_exit();
+extern void set_output_volume(uint8_t vol);
+extern void set_carrier_volume(uint8_t carrier, uint8_t new_volume);

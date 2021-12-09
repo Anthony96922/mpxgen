@@ -19,27 +19,27 @@
 #include "common.h"
 #include <alsa/asoundlib.h>
 
-static size_t buffer_size;
 static snd_pcm_t *pcm;
 
-int8_t open_alsa_input(char *input, uint32_t sample_rate, size_t num_frames) {
-	int err;
+int8_t open_alsa_output(char *output_device, unsigned int sample_rate, unsigned int channels) {
+	int8_t err;
+#if 0
 	snd_pcm_hw_params_t *hw_params;
-
-	buffer_size = num_frames;
 
 	err = snd_pcm_hw_params_malloc(&hw_params);
 	if (err < 0) {
 		fprintf(stderr, "Error: cannot allocate hardware parameter structure (%s)\n", snd_strerror(err));
 		return -1;
 	}
+#endif
 
-	err = snd_pcm_open(&pcm, input, SND_PCM_STREAM_CAPTURE, 0);
+	err = snd_pcm_open(&pcm, output_device, SND_PCM_STREAM_PLAYBACK, 0);
 	if (err < 0) {
-		fprintf(stderr, "Error: cannot open input audio device '%s' (%s)\n", input, snd_strerror(err));
+		fprintf(stderr, "Error: cannot open output audio device '%s' (%s)\n", output_device, snd_strerror(err));
 		return -1;
 	}
 
+#if 0
 	err = snd_pcm_hw_params_any(pcm, hw_params);
 	if (err < 0) {
 		fprintf(stderr, "Error: no configurations available (%s)\n", snd_strerror(err));
@@ -60,55 +60,80 @@ int8_t open_alsa_input(char *input, uint32_t sample_rate, size_t num_frames) {
 
 	err = snd_pcm_hw_params_set_rate(pcm, hw_params, sample_rate, 0);
 	if (err < 0) {
-		fprintf(stderr, "Error: cannot set sample rate (%s)\n", snd_strerror(err));
+		fprintf(stderr, "Error: cannot set sample rate to %u Hz: %s\n", sample_rate, snd_strerror(err));
 		return -1;
 	}
 
-	err = snd_pcm_hw_params_set_channels(pcm, hw_params, 2);
+	err = snd_pcm_hw_params_set_channels(pcm, hw_params, channels);
 	if (err < 0) {
-		fprintf(stderr, "Error: cannot set channel count (%s)\n", snd_strerror(err));
+		fprintf(stderr, "Error: cannot set channel count to %u (%s)\n", channels, snd_strerror(err));
 		return -1;
 	}
+
+	/*
+	err = snd_pcm_hw_params_set_buffer_size(pcm, hw_params, buffer_size);
+	if (err < 0) {
+		fprintf(stderr, "Error: cannot set buffer size to %u (%s)\n", buffer_size, snd_strerror(err));
+		return -1;
+	}
+	*/
 
 	err = snd_pcm_hw_params(pcm, hw_params);
 	if (err < 0) {
-		fprintf(stderr, "Error: cannot set parameters (%s)\n", snd_strerror(err));
+		fprintf(stderr, "Error: unable to set hw params for playback (%s)\n", snd_strerror(err));
 		return -1;
 	}
 
 	snd_pcm_hw_params_free(hw_params);
+#else
+	err = snd_pcm_set_params(pcm, SND_PCM_FORMAT_S16_LE,
+		SND_PCM_ACCESS_RW_INTERLEAVED,
+		channels, sample_rate,
+		0,
+		50000);
+	if (err < 0) {
+		fprintf(stderr, "Cannot open open output device (%s)\n", snd_strerror(err));
+		return -1;
+	}
+#endif
 
+#if 0
 	err = snd_pcm_prepare(pcm);
 	if (err < 0) {
 		fprintf(stderr, "Error: cannot prepare audio interface for use (%s)\n", snd_strerror(err));
 		return -1;
 	}
+#endif
 
 	return 0;
 }
 
-int16_t read_alsa_input(short *buffer) {
-	int16_t frames_read;
-	uint16_t frames;
+int16_t write_alsa_output(short *buffer, size_t frames) {
+	int frames_written;
 
-	frames_read = snd_pcm_readi(pcm, buffer, buffer_size);
-	if (frames_read < 0) {
-		fprintf(stderr, "Error: read from audio device failed (%s)\n", snd_strerror(frames_read));
-		frames = -1;
-	} else {
-		frames = frames_read;
+	frames_written = snd_pcm_writei(pcm, buffer, frames);
+
+	if (frames_written < 0) {
+		frames_written = snd_pcm_recover(pcm, frames_written, 0);
 	}
 
-	return frames;
+	if (frames_written < 0) {
+		fprintf(stderr, "Error: write to audio device failed (%s)\n", snd_strerror(frames_written));
+		return -1;
+	}
+
+	return frames_written;
 }
 
-int8_t close_alsa_input() {
-	int8_t err;
+int8_t close_alsa_output() {
+	int err;
 
-	err = snd_pcm_close(pcm);
+	err = snd_pcm_drain(pcm);
 	if (err < 0) {
-		fprintf(stderr, "Error: could not close source (%s)\n", snd_strerror(err));
+		fprintf(stderr, "Error: could not drain sink (%s)\n", snd_strerror(err));
+		return -1;
 	}
+	snd_pcm_close(pcm);
 
-	return err;
+	return 0;
 }

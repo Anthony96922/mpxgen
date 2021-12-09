@@ -16,16 +16,35 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// MPX carrier index
-#define CARRIER_19K 0
-#define CARRIER_38K 1
-#define CARRIER_57K 2
-#define CARRIER_67K 3
-#define CARRIER_71K 4
-#define CARRIER_76K 5
+// context for MPX oscillator
+typedef struct osc_t {
+	/*
+	 * number of freqs the struct will store waveforms for
+	 *
+	 */
+	uint8_t num_freqs;
 
-extern void create_mpx_carriers();
-extern float get_carrier(int num);
-extern float get_cos_carrier(int num);
-extern void update_carrier_phase();
-extern void clear_mpx_carriers();
+	/*
+	 * Arrays of carrier wave constants
+	 *
+	 */
+	float **sine_waves;
+	float **cosine_waves;
+
+	/*
+	 * Wave phase
+	 *
+	 */
+	uint16_t **phases;
+} osc_t;
+
+// oscillator phase index
+enum osc_phase_index {
+	CURRENT,
+	MAX
+};
+
+extern void init_osc(struct osc_t *osc_ctx, uint32_t sample_rate, const float *c_freqs);
+extern float get_wave(struct osc_t *osc_ctx, uint8_t num, uint8_t cosine);
+extern void update_osc_phase(struct osc_t *osc_ctx);
+extern void exit_osc(struct osc_t *osc_ctx);

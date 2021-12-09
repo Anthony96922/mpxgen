@@ -16,9 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "file_input.h"
-#include "alsa_input.h"
-
-int8_t open_input(char *input_name, uint8_t wait, uint32_t *sample_rate, size_t num_frames);
-int8_t read_input(short *audio);
-void close_input();
+extern int open_alsa_output(char *output_card, unsigned int sample_rate, unsigned int channels);
+extern int write_alsa_output(short *buffer, size_t frames);
+extern int close_alsa_output();

@@ -16,8 +16,51 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern void float2char(float *inbuf, char *outbuf, size_t inbufsize);
-extern void char2float(char *inbuf, float *outbuf, size_t inbufsize);
-extern void short2float(short *inbuf, float *outbuf, size_t inbufsize);
-extern void stereoize(char *inbuf, char *outbuf, size_t inbufsize);
-extern void stereoizef(float *inbuf, float *outbuf, size_t inbufsize);
+#include "common.h" // for lround
+
+// float to short
+static inline void float2short(float *inbuf, int16_t *outbuf, size_t inbufsize) {
+	for (size_t i = 0; i < inbufsize; i++) {
+		outbuf[i] = lround(inbuf[i] * 32767);
+	}
+}
+
+// converts 16 bit shorts (stored as two 8 bit ints) to floats
+static inline void char2float(int8_t *inbuf, float *outbuf, size_t inbufsize) {
+	size_t i = 0, j = 0;
+
+	for (i = 0; i < inbufsize; i++) {
+		outbuf[i] = ((inbuf[j+0] & 0xff) | (inbuf[j+1] << 8)) / 32767.0;
+		j += 2;
+	}
+}
+
+// converts 16 bit shorts to floats
+static inline void short2float(int16_t *inbuf, float *outbuf, size_t inbufsize) {
+	for (size_t i = 0; i < inbufsize; i++) {
+		outbuf[i] = inbuf[i] / 32767.0;
+	}
+}
+
+// stereoizers
+// puts the same stuff into both channels
+
+// s16le
+static inline void stereoizes16(int16_t *inbuf, int16_t *outbuf, size_t inbufsize) {
+	size_t i = 0, j = 0;
+
+	for (i = 0; i < inbufsize; i++) {
+		outbuf[j+0] = outbuf[j+1] = inbuf[i];
+		j += 2;
+	}
+}
+
+// float
+static inline void stereoizef(float *inbuf, float *outbuf, size_t inbufsize) {
+	size_t i = 0, j = 0;
+
+	for (i = 0; i < inbufsize; i++) {
+		outbuf[j+0] = outbuf[j+1] = inbuf[i];
+		j += 2;
+	}
+}
